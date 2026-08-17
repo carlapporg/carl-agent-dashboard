@@ -1,0 +1,10 @@
+/**
+ * Future feature modules:
+ *   features/tasks/
+ *   features/customers/
+ *   features/payments/
+ *   features/inbox/
+ *   features/itinerary/
+ *
+ * Each owns components, hooks, and view-models for that domain.
+ */
