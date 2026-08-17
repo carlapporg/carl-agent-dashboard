@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { AuthCard } from "@/features/auth/components/auth-card";
 import { LoginForm } from "@/features/auth/components/login-form";
 import { env } from "@/lib/config/env";
@@ -15,7 +16,9 @@ export default function LoginPage() {
         </>
       }
     >
-      <LoginForm demoMode={env.authStubMode} />
+      <Suspense fallback={null}>
+        <LoginForm demoMode={!env.isApiConfigured} />
+      </Suspense>
     </AuthCard>
   );
 }

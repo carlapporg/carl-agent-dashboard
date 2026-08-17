@@ -4,19 +4,9 @@ import { redirect } from "next/navigation";
 import { authApi } from "@/lib/api/auth";
 import { isApiError } from "@/lib/api/errors";
 import { createSession, destroySession, getSession } from "@/lib/auth/session";
-import { env } from "@/lib/config/env";
 import { ROUTES } from "@/lib/constants/routes";
-import {
-  parseForgotPasswordFormData,
-  parseLoginFormData,
-} from "@/features/auth/schemas/login";
-import type { ForgotPasswordFormState, LoginFormState } from "@/types/auth";
-
-const STUB_AUTH_DELAY_MS = 650;
-
-function delay(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+import { parseLoginFormData } from "@/features/auth/schemas/login";
+import type { LoginFormState } from "@/types/auth";
 
 export async function loginAction(
   _prevState: LoginFormState,
@@ -35,25 +25,18 @@ export async function loginAction(
   }
 
   try {
-    if (env.authStubMode) {
-      await delay(STUB_AUTH_DELAY_MS);
-    }
-
     const result = await authApi.login(validated.data);
 
     await createSession({
       accessToken: result.accessToken,
       refreshToken: result.refreshToken,
       user: result.user,
-      expiresAt:
-        result.expiresIn != null
-          ? Date.now() + result.expiresIn * 1000
-          : undefined,
+      rememberMe: Boolean(validated.data.rememberMe),
     });
   } catch (error) {
     if (isApiError(error)) {
       return {
-        message: error.message || "Incorrect email or password",
+        message: error.message || "Unable to sign in. Please try again.",
       };
     }
 
@@ -65,35 +48,18 @@ export async function loginAction(
   return { success: true };
 }
 
-export async function forgotPasswordAction(
-  _prevState: ForgotPasswordFormState,
-  formData: FormData,
-): Promise<ForgotPasswordFormState> {
-  const validated = parseForgotPasswordFormData(formData);
-
-  if (!validated.success) {
-    return {
-      errors: {
-        email: validated.error.flatten().fieldErrors.email,
-      },
-    };
-  }
-
-  await delay(STUB_AUTH_DELAY_MS);
-
-  return {
-    success: true,
-    message: "If that email exists, we've sent a reset link.",
-  };
-}
-
 export async function logoutAction(): Promise<void> {
   const session = await getSession();
 
-  if (session?.accessToken) {
-    await authApi.logout();
+  if (session?.refreshToken) {
+    await authApi.logout(session.refreshToken);
   }
 
   await destroySession();
   redirect(ROUTES.login);
+}
+
+export async function clearSessionAfterPasswordChangeAction(): Promise<void> {
+  await destroySession();
+  redirect(`${ROUTES.login}?passwordChanged=1`);
 }

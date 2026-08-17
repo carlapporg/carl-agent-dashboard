@@ -1,7 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   useActionState,
   useEffect,
@@ -35,6 +34,7 @@ type LoginFormProps = {
 
 export function LoginForm({ demoMode = false }: LoginFormProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [state, formAction, pending] = useActionState(
     loginAction,
     undefined as LoginFormState,
@@ -47,6 +47,7 @@ export function LoginForm({ demoMode = false }: LoginFormProps) {
   const [passwordError, setPasswordError] = useState<string | undefined>();
   const [showSuccess, setShowSuccess] = useState(false);
   const [bannerMessage, setBannerMessage] = useState<string | undefined>();
+  const [infoMessage, setInfoMessage] = useState<string | undefined>();
 
   const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
@@ -63,6 +64,12 @@ export function LoginForm({ demoMode = false }: LoginFormProps) {
   }, []);
 
   useEffect(() => {
+    if (searchParams.get("passwordChanged") === "1") {
+      setInfoMessage("Password updated. Please sign in again.");
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
     if (state?.errors?.email?.[0]) {
       setEmailError(state.errors.email[0]);
     }
@@ -71,6 +78,7 @@ export function LoginForm({ demoMode = false }: LoginFormProps) {
     }
     if (state?.message) {
       setBannerMessage(state.message);
+      setInfoMessage(undefined);
       alertRef.current?.focus();
     }
   }, [state]);
@@ -81,8 +89,8 @@ export function LoginForm({ demoMode = false }: LoginFormProps) {
     setShowSuccess(true);
     const timer = window.setTimeout(() => {
       startTransition(() => {
+        // replace only — refresh() here can retrigger RSC fetches in a loop
         router.replace(ROUTES.dashboard);
-        router.refresh();
       });
     }, 450);
 
@@ -120,6 +128,8 @@ export function LoginForm({ demoMode = false }: LoginFormProps) {
           <div ref={alertRef} tabIndex={-1} id={bannerId}>
             <Alert>{bannerMessage}</Alert>
           </div>
+        ) : infoMessage ? (
+          <Alert variant="info">{infoMessage}</Alert>
         ) : null}
       </div>
 
@@ -213,7 +223,7 @@ export function LoginForm({ demoMode = false }: LoginFormProps) {
         </p>
       </div>
 
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center gap-3">
         <label className="flex min-h-11 cursor-pointer items-center gap-2.5 text-sm text-muted transition-colors duration-150 hover:text-foreground-soft">
           <input
             type="checkbox"
@@ -223,13 +233,6 @@ export function LoginForm({ demoMode = false }: LoginFormProps) {
           />
           <span>Remember me</span>
         </label>
-
-        <Link
-          href={ROUTES.forgotPassword}
-          className="inline-flex min-h-11 items-center text-sm text-muted transition-colors duration-150 hover:text-accent focus-visible:rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
-        >
-          Forgot password?
-        </Link>
       </div>
 
       <Button
@@ -253,8 +256,8 @@ export function LoginForm({ demoMode = false }: LoginFormProps) {
 
       {demoMode ? (
         <p className="text-center text-xs text-muted-dim">
-          Demo mode — use a valid email and a password with 6+ characters and a
-          number.
+          Local mock mode — API_BASE_URL is unset. Use any valid email and an
+          8+ character password.
         </p>
       ) : null}
     </form>
