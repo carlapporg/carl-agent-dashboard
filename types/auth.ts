@@ -2,8 +2,11 @@ import { z } from "zod";
 import { backendUserSchema } from "@/types/user";
 
 export const loginCredentialsSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
+  email: z
+    .string()
+    .transform((value) => value.trim().toLowerCase())
+    .pipe(z.string().email()),
+  password: z.string().min(1),
   rememberMe: z.boolean().optional(),
 });
 

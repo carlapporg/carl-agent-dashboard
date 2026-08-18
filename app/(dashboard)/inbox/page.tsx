@@ -5,6 +5,10 @@ import {
   StatusBadge,
 } from "@/features/tasks/components/status-badge";
 import { EmptyState } from "@/components/feedback/empty-state";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
+import { PageShell } from "@/components/ui/page-shell";
 import { tasksApi } from "@/lib/api/tasks";
 import { ROUTES } from "@/lib/constants/routes";
 
@@ -26,46 +30,54 @@ export default async function InboxPage() {
     );
 
   return (
-    <div className="mx-auto max-w-5xl">
-      <header className="mb-8">
-        <h1 className="text-3xl font-semibold tracking-tight text-foreground md:text-4xl">
-          Inbox
-        </h1>
-        <p className="mt-2 text-base text-muted md:text-lg">
-          Blocked on the customer or a payment approval.
-        </p>
-      </header>
+    <PageShell wide>
+      <PageHeader
+        title="Inbox"
+        description="Blocked on the customer or a payment approval — these need a nudge or follow-up."
+      />
 
       {items.length === 0 ? (
         <EmptyState
           title="Inbox is clear"
           description="Nothing is waiting on a customer or payment right now."
+          action={
+            <Link href={ROUTES.tasks}>
+              <Button type="button" variant="secondary">
+                Go to tasks
+              </Button>
+            </Link>
+          }
         />
       ) : (
-        <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
-          {items.map((task) => (
-            <li key={task.id}>
-              <Link
-                href={ROUTES.task(task.id)}
-                className="flex flex-col gap-3 px-5 py-4 transition-colors hover:bg-surface-hover/50 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div className="min-w-0">
-                  <p className="font-medium text-foreground">
-                    #{task.number} {task.title}
-                  </p>
-                  <p className="mt-1 truncate text-sm text-muted">
-                    {task.customerName} · {task.request}
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <PriorityBadge priority={task.priority} />
-                  <StatusBadge status={task.status} />
-                </div>
-              </Link>
-            </li>
-          ))}
-        </ul>
+        <Card className="overflow-hidden">
+          <ul className="divide-y divide-border">
+            {items.map((task) => (
+              <li key={task.id}>
+                <Link
+                  href={ROUTES.task(task.id)}
+                  className="flex flex-col gap-4 px-6 py-5 transition-colors hover:bg-accent/[0.04] sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="min-w-0">
+                    <p className="text-lg font-semibold text-foreground">
+                      #{task.number} {task.title}
+                    </p>
+                    <p className="mt-1 line-clamp-2 text-base text-muted">
+                      {task.customerName} · {task.request}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <PriorityBadge priority={task.priority} />
+                    <StatusBadge status={task.status} />
+                    <span className="inline-flex h-10 items-center rounded-lg border border-border px-3 text-sm font-semibold text-accent">
+                      Open
+                    </span>
+                  </div>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Card>
       )}
-    </div>
+    </PageShell>
   );
 }

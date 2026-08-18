@@ -6,11 +6,13 @@ import { env } from "@/lib/config/env";
 export default function LoginPage() {
   return (
     <AuthCard
-      title="Let's get to work."
+      title="Sign in to continue"
+      subtitle="Agent Dashboard"
+      description="Handle customer requests, follow ups, and approvals — all in one calm workspace."
       footer={
         <>
           Need help? Contact your team lead.
-          <span className="mt-1 block text-xs text-muted-dim/80">
+          <span className="mt-1 block text-xs text-muted-dim">
             Agents are invited by admin — no self-serve signup.
           </span>
         </>

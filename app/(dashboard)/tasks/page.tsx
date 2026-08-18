@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { TaskList } from "@/features/tasks/components/task-list";
 import { PageSkeleton } from "@/components/feedback/skeleton";
+import { PageHeader } from "@/components/ui/page-header";
+import { PageShell } from "@/components/ui/page-shell";
 import { tasksApi } from "@/lib/api/tasks";
 import type { TaskStatus } from "@/types/task";
 
@@ -26,19 +28,14 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
   const roots = tasks.filter((t) => !t.parentId);
 
   return (
-    <div className="mx-auto max-w-6xl">
-      <header className="mb-8">
-        <h1 className="text-3xl font-semibold tracking-tight text-foreground md:text-4xl">
-          Tasks
-        </h1>
-        <p className="mt-2 text-base text-muted md:text-lg">
-          What needs you now — accept, execute, and close the loop.
-        </p>
-      </header>
-
+    <PageShell wide>
+      <PageHeader
+        title="Tasks"
+        description="Pick the next request, open the workspace, and keep customers moving."
+      />
       <Suspense fallback={<PageSkeleton />}>
         <TaskList tasks={roots} />
       </Suspense>
-    </div>
+    </PageShell>
   );
 }

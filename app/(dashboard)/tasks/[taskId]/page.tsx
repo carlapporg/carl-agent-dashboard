@@ -48,7 +48,7 @@ export default async function TaskWorkspacePage({ params }: TaskPageProps) {
   return (
     <div className="mx-auto max-w-[1600px]">
       <div className="grid gap-6 xl:grid-cols-[240px_minmax(0,1fr)_300px]">
-        <div className="rounded-2xl border border-border bg-surface p-4">
+        <div className="rounded-[var(--radius-card)] border border-border bg-surface p-4 shadow-[var(--shadow-card)]">
           <TaskTree
             parent={parent}
             childTasks={children}

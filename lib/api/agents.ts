@@ -1,22 +1,24 @@
+import { cache } from "react";
 import { apiRequest } from "@/lib/api/client";
 import { API_ENDPOINTS } from "@/lib/api/endpoints";
 import { env } from "@/lib/config/env";
 import { mockAgentUser } from "@/mocks/auth";
 import { messageDataSchema } from "@/types/auth";
 import { backendUserSchema, type BackendUser } from "@/types/user";
-import { z } from "zod";
+
+const getAgentMe = cache(async (): Promise<BackendUser> => {
+  if (!env.isApiConfigured) {
+    return mockAgentUser;
+  }
+
+  return apiRequest(API_ENDPOINTS.agents.me, {
+    method: "GET",
+    schema: backendUserSchema,
+  });
+});
 
 export const agentsApi = {
-  async me(): Promise<BackendUser> {
-    if (!env.isApiConfigured) {
-      return mockAgentUser;
-    }
-
-    return apiRequest(API_ENDPOINTS.agents.me, {
-      method: "GET",
-      schema: backendUserSchema,
-    });
-  },
+  me: getAgentMe,
 
   async updateMe(input: {
     firstName?: string | null;
@@ -50,25 +52,13 @@ export const agentsApi = {
 
     return apiRequest(API_ENDPOINTS.agents.changePassword, {
       method: "POST",
-      body: input,
+      body: {
+        currentPassword: input.currentPassword,
+        newPassword: input.newPassword,
+      },
       schema: messageDataSchema,
       dedupe: false,
-      skipRefresh: true,
+      authContext: "password",
     });
   },
 };
-
-export const changePasswordInputSchema = z
-  .object({
-    currentPassword: z.string().min(8, "Enter your current password"),
-    newPassword: z.string().min(8, "New password must be at least 8 characters"),
-    confirmPassword: z.string().min(8, "Confirm your new password"),
-  })
-  .refine((data) => data.newPassword === data.confirmPassword, {
-    message: "Passwords do not match",
-    path: ["confirmPassword"],
-  })
-  .refine((data) => data.newPassword !== data.currentPassword, {
-    message: "New password must differ from your current password",
-    path: ["newPassword"],
-  });

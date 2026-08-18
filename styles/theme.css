@@ -1,49 +1,55 @@
 :root {
-  --background: #070b14;
-  --foreground: #e8eef8;
-  --foreground-soft: #c2cde0;
-  --muted: #8a97b0;
-  --muted-dim: #5c6a84;
-  --surface: #0c1220;
-  --surface-elevated: #121a2b;
-  --surface-hover: #182338;
-  --border: #24324a;
+  --background: #f7f8fa;
+  --foreground: #111827;
+  --foreground-soft: #374151;
+  --muted: #6b7280;
+  --muted-dim: #9ca3af;
+  --surface: #ffffff;
+  --surface-elevated: #ffffff;
+  --surface-hover: #f3f4f6;
+  --border: #e5e7eb;
   --accent: #4f7cff;
   --accent-hover: #3f6aef;
-  --accent-foreground: #f5f8ff;
-  --danger: #9a5b5b;
-  --danger-foreground: #e8b4b4;
-  --ring-offset: #070b14;
-  --selection: color-mix(in srgb, var(--accent) 35%, transparent);
+  --accent-foreground: #ffffff;
+  --danger: #dc2626;
+  --danger-foreground: #b91c1c;
+  --success: #059669;
+  --success-foreground: #047857;
+  --warning: #d97706;
+  --warning-foreground: #b45309;
+  --info: #2563eb;
+  --info-foreground: #1d4ed8;
+  --ring-offset: #ffffff;
+  --selection: color-mix(in srgb, var(--accent) 22%, transparent);
 
-  --auth-glow-top: color-mix(in srgb, var(--accent) 14%, transparent);
-  --auth-glow-bottom: color-mix(in srgb, #18305a 40%, transparent);
-  --auth-grid-line: rgba(255, 255, 255, 0.03);
+  --auth-glow-top: color-mix(in srgb, var(--accent) 10%, transparent);
+  --auth-glow-bottom: color-mix(in srgb, #e5e7eb 80%, transparent);
+  --auth-grid-line: rgba(17, 24, 39, 0.04);
   --auth-grid-size: 56px;
-  --auth-grid-opacity: 0.28;
+  --auth-grid-opacity: 0.5;
 
-  --font-size-root: 18px;
-  --font-size-root-lg: 18.5px;
+  --font-size-root: 17px;
+  --font-size-root-lg: 18px;
   --line-height-body: 1.5;
 
   --radius-sm: 0.5rem;
-  --radius-md: 0.75rem;
-  --radius-lg: 1rem;
-  --radius-xl: 1.25rem;
-  --radius-card: 1rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-card: 0.75rem;
 
-  --shadow-card: 0 18px 50px rgba(0, 0, 0, 0.28);
-  --shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.2);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04);
+  --shadow-soft: 0 4px 16px rgba(0, 0, 0, 0.06);
 
   --motion-fast: 150ms;
   --motion-base: 200ms;
   --motion-slow: 350ms;
   --ease-out: ease-out;
 
-  --auth-card-max-width: 420px;
+  --auth-card-max-width: 480px;
   --control-height: 3rem;
 
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 @theme inline {
@@ -61,6 +67,12 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-danger: var(--danger);
   --color-danger-foreground: var(--danger-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
 
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
@@ -98,7 +110,7 @@ body {
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
@@ -106,14 +118,20 @@ body {
   }
 }
 
+.auth-shell {
+  background: var(--background);
+}
+
 .auth-shell::before {
   content: "";
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background:
-    radial-gradient(ellipse at top, var(--auth-glow-top), transparent 55%),
-    radial-gradient(ellipse at bottom, var(--auth-glow-bottom), transparent 50%);
+  background: radial-gradient(
+    ellipse at top,
+    var(--auth-glow-top),
+    transparent 60%
+  );
 }
 
 .auth-shell::after {

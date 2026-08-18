@@ -11,7 +11,7 @@ const PROTECTED_PREFIXES = [
   ROUTES.settings,
 ];
 
-function clearSessionAndRedirect(request: NextRequest, pathname: string) {
+function redirectToLogin(request: NextRequest, pathname: string) {
   const loginUrl = new URL(ROUTES.login, request.url);
   if (pathname !== ROUTES.home && pathname !== ROUTES.login) {
     loginUrl.searchParams.set("next", pathname);
@@ -26,10 +26,8 @@ export function proxy(request: NextRequest) {
   const rawCookie = request.cookies.get(AUTH_COOKIE_NAME)?.value;
   const hasValidSession = isSessionCookieShapeValid(rawCookie);
 
-  // Stale/invalid cookie (e.g. pre–Plan 2 shape) must be cleared or we loop:
-  // layout getSession()→null → /unauthorized → proxy sees cookie → /dashboard.
   if (rawCookie && !hasValidSession) {
-    return clearSessionAndRedirect(request, pathname);
+    return redirectToLogin(request, pathname);
   }
 
   const isLoginRoute =
@@ -42,17 +40,13 @@ export function proxy(request: NextRequest) {
     );
 
   if (isProtectedRoute && !hasValidSession) {
-    if (pathname !== ROUTES.home) {
-      return NextResponse.redirect(new URL(ROUTES.unauthorized, request.url));
-    }
-    return clearSessionAndRedirect(request, pathname);
+    return redirectToLogin(request, pathname);
   }
 
   if (isLoginRoute && hasValidSession) {
     return NextResponse.redirect(new URL(ROUTES.dashboard, request.url));
   }
 
-  // Valid session on /unauthorized → dashboard. Invalid already cleared above.
   if (isUnauthorizedRoute && hasValidSession) {
     return NextResponse.redirect(new URL(ROUTES.dashboard, request.url));
   }

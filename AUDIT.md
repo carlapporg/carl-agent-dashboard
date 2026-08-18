@@ -100,7 +100,7 @@ Initial audit before hardening. Status updated as fixes land.
 | Check | Result |
 | --- | --- |
 | Mock mode boots without `API_BASE_URL` | Pass (`npm run build`) |
-| Real agent login with seed account | Manual — requires local API at `http://localhost:4000/api/v1` |
+| Real agent login with seed account | Manual — requires deployed `API_BASE_URL` |
 | Wrong password / non-agent messaging | Pass (client calm-message mapping) |
 | Edit name → session update | Pass (`PATCH /agents/me` + `updateSessionUser`) |
 | Change password → forced re-login | Pass (destroy session → `/login?passwordChanged=1`) |

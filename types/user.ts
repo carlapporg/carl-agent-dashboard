@@ -2,18 +2,20 @@ import { z } from "zod";
 
 export const backendRoleSchema = z.enum(["USER", "AGENT", "ADMIN"]);
 
-export const backendUserSchema = z.object({
-  id: z.string().min(1),
-  email: z.string().email(),
-  firstName: z.string().nullable(),
-  lastName: z.string().nullable(),
-  role: backendRoleSchema,
-  accountType: z.enum(["ADULT", "CHILD"]).optional(),
-  isEmailVerified: z.boolean().optional(),
-  familyId: z.string().nullable().optional(),
-  createdAt: z.string().optional(),
-  updatedAt: z.string().optional(),
-});
+export const backendUserSchema = z
+  .object({
+    id: z.string().min(1),
+    email: z.string().email(),
+    firstName: z.string().nullable(),
+    lastName: z.string().nullable(),
+    role: backendRoleSchema,
+    accountType: z.enum(["ADULT", "CHILD"]).nullish(),
+    isEmailVerified: z.boolean().nullish(),
+    familyId: z.string().nullable().nullish(),
+    createdAt: z.string().nullish(),
+    updatedAt: z.string().nullish(),
+  })
+  .strip();
 
 export type BackendUser = z.infer<typeof backendUserSchema>;
 export type BackendRole = z.infer<typeof backendRoleSchema>;

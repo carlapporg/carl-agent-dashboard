@@ -9,6 +9,7 @@ export const ROUTES = {
   profile: "/profile",
   settings: "/settings",
   unauthorized: "/unauthorized",
+  sessionClear: "/session/clear",
 } as const;
 
 export const PUBLIC_ROUTES = [ROUTES.login, ROUTES.unauthorized] as const;

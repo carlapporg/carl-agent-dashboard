@@ -1,18 +1,19 @@
 "use server";
 
-import { agentsApi } from "@/lib/api/agents";
-import { isApiError } from "@/lib/api/errors";
-import {
-  destroySession,
-  updateSessionUser,
-} from "@/lib/auth/session";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { agentsApi } from "@/lib/api/agents";
+import { toUserMessage } from "@/lib/api/error-handler";
+import { isApiError } from "@/lib/api/errors";
+import { destroySession, updateSessionUser } from "@/lib/auth/session";
 import { ROUTES } from "@/lib/constants/routes";
+import type { BackendUser } from "@/types/user";
 import { z } from "zod";
 
 export type ProfileNameState = {
   success?: boolean;
   message?: string;
+  user?: BackendUser;
   errors?: {
     firstName?: string[];
     lastName?: string[];
@@ -83,12 +84,12 @@ export async function updateAgentNameAction(
       lastName: parsed.data.lastName,
     });
     await updateSessionUser(user);
-    return { success: true, message: "Name updated." };
+    revalidatePath(ROUTES.profile);
+    revalidatePath(ROUTES.dashboard);
+    return { success: true, message: "Name updated.", user };
   } catch (error) {
     return {
-      message: isApiError(error)
-        ? error.message
-        : "Couldn’t save your name. Please try again.",
+      message: toUserMessage(error),
     };
   }
 }
@@ -120,18 +121,12 @@ export async function changeAgentPasswordAction(
       newPassword: parsed.data.newPassword,
     });
   } catch (error) {
-    if (isApiError(error) && error.status === 401) {
-      return {
-        message: "Current password is incorrect.",
-        errors: {
-          currentPassword: ["Current password is incorrect."],
-        },
-      };
-    }
     return {
-      message: isApiError(error)
-        ? error.message
-        : "Couldn’t change your password. Please try again.",
+      message: toUserMessage(error),
+      errors:
+        isApiError(error) && error.kind === "wrong_password"
+          ? { currentPassword: [error.message] }
+          : undefined,
     };
   }
 

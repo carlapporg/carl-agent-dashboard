@@ -27,9 +27,9 @@ type ToastContextValue = {
 const ToastContext = createContext<ToastContextValue | null>(null);
 
 const VARIANT_STYLES: Record<ToastVariant, string> = {
-  info: "border-border bg-surface-elevated text-foreground-soft",
-  success: "border-emerald-500/30 bg-emerald-500/10 text-emerald-100",
-  error: "border-danger/35 bg-danger/10 text-danger-foreground",
+  info: "border-border bg-surface text-foreground-soft",
+  success: "border-emerald-200 bg-emerald-50 text-emerald-800",
+  error: "border-red-200 bg-red-50 text-red-700",
 };
 
 export function ToastProvider({ children }: { children: ReactNode }) {
@@ -65,7 +65,6 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      {/* Mount after hydration so password-manager extensions cannot mismatch SSR HTML */}
       {mounted ? (
         <div
           className="pointer-events-none fixed inset-x-0 bottom-4 z-[100] flex flex-col items-center gap-2 px-4"
