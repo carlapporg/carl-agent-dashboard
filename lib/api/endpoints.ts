@@ -1,12 +1,20 @@
-import { API_PATHS } from "@/lib/config/api-paths";
-
-/** Live Agent Backend routes. Always joined with env.apiBaseUrl (/api/v1). */
+/**
+ * All Backend API routes for the Agent Dashboard.
+ *
+ * Change paths here only. Full URL = API_BASE_URL + these paths.
+ * Example: https://host/api/v1 + /auth/agent/login
+ *
+ * Do not put /api/v1 in these values — that prefix lives in API_BASE_URL.
+ */
 export const API_ENDPOINTS = {
   auth: {
-    agentLogin: API_PATHS.auth.agentLogin,
+    /** POST — agent sign-in */
+    agentLogin: "/auth/agent/login",
   },
   agents: {
-    me: API_PATHS.agents.me,
-    changePassword: API_PATHS.agents.changePassword,
+    /** GET current agent · PATCH update name */
+    me: "/agents/me",
+    /** POST change password */
+    changePassword: "/agents/me/change-password",
   },
 } as const;
