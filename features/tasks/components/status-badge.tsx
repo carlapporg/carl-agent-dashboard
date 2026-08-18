@@ -42,12 +42,37 @@ export function formatStatus(status: TaskStatus): string {
   return status.replaceAll("_", " ");
 }
 
-export function StatusBadge({ status }: { status: TaskStatus }) {
-  return <Badge variant={statusBadgeVariant(status)}>{formatStatus(status)}</Badge>;
+const STATUS_DOT: Record<TaskStatus, string> = {
+  queued: "bg-muted-dim",
+  assigned: "bg-sky-500",
+  in_progress: "bg-accent",
+  waiting_for_customer: "bg-amber-500",
+  waiting_for_payment: "bg-orange-500",
+  completed: "bg-emerald-500",
+  cancelled: "bg-red-500",
+  failed: "bg-red-500",
+};
+
+export function StatusBadge({
+  status,
+  withDot = false,
+}: {
+  status: TaskStatus;
+  withDot?: boolean;
+}) {
+  return (
+    <Badge variant={statusBadgeVariant(status)}>
+      {withDot ? (
+        <span
+          className={`mr-1.5 size-1.5 shrink-0 rounded-full ${STATUS_DOT[status]}`}
+          aria-hidden
+        />
+      ) : null}
+      {formatStatus(status)}
+    </Badge>
+  );
 }
 
 export function PriorityBadge({ priority }: { priority: TaskPriority }) {
-  return (
-    <Badge variant={priorityBadgeVariant(priority)}>{priority}</Badge>
-  );
+  return <Badge variant={priorityBadgeVariant(priority)}>{priority}</Badge>;
 }

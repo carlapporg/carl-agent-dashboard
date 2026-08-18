@@ -12,7 +12,7 @@ export function MobileNav() {
 
   return (
     <div className="border-b border-border bg-surface lg:hidden">
-      <div className="flex h-[4.5rem] items-center justify-between px-5">
+      <div className="flex h-20 items-center justify-between px-5">
         <Link href={DASHBOARD_NAV[0].href} className="block">
           <p className="text-xl font-semibold tracking-tight text-foreground">
             Carl
