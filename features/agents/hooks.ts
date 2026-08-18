@@ -6,12 +6,30 @@ import { updateAgentNameAction } from "@/features/profile/actions/profile-action
 import { queryKeys } from "@/lib/query/keys";
 import type { BackendUser } from "@/types/user";
 
+/**
+ * Agent profile query.
+ * - No automatic refetch every 5 minutes (Backend has no token refresh yet).
+ * - Fresh data only on first load (empty cache) or after name update / logout.
+ */
 export function useAgentMe(initialUser?: BackendUser) {
   return useQuery({
     queryKey: queryKeys.agents.me(),
     queryFn: fetchCurrentAgent,
-    staleTime: 5 * 60_000,
-    placeholderData: initialUser,
+    // Keep until logout / explicit invalidate — avoids 401 after access token ages out.
+    staleTime: Infinity,
+    gcTime: 60 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: false,
+    // Hydration-safe seed from session (server + client same first paint).
+    ...(initialUser
+      ? {
+          initialData: initialUser,
+          // Prefer existing cache if already fetched (e.g. after login me()).
+          initialDataUpdatedAt: 0,
+        }
+      : {}),
   });
 }
 

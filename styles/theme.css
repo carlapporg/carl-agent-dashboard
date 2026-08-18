@@ -28,8 +28,8 @@
   --auth-grid-size: 56px;
   --auth-grid-opacity: 0.5;
 
-  --font-size-root: 17px;
-  --font-size-root-lg: 18px;
+  --font-size-root: 16px;
+  --font-size-root-lg: 16.5px;
   --line-height-body: 1.5;
 
   --radius-sm: 0.5rem;
@@ -46,8 +46,8 @@
   --motion-slow: 350ms;
   --ease-out: ease-out;
 
-  --auth-card-max-width: 480px;
-  --control-height: 3rem;
+  --auth-card-max-width: 420px;
+  --control-height: 2.75rem;
 
   color-scheme: light;
 }
