@@ -1,7 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   useActionState,
   useEffect,
@@ -11,20 +10,18 @@ import {
   useTransition,
 } from "react";
 import { loginAction } from "@/features/auth/actions/auth";
-import {
-  CheckIcon,
-  EyeIcon,
-  EyeOffIcon,
-} from "@/features/auth/components/icons";
+import { CheckIcon } from "@/features/auth/components/icons";
 import {
   isLoginFormValid,
   validateEmailField,
   validatePasswordField,
 } from "@/features/auth/schemas/login";
+import { useToast } from "@/components/providers/toast-provider";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PasswordField } from "@/components/ui/password-field";
 import { ROUTES } from "@/lib/constants/routes";
 import { cn } from "@/lib/utils/cn";
 import type { LoginFormState } from "@/types/auth";
@@ -35,32 +32,43 @@ type LoginFormProps = {
 
 export function LoginForm({ demoMode = false }: LoginFormProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const { toast } = useToast();
   const [state, formAction, pending] = useActionState(
     loginAction,
     undefined as LoginFormState,
   );
   const [isRedirecting, startTransition] = useTransition();
-  const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [emailError, setEmailError] = useState<string | undefined>();
   const [passwordError, setPasswordError] = useState<string | undefined>();
   const [showSuccess, setShowSuccess] = useState(false);
   const [bannerMessage, setBannerMessage] = useState<string | undefined>();
+  const [infoMessage, setInfoMessage] = useState<string | undefined>();
 
   const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
   const alertRef = useRef<HTMLDivElement>(null);
   const emailErrorId = useId();
-  const passwordErrorId = useId();
   const bannerId = useId();
+  const toastedMessage = useRef<string | undefined>(undefined);
 
   const canSubmit = isLoginFormValid(email, password);
   const isBusy = pending || showSuccess || isRedirecting;
+  const nextPath = searchParams.get("next");
 
   useEffect(() => {
     emailRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    if (searchParams.get("passwordChanged") === "1") {
+      setInfoMessage("Password changed successfully. Please sign in again.");
+    } else if (searchParams.get("expired") === "1") {
+      setInfoMessage("Your session expired. Please sign in again.");
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (state?.errors?.email?.[0]) {
@@ -71,34 +79,41 @@ export function LoginForm({ demoMode = false }: LoginFormProps) {
     }
     if (state?.message) {
       setBannerMessage(state.message);
+      setInfoMessage(undefined);
       alertRef.current?.focus();
+      if (toastedMessage.current !== state.message) {
+        toastedMessage.current = state.message;
+        toast(state.message, "error");
+      }
     }
-  }, [state]);
+  }, [state, toast]);
 
   useEffect(() => {
     if (!state?.success) return;
 
     setShowSuccess(true);
+    const destination =
+      nextPath &&
+      nextPath.startsWith("/") &&
+      !nextPath.startsWith("//") &&
+      !nextPath.includes("://")
+        ? nextPath
+        : ROUTES.dashboard;
     const timer = window.setTimeout(() => {
       startTransition(() => {
-        router.replace(ROUTES.dashboard);
-        router.refresh();
+        router.replace(destination);
       });
     }, 450);
 
     return () => window.clearTimeout(timer);
-  }, [state?.success, router]);
-
-  function handleEmailBlur() {
-    setEmailError(validateEmailField(email));
-  }
-
-  function handlePasswordBlur() {
-    setPasswordError(validatePasswordField(password));
-  }
+  }, [state?.success, router, nextPath]);
 
   function handleSubmit(formData: FormData) {
-    const nextEmailError = validateEmailField(email);
+    const normalizedEmail = email.trim().toLowerCase();
+    if (normalizedEmail !== email) setEmail(normalizedEmail);
+    formData.set("email", normalizedEmail);
+
+    const nextEmailError = validateEmailField(normalizedEmail);
     const nextPasswordError = validatePasswordField(password);
     setEmailError(nextEmailError);
     setPasswordError(nextPasswordError);
@@ -115,11 +130,13 @@ export function LoginForm({ demoMode = false }: LoginFormProps) {
 
   return (
     <form action={handleSubmit} className="flex flex-col gap-5" noValidate>
-      <div className="min-h-[3.25rem]" aria-live="polite">
+      <div className="min-h-[3rem]" aria-live="polite">
         {bannerMessage ? (
           <div ref={alertRef} tabIndex={-1} id={bannerId}>
             <Alert>{bannerMessage}</Alert>
           </div>
+        ) : infoMessage ? (
+          <Alert variant="info">{infoMessage}</Alert>
         ) : null}
       </div>
 
@@ -130,16 +147,20 @@ export function LoginForm({ demoMode = false }: LoginFormProps) {
           id="email"
           name="email"
           type="email"
-          autoComplete="username"
+          autoComplete="email"
           inputMode="email"
-          placeholder="you@company.com"
+          placeholder="Enter your email"
           value={email}
           onChange={(event) => {
             const next = event.target.value;
             setEmail(next);
             if (emailError) setEmailError(validateEmailField(next));
           }}
-          onBlur={handleEmailBlur}
+          onBlur={() => {
+            const normalized = email.trim().toLowerCase();
+            if (normalized !== email) setEmail(normalized);
+            setEmailError(validateEmailField(normalized));
+          }}
           hasError={Boolean(emailError)}
           aria-invalid={Boolean(emailError)}
           aria-describedby={emailError ? emailErrorId : undefined}
@@ -148,89 +169,41 @@ export function LoginForm({ demoMode = false }: LoginFormProps) {
         />
         <p
           id={emailErrorId}
-          className="mt-2 min-h-5 text-sm text-danger-foreground"
+          className="mt-1.5 min-h-5 text-sm text-danger-foreground"
         >
           {emailError ?? ""}
         </p>
       </div>
 
-      <div>
-        <Label htmlFor="password">Password</Label>
-        <div className="relative">
-          <Input
-            ref={passwordRef}
-            id="password"
-            name="password"
-            type={showPassword ? "text" : "password"}
-            autoComplete="current-password"
-            placeholder="Your password"
-            className="pr-12"
-            value={password}
-            onChange={(event) => {
-              const next = event.target.value;
-              setPassword(next);
-              if (passwordError) setPasswordError(validatePasswordField(next));
-            }}
-            onBlur={handlePasswordBlur}
-            hasError={Boolean(passwordError)}
-            aria-invalid={Boolean(passwordError)}
-            aria-describedby={passwordError ? passwordErrorId : undefined}
-            disabled={isBusy}
-            required
-          />
-          <button
-            type="button"
-            className={cn(
-              "absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-xl text-muted transition-colors duration-150 ease-out",
-              "hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/50",
-            )}
-            onClick={() => setShowPassword((value) => !value)}
-            aria-pressed={showPassword}
-            aria-label={showPassword ? "Hide password" : "Show password"}
-            disabled={isBusy}
-          >
-            <span className="relative size-5">
-              <EyeIcon
-                className={cn(
-                  "absolute inset-0 transition-opacity duration-150 ease-out",
-                  showPassword ? "opacity-0" : "opacity-100",
-                )}
-              />
-              <EyeOffIcon
-                className={cn(
-                  "absolute inset-0 transition-opacity duration-150 ease-out",
-                  showPassword ? "opacity-100" : "opacity-0",
-                )}
-              />
-            </span>
-          </button>
-        </div>
-        <p
-          id={passwordErrorId}
-          className="mt-2 min-h-5 text-sm text-danger-foreground"
-        >
-          {passwordError ?? ""}
-        </p>
-      </div>
+      <PasswordField
+        ref={passwordRef}
+        id="password"
+        name="password"
+        label="Password"
+        autoComplete="off"
+        placeholder="Enter your password"
+        value={password}
+        onChange={(event) => {
+          const next = event.target.value;
+          setPassword(next);
+          if (passwordError) setPasswordError(validatePasswordField(next));
+        }}
+        onBlur={() => setPasswordError(validatePasswordField(password))}
+        hasError={Boolean(passwordError)}
+        errorMessage={passwordError}
+        disabled={isBusy}
+        required
+      />
 
-      <div className="flex items-center justify-between gap-3">
-        <label className="flex min-h-11 cursor-pointer items-center gap-2.5 text-sm text-muted transition-colors duration-150 hover:text-foreground-soft">
-          <input
-            type="checkbox"
-            name="rememberMe"
-            disabled={isBusy}
-            className="size-4 shrink-0 rounded border-border bg-surface-elevated accent-[var(--accent)]"
-          />
-          <span>Remember me</span>
-        </label>
-
-        <Link
-          href={ROUTES.forgotPassword}
-          className="inline-flex min-h-11 items-center text-sm text-muted transition-colors duration-150 hover:text-accent focus-visible:rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
-        >
-          Forgot password?
-        </Link>
-      </div>
+      <label className="flex min-h-10 cursor-pointer items-center gap-2.5 text-sm text-muted">
+        <input
+          type="checkbox"
+          name="rememberMe"
+          disabled={isBusy}
+          className="size-4 shrink-0 rounded border-border accent-[var(--accent)]"
+        />
+        <span>Remember me</span>
+      </label>
 
       <Button
         type="submit"
@@ -241,7 +214,7 @@ export function LoginForm({ demoMode = false }: LoginFormProps) {
       >
         {showSuccess ? (
           <span className="inline-flex items-center gap-2">
-            <CheckIcon className="size-5" />
+            <CheckIcon className="size-4" />
             Signed in
           </span>
         ) : pending ? (
@@ -253,8 +226,7 @@ export function LoginForm({ demoMode = false }: LoginFormProps) {
 
       {demoMode ? (
         <p className="text-center text-xs text-muted-dim">
-          Demo mode — use a valid email and a password with 6+ characters and a
-          number.
+          Local mock mode — API_BASE_URL is unset.
         </p>
       ) : null}
     </form>

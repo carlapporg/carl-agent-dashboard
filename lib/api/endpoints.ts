@@ -1,11 +1,20 @@
+/**
+ * All Backend API routes for the Agent Dashboard.
+ *
+ * Change paths here only. Full URL = API_BASE_URL + these paths.
+ * Example: https://host/api/v1 + /auth/agent/login
+ *
+ * Do not put /api/v1 in these values — that prefix lives in API_BASE_URL.
+ */
 export const API_ENDPOINTS = {
   auth: {
-    login: "/auth/login",
-    logout: "/auth/logout",
-    refresh: "/auth/refresh",
-    me: "/auth/me",
+    /** POST — agent sign-in */
+    agentLogin: "/auth/agent/login",
+  },
+  agents: {
+    /** GET current agent · PATCH update name */
+    me: "/agents/me",
+    /** POST change password */
+    changePassword: "/agents/me/change-password",
   },
 } as const;
-
-export type ApiEndpointPath =
-  (typeof API_ENDPOINTS)[keyof typeof API_ENDPOINTS][keyof (typeof API_ENDPOINTS)[keyof typeof API_ENDPOINTS]];

@@ -6,11 +6,15 @@ Web app for **Carl** human agents (Next.js).
 
 ```bash
 npm install
-npm run env:which   # main → .env.production, else → .env.staging
-npm run dev
+npm run env:which   # which env file each command loads
+npm run dev         # loads .env.staging
 ```
 
-Open [http://localhost:3000/login](http://localhost:3000/login).  
-Stub auth (empty `API_BASE_URL`): valid email + password (6+ chars, 1 number).
+Open [http://localhost:3000/login](http://localhost:3000/login).
 
-Override file: `ENV_FILE=.env.local npm run dev`
+| Command | Env file |
+| --- | --- |
+| `npm run dev` | `.env.staging` |
+| `npm run build` / `npm start` | `.env.production` |
+
+Copy `.env.example` → `.env.staging` / `.env.production` if those files are missing. When the live Backend is ready, change only `API_BASE_URL` in `.env.production`.

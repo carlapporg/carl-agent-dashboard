@@ -1,30 +1,53 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { isSessionCookieShapeValid } from "@/lib/auth/session-cookie";
 import { AUTH_COOKIE_NAME, ROUTES } from "@/lib/constants/routes";
+
+const PROTECTED_PREFIXES = [
+  ROUTES.dashboard,
+  ROUTES.tasks,
+  ROUTES.inbox,
+  ROUTES.profile,
+  ROUTES.settings,
+];
+
+function redirectToLogin(request: NextRequest, pathname: string) {
+  const loginUrl = new URL(ROUTES.login, request.url);
+  if (pathname !== ROUTES.home && pathname !== ROUTES.login) {
+    loginUrl.searchParams.set("next", pathname);
+  }
+  const response = NextResponse.redirect(loginUrl);
+  response.cookies.delete(AUTH_COOKIE_NAME);
+  return response;
+}
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const hasSession = Boolean(request.cookies.get(AUTH_COOKIE_NAME)?.value);
-  const isLoginRoute =
-    pathname === ROUTES.login || pathname.startsWith(`${ROUTES.login}/`);
-  const isForgotRoute =
-    pathname === ROUTES.forgotPassword ||
-    pathname.startsWith(`${ROUTES.forgotPassword}/`);
-  const isUnauthorizedRoute = pathname.startsWith(ROUTES.unauthorized);
-  const isPublicAuthRoute = isLoginRoute || isForgotRoute;
-  const isProtectedRoute =
-    pathname.startsWith(ROUTES.dashboard) || pathname === ROUTES.home;
+  const rawCookie = request.cookies.get(AUTH_COOKIE_NAME)?.value;
+  const hasValidSession = isSessionCookieShapeValid(rawCookie);
 
-  if (isProtectedRoute && !hasSession) {
-    if (pathname.startsWith(ROUTES.dashboard)) {
-      return NextResponse.redirect(new URL(ROUTES.unauthorized, request.url));
-    }
-    const loginUrl = new URL(ROUTES.login, request.url);
-    loginUrl.searchParams.set("next", pathname);
-    return NextResponse.redirect(loginUrl);
+  if (rawCookie && !hasValidSession) {
+    return redirectToLogin(request, pathname);
   }
 
-  if ((isPublicAuthRoute || isUnauthorizedRoute) && hasSession) {
+  const isLoginRoute =
+    pathname === ROUTES.login || pathname.startsWith(`${ROUTES.login}/`);
+  const isUnauthorizedRoute = pathname.startsWith(ROUTES.unauthorized);
+  const isProtectedRoute =
+    pathname === ROUTES.home ||
+    PROTECTED_PREFIXES.some(
+      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+    );
+
+  if (isProtectedRoute && !hasValidSession) {
+    return redirectToLogin(request, pathname);
+  }
+
+  if (isLoginRoute && hasValidSession) {
+    return NextResponse.redirect(new URL(ROUTES.dashboard, request.url));
+  }
+
+  if (isUnauthorizedRoute && hasValidSession) {
     return NextResponse.redirect(new URL(ROUTES.dashboard, request.url));
   }
 
@@ -35,8 +58,13 @@ export const config = {
   matcher: [
     "/",
     "/login",
-    "/forgot-password",
     "/unauthorized",
+    "/dashboard",
     "/dashboard/:path*",
+    "/tasks",
+    "/tasks/:path*",
+    "/inbox",
+    "/profile",
+    "/settings",
   ],
 };

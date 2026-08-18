@@ -1,32 +1,44 @@
 import type { LoginCredentials, LoginResponse } from "@/types/auth";
-import type { AgentUser } from "@/types/user";
+import type { BackendUser } from "@/types/user";
 
 export function createMockLoginResponse(
   credentials: LoginCredentials,
 ): LoginResponse {
   const localPart = credentials.email.split("@")[0] || "agent";
-  const name = localPart
-    .replace(/[._-]+/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+  const parts = localPart.replace(/[._-]+/g, " ").split(" ");
+  const firstName =
+    parts[0]?.replace(/\b\w/g, (c) => c.toUpperCase()) || "Alex";
+  const lastName =
+    parts.slice(1).join(" ").replace(/\b\w/g, (c) => c.toUpperCase()) ||
+    "Morgan";
 
   return {
     accessToken: `stub_access_${Buffer.from(credentials.email).toString("base64url")}`,
     refreshToken: `stub_refresh_${Date.now()}`,
-    expiresIn: 60 * 60 * 8,
     user: {
       id: "agent_stub_001",
       email: credentials.email,
-      name: name || "Carl Agent",
-      role: "agent",
-      avatarUrl: null,
+      firstName,
+      lastName,
+      role: "AGENT",
+      accountType: "ADULT",
+      isEmailVerified: true,
+      familyId: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     },
   };
 }
 
-export const mockAgentUser: AgentUser = {
+export const mockAgentUser: BackendUser = {
   id: "agent_stub_001",
   email: "agent@carl.app",
-  name: "Alex Morgan",
-  role: "agent",
-  avatarUrl: null,
+  firstName: "Alex",
+  lastName: "Morgan",
+  role: "AGENT",
+  accountType: "ADULT",
+  isEmailVerified: true,
+  familyId: null,
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
 };

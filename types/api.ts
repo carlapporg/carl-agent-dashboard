@@ -1,6 +1,7 @@
 export type ApiErrorCode =
   | "UNAUTHORIZED"
   | "FORBIDDEN"
+  | "DISABLED"
   | "VALIDATION_ERROR"
   | "NOT_FOUND"
   | "RATE_LIMITED"
@@ -15,13 +16,20 @@ export type ApiErrorBody = {
 };
 
 export type ApiSuccessResponse<T> = {
-  success: true;
   data: T;
 };
 
+/** NestJS-style error body from Backend */
+export type NestErrorBody = {
+  statusCode: number;
+  message: string | string[];
+  error?: string;
+};
+
 export type ApiFailureResponse = {
-  success: false;
-  error: ApiErrorBody;
+  statusCode: number;
+  message: string | string[];
+  error?: string;
 };
 
 export type ApiResponse<T> = ApiSuccessResponse<T> | ApiFailureResponse;
