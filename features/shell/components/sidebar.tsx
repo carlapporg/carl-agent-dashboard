@@ -10,9 +10,9 @@ export function DashboardSidebar() {
 
   return (
     <aside className="hidden w-80 shrink-0 border-r border-border bg-surface lg:flex lg:w-[18.5rem] lg:flex-col xl:w-80">
-      <div className="flex h-20 items-center border-b border-border px-7">
+      <div className="flex h-16 items-center border-b border-border px-6">
         <Link href={DASHBOARD_NAV[0].href} className="group block min-w-0">
-          <p className="text-2xl font-semibold tracking-tight text-foreground">
+          <p className="text-xl font-semibold tracking-tight text-foreground">
             Carl
           </p>
           <p className="mt-0.5 text-sm font-medium text-muted">
@@ -38,7 +38,7 @@ export function DashboardSidebar() {
                 key={item.label}
                 href={item.href}
                 className={cn(
-                  "relative flex items-center rounded-xl px-4 py-3.5 text-lg font-medium transition-colors",
+                  "relative flex items-center rounded-xl px-3.5 py-2.5 text-base font-medium transition-colors",
                   active
                     ? "bg-accent/10 text-accent shadow-sm"
                     : "text-foreground-soft hover:bg-surface-hover hover:text-foreground",

@@ -29,9 +29,9 @@ export function DashboardHeader({ user }: DashboardHeaderProps) {
 
   return (
     <>
-      <header className="flex h-20 items-center justify-between gap-4 border-b border-border bg-surface px-5 md:px-8 lg:px-10">
+      <header className="flex h-16 items-center justify-between gap-4 border-b border-border bg-surface px-5 md:px-6 lg:px-8">
         <div className="min-w-0">
-          <p className="truncate text-lg font-semibold tracking-tight text-foreground md:text-xl">
+          <p className="truncate text-base font-semibold tracking-tight text-foreground md:text-lg">
             Agent Dashboard
           </p>
           <p className="mt-0.5 truncate text-base text-muted">

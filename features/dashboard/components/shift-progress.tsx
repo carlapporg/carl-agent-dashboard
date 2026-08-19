@@ -65,7 +65,7 @@ function Donut({
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <p className="text-3xl font-semibold tabular-nums text-foreground">
+        <p className="text-2xl font-semibold tabular-nums text-foreground">
           {donePct}%
         </p>
         <p className="text-sm font-medium text-muted">wrapped up</p>

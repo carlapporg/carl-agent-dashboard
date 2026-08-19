@@ -10,7 +10,9 @@ export function AppProviders({ children }: { children: ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <ToastProvider>{children}</ToastProvider>
+      <ToastProvider>
+        <div className="flex min-h-0 flex-1 flex-col">{children}</div>
+      </ToastProvider>
     </QueryClientProvider>
   );
 }

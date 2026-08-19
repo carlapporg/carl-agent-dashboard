@@ -23,12 +23,12 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="flex min-h-full flex-1 flex-col bg-background lg:flex-row">
+    <div className="flex min-h-dvh flex-1 flex-col bg-background lg:flex-row">
       <DashboardSidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <MobileNav />
         <DashboardHeader user={session.user} />
-        <main className="flex-1 p-6 md:p-8 lg:px-10 lg:py-9">{children}</main>
+        <main className="flex-1 p-5 md:p-6 lg:px-8 lg:py-7">{children}</main>
       </div>
     </div>
   );

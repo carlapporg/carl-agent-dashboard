@@ -61,10 +61,10 @@ export function TaskBriefPane({ task, timeline }: TaskBriefPaneProps) {
                 <StatusBadge status={task.status} withDot />
                 <PriorityBadge priority={task.priority} />
               </div>
-              <h1 className="mt-3 text-3xl font-semibold tracking-tight text-foreground md:text-[2.15rem]">
+              <h1 className="mt-3 text-2xl font-semibold tracking-tight text-foreground md:text-3xl">
                 {task.title}
               </h1>
-              <p className="mt-2.5 max-w-3xl text-lg leading-relaxed text-muted">
+              <p className="mt-2 max-w-3xl text-base leading-relaxed text-muted">
                 {task.request}
               </p>
               <p className="mt-3 text-base text-muted">

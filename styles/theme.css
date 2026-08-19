@@ -28,9 +28,9 @@
   --auth-grid-size: 56px;
   --auth-grid-opacity: 0.5;
 
-  --font-size-root: 18px;
-  --font-size-root-lg: 18.5px;
-  --line-height-body: 1.55;
+  --font-size-root: 16px;
+  --font-size-root-lg: 16px;
+  --line-height-body: 1.5;
 
   --radius-sm: 0.5rem;
   --radius-md: 0.625rem;
@@ -46,8 +46,8 @@
   --motion-slow: 350ms;
   --ease-out: ease-out;
 
-  --auth-card-max-width: 460px;
-  --control-height: 3.125rem;
+  --auth-card-max-width: 420px;
+  --control-height: 2.5rem;
 
   color-scheme: light;
 }
@@ -441,8 +441,14 @@ body {
   }
 }
 
+html:has(.auth-shell) {
+  --auth-card-max-width: 400px;
+}
+
 .auth-shell {
   background: var(--background);
+  min-height: 100dvh;
+  min-height: 100svh;
 }
 
 .auth-shell::before {

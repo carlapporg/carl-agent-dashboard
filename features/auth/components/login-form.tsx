@@ -129,16 +129,18 @@ export function LoginForm({ demoMode = false }: LoginFormProps) {
   }
 
   return (
-    <form action={handleSubmit} className="flex flex-col gap-5" noValidate>
-      <div className="min-h-[3rem]" aria-live="polite">
-        {bannerMessage ? (
-          <div ref={alertRef} tabIndex={-1} id={bannerId}>
-            <Alert>{bannerMessage}</Alert>
-          </div>
-        ) : infoMessage ? (
-          <Alert variant="info">{infoMessage}</Alert>
-        ) : null}
-      </div>
+    <form action={handleSubmit} className="flex flex-col gap-4" noValidate>
+      {bannerMessage || infoMessage ? (
+        <div className="min-h-0" aria-live="polite">
+          {bannerMessage ? (
+            <div ref={alertRef} tabIndex={-1} id={bannerId}>
+              <Alert>{bannerMessage}</Alert>
+            </div>
+          ) : infoMessage ? (
+            <Alert variant="info">{infoMessage}</Alert>
+          ) : null}
+        </div>
+      ) : null}
 
       <div>
         <Label htmlFor="email">Email</Label>

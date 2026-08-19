@@ -12,16 +12,16 @@ export function MobileNav() {
 
   return (
     <div className="border-b border-border bg-surface lg:hidden">
-      <div className="flex h-20 items-center justify-between px-5">
+      <div className="flex h-16 items-center justify-between px-5">
         <Link href={DASHBOARD_NAV[0].href} className="block">
-          <p className="text-xl font-semibold tracking-tight text-foreground">
+          <p className="text-lg font-semibold tracking-tight text-foreground">
             Carl
           </p>
           <p className="text-sm text-muted">Agent workspace</p>
         </Link>
         <button
           type="button"
-          className="inline-flex h-12 items-center rounded-xl border border-border px-4 text-base font-semibold text-foreground"
+          className="inline-flex h-10 items-center rounded-xl border border-border px-3.5 text-sm font-semibold text-foreground"
           aria-expanded={open}
           aria-controls="mobile-nav"
           onClick={() => setOpen((value) => !value)}
@@ -47,7 +47,7 @@ export function MobileNav() {
                 href={item.href}
                 onClick={() => setOpen(false)}
                 className={cn(
-                  "block rounded-xl px-4 py-3.5 text-lg font-medium",
+                  "block rounded-xl px-3.5 py-2.5 text-base font-medium",
                   active
                     ? "bg-accent/10 text-accent"
                     : "text-foreground-soft hover:bg-surface-hover hover:text-foreground",

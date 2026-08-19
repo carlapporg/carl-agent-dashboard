@@ -244,7 +244,7 @@ export function TaskList({ tasks }: TaskListProps) {
 
       <section>
         <div className="mb-3 flex flex-wrap items-center gap-2">
-          <h2 className="text-lg font-semibold text-foreground">
+          <h2 className="text-base font-semibold text-foreground">
             Queue health
           </h2>
           <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-emerald-700">
@@ -355,7 +355,7 @@ export function TaskList({ tasks }: TaskListProps) {
                         <span className="text-base font-semibold text-muted">
                           #{task.number}
                         </span>
-                        <p className="text-lg font-semibold leading-snug text-foreground">
+                        <p className="text-base font-semibold leading-snug text-foreground">
                           {task.title}
                         </p>
                       </div>
