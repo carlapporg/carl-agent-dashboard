@@ -30,11 +30,11 @@ export function EditNameForm({ firstName, lastName }: EditNameFormProps) {
     return (
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <p className="text-base font-semibold text-foreground">Display name</p>
-          <p className="mt-1.5 text-lg text-foreground-soft">
+          <p className="text-sm font-semibold text-foreground">Display name</p>
+          <p className="mt-1 text-sm text-foreground-soft">
             {[firstName, lastName].filter(Boolean).join(" ") || "—"}
           </p>
-          <p className="mt-1 text-base text-muted">
+          <p className="mt-1 text-sm text-muted">
             This name appears in the header and on task activity.
           </p>
         </div>
@@ -54,15 +54,15 @@ export function EditNameForm({ firstName, lastName }: EditNameFormProps) {
 
   return (
     <form
-      className="space-y-5"
+      className="space-y-4"
       onSubmit={(event) => {
         event.preventDefault();
         updateName.mutate(new FormData(event.currentTarget));
       }}
     >
       <div>
-        <p className="text-base font-semibold text-foreground">Edit name</p>
-        <p className="mt-1 text-base text-muted">
+        <p className="text-sm font-semibold text-foreground">Edit name</p>
+        <p className="mt-1 text-sm text-muted">
           Update how teammates see you in the dashboard.
         </p>
       </div>
@@ -73,7 +73,7 @@ export function EditNameForm({ firstName, lastName }: EditNameFormProps) {
             : "Couldn’t save your name."}
         </Alert>
       ) : null}
-      <div className="grid gap-5 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <Label htmlFor="firstName">First name</Label>
           <Input

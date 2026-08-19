@@ -55,20 +55,20 @@ export default async function InboxPage() {
               <li key={task.id}>
                 <Link
                   href={ROUTES.task(task.id)}
-                  className="flex flex-col gap-4 px-6 py-5 transition-colors hover:bg-accent/[0.04] sm:flex-row sm:items-center sm:justify-between"
+                  className="flex flex-col gap-3 px-4 py-4 transition-colors hover:bg-accent/[0.04] sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div className="min-w-0">
-                    <p className="text-lg font-semibold text-foreground">
+                    <p className="text-sm font-semibold text-foreground">
                       #{task.number} {task.title}
                     </p>
-                    <p className="mt-1 line-clamp-2 text-base text-muted">
+                    <p className="mt-1 line-clamp-2 text-sm text-muted">
                       {task.customerName} · {task.request}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <PriorityBadge priority={task.priority} />
                     <StatusBadge status={task.status} />
-                    <span className="inline-flex h-10 items-center rounded-lg border border-border px-3 text-sm font-semibold text-accent">
+                    <span className="inline-flex h-8 items-center rounded-lg border border-border px-2.5 text-sm font-semibold text-accent">
                       Open
                     </span>
                   </div>

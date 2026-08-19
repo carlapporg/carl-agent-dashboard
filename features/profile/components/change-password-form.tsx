@@ -44,11 +44,11 @@ export function ChangePasswordForm() {
     return (
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <p className="text-base font-semibold text-foreground">Password</p>
-          <p className="mt-1.5 text-lg tracking-widest text-foreground-soft">
+          <p className="text-sm font-semibold text-foreground">Password</p>
+          <p className="mt-1 text-sm tracking-widest text-foreground-soft">
             ••••••••
           </p>
-          <p className="mt-1 text-base text-muted">
+          <p className="mt-1 text-sm text-muted">
             Update your password regularly to keep the account secure.
           </p>
         </div>

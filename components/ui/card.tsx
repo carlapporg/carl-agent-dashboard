@@ -21,7 +21,7 @@ export function Card({ className, children, ...props }: CardProps) {
 
 export function CardHeader({ className, children, ...props }: CardProps) {
   return (
-    <div className={cn("border-b border-border px-5 py-4", className)} {...props}>
+    <div className={cn("border-b border-border px-4 py-3", className)} {...props}>
       {children}
     </div>
   );
@@ -29,7 +29,10 @@ export function CardHeader({ className, children, ...props }: CardProps) {
 
 export function CardBody({ className, children, ...props }: CardProps) {
   return (
-    <div className={cn("p-6 md:p-7", className)} {...props}>
+    <div
+      className={cn("p-[var(--card-padding)] md:p-[var(--card-padding-md)]", className)}
+      {...props}
+    >
       {children}
     </div>
   );

@@ -19,7 +19,7 @@ export default async function TasksPage() {
       <PageHeader
         title="Tasks"
         description="Pick the next request, open the workspace, and keep customers moving."
-        className="mb-6 sm:mb-7"
+        className="mb-5 sm:mb-6"
       />
       <Suspense fallback={<PageSkeleton />}>
         <TaskList tasks={roots} />

@@ -162,9 +162,9 @@ export function TaskList({ tasks }: TaskListProps) {
   }
 
   return (
-    <div className={cn("task-card-in space-y-5", pending && "opacity-90")}>
-      <Card className="p-4 md:px-5 md:py-4">
-        <div className="flex flex-col gap-4">
+    <div className={cn("task-card-in space-y-4", pending && "opacity-90")}>
+      <Card className="p-3 md:px-4 md:py-3">
+        <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className={cn(!viewReady && "invisible")}>
               <TaskViewToggle value={view} onChange={changeView} />
@@ -191,7 +191,7 @@ export function TaskList({ tasks }: TaskListProps) {
               <Input
                 defaultValue={search}
                 placeholder="Search tasks, customers…"
-                className="h-11 pl-10"
+                className="pl-10"
                 aria-label="Search tasks"
                 onChange={(event) => {
                   const value = event.target.value;
@@ -224,7 +224,7 @@ export function TaskList({ tasks }: TaskListProps) {
                     updateParams({ status: filter.value });
                   }}
                   className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full border px-4 py-2.5 text-base font-semibold transition-colors",
+                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-semibold transition-colors",
                     active
                       ? "border-accent bg-accent text-accent-foreground shadow-sm"
                       : "border-border bg-surface text-foreground-soft hover:border-accent/35 hover:text-accent",
@@ -257,7 +257,7 @@ export function TaskList({ tasks }: TaskListProps) {
           {distribution.map((stage, index) => (
             <div
               key={stage.status}
-              className="task-health-in rounded-2xl border border-border bg-surface px-4 py-3.5 shadow-[var(--shadow-card)]"
+              className="task-health-in rounded-xl border border-border bg-surface px-3 py-2.5 shadow-[var(--shadow-card)]"
               style={{ "--health-i": index } as CSSProperties}
             >
               <p className="truncate text-sm font-medium text-muted">
@@ -265,7 +265,7 @@ export function TaskList({ tasks }: TaskListProps) {
               </p>
               <p
                 key={`${motionKey}-${stage.status}-n`}
-                className="task-count-pop mt-1 text-2xl font-semibold tabular-nums tracking-tight text-foreground"
+                className="task-count-pop mt-1 text-xl font-semibold tabular-nums tracking-tight text-foreground"
               >
                 {stage.count}
               </p>
@@ -312,7 +312,7 @@ export function TaskList({ tasks }: TaskListProps) {
         </Card>
       ) : (
         <Card className="overflow-hidden p-0">
-          <div className="hidden grid-cols-[56px_minmax(0,1.8fr)_minmax(0,0.9fr)_110px_170px_90px_88px] gap-3 border-b border-border bg-[#f8fafc] px-5 py-3.5 text-sm font-semibold uppercase tracking-[0.08em] text-muted xl:grid">
+          <div className="hidden grid-cols-[48px_minmax(0,1.8fr)_minmax(0,0.9fr)_100px_160px_80px_80px] gap-2 border-b border-border bg-[#f8fafc] px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.08em] text-muted xl:grid">
             <span>Prog</span>
             <span>Task</span>
             <span>Customer</span>
@@ -334,15 +334,15 @@ export function TaskList({ tasks }: TaskListProps) {
                 >
                   <Link
                     href={ROUTES.task(task.id)}
-                    className="group relative grid gap-3 px-4 py-4.5 transition-colors hover:bg-accent/[0.04] sm:px-5 xl:grid-cols-[56px_minmax(0,1.8fr)_minmax(0,0.9fr)_110px_170px_90px_88px] xl:items-center"
+                    className="group relative grid gap-2 px-3 py-3 transition-colors hover:bg-accent/[0.04] sm:px-4 xl:grid-cols-[48px_minmax(0,1.8fr)_minmax(0,0.9fr)_100px_160px_80px_80px] xl:items-center"
                   >
                     <span className="absolute inset-y-3 left-0 w-0 rounded-r bg-accent transition-[width] duration-200 group-hover:w-1" />
 
-                    <div className="relative hidden size-11 xl:block">
+                    <div className="relative hidden size-10 xl:block">
                       <MiniRing
                         percent={pct}
                         color={color}
-                        size={44}
+                        size={40}
                         animate
                       />
                       <span className="absolute inset-0 flex items-center justify-center text-xs font-bold tabular-nums text-foreground">
@@ -352,20 +352,20 @@ export function TaskList({ tasks }: TaskListProps) {
 
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                        <span className="text-base font-semibold text-muted">
+                        <span className="text-sm font-semibold text-muted">
                           #{task.number}
                         </span>
-                        <p className="text-base font-semibold leading-snug text-foreground">
+                        <p className="text-sm font-semibold leading-snug text-foreground">
                           {task.title}
                         </p>
                       </div>
-                      <p className="mt-1.5 line-clamp-1 text-base text-muted">
+                      <p className="mt-1 line-clamp-1 text-sm text-muted">
                         {task.request}
                       </p>
                     </div>
 
                     <div className="hidden min-w-0 xl:block">
-                      <p className="truncate text-base font-medium text-foreground">
+                      <p className="truncate text-sm font-medium text-foreground">
                         {task.customerName}
                       </p>
                     </div>
@@ -384,7 +384,7 @@ export function TaskList({ tasks }: TaskListProps) {
                           </span>
                         </div>
                       </div>
-                      <p className="text-base text-muted xl:hidden">
+                      <p className="text-sm text-muted xl:hidden">
                         {task.customerName}
                       </p>
                       <div>
@@ -393,11 +393,11 @@ export function TaskList({ tasks }: TaskListProps) {
                       <div>
                         <StatusBadge status={task.status} withDot />
                       </div>
-                      <p className="text-base tabular-nums text-muted">
+                      <p className="text-sm tabular-nums text-muted">
                         {formatRelative(task.updatedAt)}
                       </p>
                       <div className="xl:text-right">
-                        <span className="inline-flex h-9 items-center rounded-full bg-accent/10 px-4 text-base font-semibold text-accent transition-all group-hover:bg-accent group-hover:text-accent-foreground">
+                        <span className="inline-flex h-8 items-center rounded-full bg-accent/10 px-3 text-sm font-semibold text-accent transition-all group-hover:bg-accent group-hover:text-accent-foreground">
                           Open
                         </span>
                       </div>

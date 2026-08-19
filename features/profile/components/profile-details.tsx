@@ -22,9 +22,9 @@ function initials(user: BackendUser): string {
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-col gap-1 border-b border-border py-4 last:border-0 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
-      <dt className="text-base text-muted">{label}</dt>
-      <dd className="text-base font-semibold text-foreground sm:text-right">
+    <div className="flex flex-col gap-1 border-b border-border py-3 last:border-0 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+      <dt className="text-sm text-muted">{label}</dt>
+      <dd className="text-sm font-semibold text-foreground sm:text-right">
         {value}
       </dd>
     </div>
@@ -34,29 +34,29 @@ function Row({ label, value }: { label: string; value: string }) {
 export function ProfileDetails({ user }: { user: BackendUser }) {
   return (
     <Card>
-      <CardBody className="p-6 md:p-8">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+      <CardBody>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
           <div
-            className="flex size-20 shrink-0 items-center justify-center rounded-2xl bg-accent/10 text-2xl font-semibold text-accent"
+            className="flex size-14 shrink-0 items-center justify-center rounded-xl bg-accent/10 text-lg font-semibold text-accent"
             aria-hidden
           >
             {initials(user)}
           </div>
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-3">
-              <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-lg font-semibold tracking-tight text-foreground">
                 {getAgentDisplayName(user)}
               </h2>
               <Badge variant="accent">{user.role}</Badge>
             </div>
-            <p className="mt-1.5 truncate text-base text-muted">{user.email}</p>
-            <p className="mt-1 text-base text-muted-dim">
+            <p className="mt-1 truncate text-sm text-muted">{user.email}</p>
+            <p className="mt-0.5 text-sm text-muted-dim">
               Member since {formatDate(user.createdAt)}
             </p>
           </div>
         </div>
 
-        <dl className="mt-8 border-t border-border pt-2">
+        <dl className="mt-5 border-t border-border pt-1">
           <Row label="First name" value={user.firstName?.trim() || "—"} />
           <Row label="Last name" value={user.lastName?.trim() || "—"} />
           <Row label="Email" value={user.email} />

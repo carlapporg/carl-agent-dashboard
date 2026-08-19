@@ -42,32 +42,32 @@ export function TaskBriefPane({ task, timeline }: TaskBriefPaneProps) {
     TASK_STAGES.find((s) => s.status === task.status)?.color ?? "#4f7cff";
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <Link
         href={ROUTES.tasks}
-        className="inline-flex items-center gap-1.5 text-base font-semibold text-accent hover:text-accent-hover"
+        className="inline-flex items-center gap-1.5 text-sm font-semibold text-accent hover:text-accent-hover"
       >
         ← Back to tasks
       </Link>
 
       <Card>
-        <CardBody className="p-6 md:p-7">
-          <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+        <CardBody>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2.5">
-                <span className="rounded-md bg-surface-hover px-3 py-1 text-base font-semibold text-muted">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-md bg-surface-hover px-2.5 py-0.5 text-sm font-semibold text-muted">
                   #{task.number}
                 </span>
                 <StatusBadge status={task.status} withDot />
                 <PriorityBadge priority={task.priority} />
               </div>
-              <h1 className="mt-3 text-2xl font-semibold tracking-tight text-foreground md:text-3xl">
+              <h1 className="mt-2 text-xl font-semibold tracking-tight text-foreground md:text-2xl">
                 {task.title}
               </h1>
-              <p className="mt-2 max-w-3xl text-base leading-relaxed text-muted">
+              <p className="mt-1.5 max-w-3xl text-sm leading-relaxed text-muted">
                 {task.request}
               </p>
-              <p className="mt-3 text-base text-muted">
+              <p className="mt-2 text-sm text-muted">
                 Customer ·{" "}
                 <span className="font-semibold text-foreground-soft">
                   {task.customerName}
@@ -75,10 +75,10 @@ export function TaskBriefPane({ task, timeline }: TaskBriefPaneProps) {
               </p>
             </div>
 
-            <div className="flex shrink-0 items-center gap-4">
-              <div className="relative hidden size-16 sm:block">
-                <MiniRing percent={pct} color={color} size={64} />
-                <span className="absolute inset-0 flex items-center justify-center text-sm font-bold tabular-nums">
+            <div className="flex shrink-0 items-center gap-3">
+              <div className="relative hidden size-14 sm:block">
+                <MiniRing percent={pct} color={color} size={56} />
+                <span className="absolute inset-0 flex items-center justify-center text-xs font-bold tabular-nums">
                   {pct}%
                 </span>
               </div>
@@ -99,32 +99,32 @@ export function TaskBriefPane({ task, timeline }: TaskBriefPaneProps) {
         </CardBody>
       </Card>
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-        <div className="space-y-5">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+        <div className="space-y-4">
           <Card>
-            <CardBody className="p-6 md:p-7">
-              <h2 className="text-lg font-semibold text-foreground">Brief</h2>
+            <CardBody>
+              <h2 className="text-sm font-semibold text-foreground">Brief</h2>
               {task.aiBrief ? (
-                <p className="mt-3 text-lg leading-relaxed text-foreground-soft">
+                <p className="mt-2 text-sm leading-relaxed text-foreground-soft">
                   {task.aiBrief.summary}
                 </p>
               ) : (
-                <p className="mt-3 text-lg text-muted">
+                <p className="mt-2 text-sm text-muted">
                   No AI brief yet for this task.
                 </p>
               )}
 
               {task.aiBrief?.missingInfo &&
               task.aiBrief.missingInfo.length > 0 ? (
-                <div className="mt-5">
-                  <p className="text-base font-semibold text-amber-800">
+                <div className="mt-4">
+                  <p className="text-sm font-semibold text-amber-800">
                     Still needed
                   </p>
-                  <ul className="mt-2.5 flex flex-wrap gap-2">
+                  <ul className="mt-2 flex flex-wrap gap-1.5">
                     {task.aiBrief.missingInfo.map((item) => (
                       <li
                         key={item}
-                        className="rounded-full border border-amber-200 bg-amber-50 px-3.5 py-1.5 text-base text-amber-900"
+                        className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-sm text-amber-900"
                       >
                         {item}
                       </li>
@@ -136,14 +136,14 @@ export function TaskBriefPane({ task, timeline }: TaskBriefPaneProps) {
           </Card>
 
           <Card>
-            <CardBody className="p-6 md:p-7">
-              <h2 className="text-lg font-semibold text-foreground">
+            <CardBody>
+              <h2 className="text-sm font-semibold text-foreground">
                 Update status
               </h2>
-              <p className="mt-1 text-base text-muted">
+              <p className="mt-1 text-sm text-muted">
                 Move the task when something changes.
               </p>
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="mt-3 flex flex-wrap gap-1.5">
                 {STATUS_OPTIONS.map((next) => {
                   const active = task.status === next;
                   const stageColor =
@@ -157,7 +157,7 @@ export function TaskBriefPane({ task, timeline }: TaskBriefPaneProps) {
                       <button
                         type="submit"
                         className={cn(
-                          "inline-flex h-10 items-center rounded-full border px-3.5 text-base font-semibold transition-colors",
+                          "inline-flex h-8 items-center rounded-full border px-3 text-sm font-semibold transition-colors",
                           active
                             ? "border-transparent text-white shadow-sm"
                             : "border-border bg-surface text-muted hover:bg-surface-hover hover:text-foreground",

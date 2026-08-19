@@ -47,6 +47,9 @@
 
   --auth-card-max-width: 420px;
   --control-height: 2.5rem;
+  --card-padding: 1rem;
+  --card-padding-md: 1.25rem;
+  --section-gap: 1rem;
 
   color-scheme: light;
 }
@@ -427,6 +430,12 @@ body {
   100% {
     box-shadow: 0 0 0 0 transparent;
   }
+}
+
+.app-shell {
+  --control-height: 2.5rem;
+  --card-padding: 1rem;
+  --card-padding-md: 1.25rem;
 }
 
 html:has(.auth-shell) {

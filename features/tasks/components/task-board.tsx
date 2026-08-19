@@ -78,13 +78,13 @@ function TaskBoardCardContent({
       )}
     >
       <div className="flex items-start justify-between gap-2">
-        <span className="text-base font-semibold text-muted">#{task.number}</span>
+        <span className="text-sm font-semibold text-muted">#{task.number}</span>
         <PriorityBadge priority={task.priority} />
       </div>
-      <p className="mt-2 text-base font-semibold leading-snug text-foreground">
+      <p className="mt-1.5 text-sm font-semibold leading-snug text-foreground">
         {task.title}
       </p>
-      <p className="mt-1.5 truncate text-base text-muted">{task.customerName}</p>
+      <p className="mt-1 truncate text-sm text-muted">{task.customerName}</p>
       <p className="mt-2.5 text-sm tabular-nums text-muted-dim">
         {formatRelative(task.updatedAt)}
       </p>
@@ -160,7 +160,7 @@ function BoardColumn({
             style={{ backgroundColor: color }}
             aria-hidden
           />
-          <h3 className="truncate text-base font-semibold text-foreground">
+          <h3 className="truncate text-sm font-semibold text-foreground">
             {label}
           </h3>
         </div>
@@ -181,7 +181,7 @@ function BoardColumn({
           strategy={verticalListSortingStrategy}
         >
           {tasks.length === 0 ? (
-            <p className="m-auto px-3 py-8 text-center text-base text-muted">
+            <p className="m-auto px-3 py-6 text-center text-sm text-muted">
               No tasks here
             </p>
           ) : (
@@ -312,7 +312,7 @@ export function TaskBoard({ tasks }: TaskBoardProps) {
   if (tasks.length === 0) {
     return (
       <Card className="p-8 text-center">
-        <p className="text-base font-medium text-foreground">No tasks to show</p>
+        <p className="text-sm font-medium text-foreground">No tasks to show</p>
         <p className="mt-1 text-sm text-muted">
           Adjust filters or search to see work on the board.
         </p>

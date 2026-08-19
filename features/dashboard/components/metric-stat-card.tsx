@@ -53,12 +53,12 @@ export function MetricStatCard({
               className="dash-progress-fill"
             />
           </svg>
-          <span className="absolute inset-0 flex items-center justify-center text-lg font-bold tabular-nums text-foreground">
+          <span className="absolute inset-0 flex items-center justify-center text-sm font-bold tabular-nums text-foreground">
             {ringValue}
           </span>
         </div>
         <div className="min-w-0">
-          <p className="text-3xl font-semibold tracking-tight text-foreground">
+          <p className="text-2xl font-semibold tracking-tight text-foreground">
             {value}
           </p>
           <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-muted">

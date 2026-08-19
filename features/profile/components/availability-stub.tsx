@@ -7,10 +7,10 @@ export function AvailabilityStub() {
   return (
     <div className="flex flex-wrap items-center justify-between gap-4">
       <div>
-        <p className="text-base font-semibold text-foreground">Availability</p>
-        <div className="mt-2 flex flex-wrap items-center gap-3">
+        <p className="text-sm font-semibold text-foreground">Availability</p>
+        <div className="mt-1.5 flex flex-wrap items-center gap-2">
           <Badge variant="success">Online</Badge>
-          <span className="text-base text-muted">
+          <span className="text-sm text-muted">
             Display only — controls are coming soon.
           </span>
         </div>

@@ -74,12 +74,12 @@ export function ProfileView({ initialUser }: ProfileViewProps) {
         }`}
       />
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
         <ProfileDetails user={current} />
 
-        <div className="space-y-6">
+        <div className="space-y-4">
           <Card>
-            <CardBody className="p-6 md:p-8">
+            <CardBody>
               <EditNameForm
                 firstName={current.firstName ?? ""}
                 lastName={current.lastName ?? ""}
@@ -88,13 +88,13 @@ export function ProfileView({ initialUser }: ProfileViewProps) {
           </Card>
 
           <Card>
-            <CardBody className="p-6 md:p-8">
+            <CardBody>
               <ChangePasswordForm />
             </CardBody>
           </Card>
 
           <Card>
-            <CardBody className="p-6 md:p-8">
+            <CardBody>
               <AvailabilityStub />
             </CardBody>
           </Card>

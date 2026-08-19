@@ -19,7 +19,7 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center rounded-[var(--radius-card)] border border-dashed border-border bg-surface px-6 py-14 text-center shadow-[var(--shadow-card)]",
+        "flex flex-col items-center justify-center rounded-[var(--radius-card)] border border-dashed border-border bg-surface px-5 py-10 text-center shadow-[var(--shadow-card)]",
         className,
       )}
     >
@@ -35,11 +35,11 @@ export function EmptyState({
           <span className="text-lg">∅</span>
         </div>
       )}
-      <h2 className="text-lg font-semibold text-foreground md:text-xl">
+      <h2 className="text-base font-semibold text-foreground">
         {title}
       </h2>
       {description ? (
-        <p className="mt-2 max-w-md text-sm leading-relaxed text-muted md:text-base">
+        <p className="mt-1.5 max-w-md text-sm leading-relaxed text-muted">
           {description}
         </p>
       ) : null}

@@ -65,7 +65,7 @@ function Donut({
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <p className="text-2xl font-semibold tabular-nums text-foreground">
+        <p className="text-xl font-semibold tabular-nums text-foreground">
           {donePct}%
         </p>
         <p className="text-sm font-medium text-muted">wrapped up</p>
@@ -153,7 +153,7 @@ export function ShiftProgress({
             <p className="text-sm font-semibold uppercase tracking-wide text-muted">
               Shift progress
             </p>
-            <p className="mt-2 text-lg font-semibold text-foreground">
+            <p className="mt-1.5 text-base font-semibold text-foreground">
               {completed} done · {inProgress} in motion · {remaining} waiting
             </p>
             <p className="mt-1 max-w-xs text-sm text-muted">

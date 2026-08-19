@@ -12,9 +12,9 @@ export function MobileNav() {
 
   return (
     <div className="border-b border-border bg-surface lg:hidden">
-      <div className="flex h-16 items-center justify-between px-5">
+      <div className="flex h-14 items-center justify-between px-4">
         <Link href={DASHBOARD_NAV[0].href} className="block">
-          <p className="text-lg font-semibold tracking-tight text-foreground">
+          <p className="text-base font-semibold tracking-tight text-foreground">
             Carl
           </p>
           <p className="text-sm text-muted">Agent workspace</p>

@@ -29,12 +29,12 @@ export function DashboardHeader({ user }: DashboardHeaderProps) {
 
   return (
     <>
-      <header className="flex h-16 items-center justify-between gap-4 border-b border-border bg-surface px-5 md:px-6 lg:px-8">
+      <header className="flex h-14 items-center justify-between gap-4 border-b border-border bg-surface px-4 md:px-5 lg:px-6">
         <div className="min-w-0">
-          <p className="truncate text-base font-semibold tracking-tight text-foreground md:text-lg">
+          <p className="truncate text-sm font-semibold tracking-tight text-foreground md:text-base">
             Agent Dashboard
           </p>
-          <p className="mt-0.5 truncate text-base text-muted">
+          <p className="mt-0.5 truncate text-sm text-muted">
             Signed in as {current.email}
           </p>
         </div>
@@ -48,7 +48,7 @@ export function DashboardHeader({ user }: DashboardHeaderProps) {
               {initials(current)}
             </div>
             <div className="min-w-0">
-              <p className="truncate text-base font-semibold text-foreground">
+              <p className="truncate text-sm font-semibold text-foreground">
                 {name}
               </p>
               <p className="text-sm text-muted">Agent</p>

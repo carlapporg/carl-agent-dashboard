@@ -51,7 +51,7 @@ export function TaskViewToggle({ value, onChange }: TaskViewToggleProps) {
             aria-pressed={active}
             onClick={() => onChange(option.id)}
             className={cn(
-              "rounded-full px-4 py-2 text-base font-semibold transition-colors",
+              "rounded-full px-3 py-1.5 text-sm font-semibold transition-colors",
               active
                 ? "bg-accent text-accent-foreground shadow-sm"
                 : "text-muted hover:text-foreground",

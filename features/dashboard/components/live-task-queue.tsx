@@ -91,6 +91,10 @@ export function LiveTaskQueue({ seedTasks }: LiveTaskQueueProps) {
 
   useEffect(() => {
     const id = window.setInterval(() => {
+      let incomingId: string | null = null;
+      let incomingTitle = "";
+      let incomingCustomer = "";
+
       setItems((current) => {
         const prev = current.filter((i) => i.isSimulated).length;
         const demo = DEMO_ARRIVALS[prev % DEMO_ARRIVALS.length];
@@ -102,13 +106,9 @@ export function LiveTaskQueue({ seedTasks }: LiveTaskQueueProps) {
           isSimulated: true,
         };
 
-        setLivePop(true);
-        toast(`${incoming.title} · ${incoming.customerName}`, "info", {
-          placement: "top",
-          title: "New task in queue",
-        });
-
-        window.setTimeout(() => setLivePop(false), 900);
+        incomingId = incoming.id;
+        incomingTitle = incoming.title;
+        incomingCustomer = incoming.customerName;
 
         const cleared = current.map((item) => ({ ...item, isNew: false }));
         const next = [incoming, ...cleared].slice(0, 6);
@@ -123,6 +123,16 @@ export function LiveTaskQueue({ seedTasks }: LiveTaskQueueProps) {
 
         return next;
       });
+
+      if (!incomingId) return;
+
+      setLivePop(true);
+      toast(`${incomingTitle} · ${incomingCustomer}`, "info", {
+        placement: "top",
+        title: "New task in queue",
+      });
+
+      window.setTimeout(() => setLivePop(false), 900);
     }, 8000);
 
     return () => window.clearInterval(id);
@@ -130,9 +140,9 @@ export function LiveTaskQueue({ seedTasks }: LiveTaskQueueProps) {
 
   return (
     <section>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <h2 className="text-xl font-semibold text-foreground">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <h2 className="text-base font-semibold text-foreground">
             Live task queue
           </h2>
           <span
@@ -147,23 +157,23 @@ export function LiveTaskQueue({ seedTasks }: LiveTaskQueueProps) {
         </div>
         <Link
           href={ROUTES.tasks}
-          className="text-base font-semibold text-accent hover:text-accent-hover"
+          className="text-sm font-semibold text-accent hover:text-accent-hover"
         >
           Open full queue
         </Link>
       </div>
 
       <Card className="overflow-hidden p-0">
-        <div className="border-b border-border bg-[#f8fafc] px-5 py-3 text-sm text-muted md:px-6">
+        <div className="border-b border-border bg-[#f8fafc] px-4 py-2.5 text-xs text-muted">
           Fresh asks land at the top. Demo stream updates every few seconds.
         </div>
 
         {items.length === 0 ? (
-          <p className="px-6 py-10 text-center text-base text-muted">
+          <p className="px-4 py-8 text-center text-sm text-muted">
             Queue is quiet. New work will slide in live.
           </p>
         ) : (
-          <ul className="flex flex-col gap-0 p-3 md:p-4">
+          <ul className="flex flex-col gap-0 p-2.5 md:p-3">
             {items.map((item, index) => {
               const href = item.isSimulated
                 ? ROUTES.tasks
@@ -174,7 +184,7 @@ export function LiveTaskQueue({ seedTasks }: LiveTaskQueueProps) {
                   <Link
                     href={href}
                     className={cn(
-                      "group relative flex flex-col gap-3 overflow-hidden rounded-xl border border-border bg-surface px-4 py-4 transition-all hover:border-accent/30 hover:bg-accent/[0.03] sm:flex-row sm:items-center sm:justify-between md:px-5",
+                      "group relative flex flex-col gap-2 overflow-hidden rounded-lg border border-border bg-surface px-3 py-3 transition-all hover:border-accent/30 hover:bg-accent/[0.03] sm:flex-row sm:items-center sm:justify-between md:px-4",
                       item.isNew && "dash-drop-in border-accent/40 shadow-sm",
                       index === 0 && !item.isNew && "border-accent/20",
                     )}
@@ -186,7 +196,7 @@ export function LiveTaskQueue({ seedTasks }: LiveTaskQueueProps) {
                     <div className="flex min-w-0 items-center gap-3.5">
                       <span
                         className={cn(
-                          "flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-bold",
+                          "flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-bold",
                           index === 0
                             ? "bg-accent text-accent-foreground"
                             : "bg-accent/10 text-accent",
@@ -202,11 +212,11 @@ export function LiveTaskQueue({ seedTasks }: LiveTaskQueueProps) {
                               Just in
                             </span>
                           ) : null}
-                          <p className="truncate text-base font-semibold text-foreground md:text-lg">
+                          <p className="truncate text-sm font-semibold text-foreground">
                             {item.title}
                           </p>
                         </div>
-                        <p className="mt-0.5 truncate text-sm text-muted md:text-base">
+                        <p className="mt-0.5 truncate text-xs text-muted sm:text-sm">
                           {item.customerName}
                           <span className="text-muted-dim">
                             {" "}

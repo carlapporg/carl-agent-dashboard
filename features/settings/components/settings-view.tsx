@@ -36,10 +36,10 @@ function SettingRow({
   defaultChecked: boolean;
 }) {
   return (
-    <div className="flex items-start justify-between gap-6 py-6 first:pt-0 last:pb-0">
+    <div className="flex items-start justify-between gap-4 py-4 first:pt-0 last:pb-0">
       <div className="min-w-0">
-        <p className="text-lg font-medium text-foreground">{title}</p>
-        <p className="mt-1.5 text-base leading-relaxed text-muted">{detail}</p>
+        <p className="text-sm font-medium text-foreground">{title}</p>
+        <p className="mt-1 text-sm leading-relaxed text-muted">{detail}</p>
         <p className="mt-2 text-sm text-muted-dim">Coming soon</p>
       </div>
       <Switch
@@ -60,13 +60,13 @@ export function SettingsView() {
         description="Notification and display preferences. These controls are preview-only for now."
       />
 
-      <div className="mx-auto max-w-3xl space-y-5">
+      <div className="mx-auto max-w-3xl space-y-4">
         <Card>
-          <CardBody className="p-6 md:p-8">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
+          <CardBody>
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">
               Notifications
             </h2>
-            <div className="mt-4 divide-y divide-border">
+            <div className="mt-3 divide-y divide-border">
               {NOTIFICATION_SETTINGS.map((item) => (
                 <SettingRow key={item.title} {...item} />
               ))}
@@ -75,11 +75,11 @@ export function SettingsView() {
         </Card>
 
         <Card>
-          <CardBody className="p-6 md:p-8">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
+          <CardBody>
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">
               Display
             </h2>
-            <div className="mt-4 divide-y divide-border">
+            <div className="mt-3 divide-y divide-border">
               {DISPLAY_SETTINGS.map((item) => (
                 <SettingRow key={item.title} {...item} />
               ))}
