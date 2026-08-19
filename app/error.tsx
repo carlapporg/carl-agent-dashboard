@@ -24,7 +24,7 @@ export default function ErrorBoundary({
         Something went wrong
       </h1>
       <p className="max-w-md text-sm leading-relaxed text-muted">
-        We hit an unexpected snag. Try again — if it keeps happening, tell your
+        We hit an unexpected snag . Try again — if it keeps happening, tell your
         admin.
       </p>
       {error.digest ? (
