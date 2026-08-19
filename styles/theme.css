@@ -29,7 +29,6 @@
   --auth-grid-opacity: 0.5;
 
   --font-size-root: 16px;
-  --font-size-root-lg: 16px;
   --line-height-body: 1.5;
 
   --radius-sm: 0.5rem;
@@ -80,17 +79,6 @@
 
 * {
   border-color: var(--border);
-}
-
-html {
-  color-scheme: inherit;
-  font-size: var(--font-size-root);
-}
-
-@media (min-width: 1280px) {
-  html {
-    font-size: var(--font-size-root-lg);
-  }
 }
 
 body {

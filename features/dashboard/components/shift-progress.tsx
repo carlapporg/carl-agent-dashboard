@@ -18,8 +18,8 @@ function Donut({
   inProgress: number;
   total: number;
 }) {
-  const size = 168;
-  const stroke = 18;
+  const size = 140;
+  const stroke = 14;
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
   const safe = Math.max(total, 1);
@@ -138,7 +138,7 @@ export function ShiftProgress({
   return (
     <div
       className={cn(
-        "rounded-[var(--radius-card)] border border-border bg-surface p-6 shadow-[var(--shadow-card)] md:p-8",
+        "rounded-[var(--radius-card)] border border-border bg-surface p-5 shadow-[var(--shadow-card)] md:p-6",
         className,
       )}
     >

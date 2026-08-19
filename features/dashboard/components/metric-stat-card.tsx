@@ -18,8 +18,8 @@ export function MetricStatCard({
   color,
   className,
 }: MetricStatCardProps) {
-  const size = 76;
-  const stroke = 8;
+  const size = 64;
+  const stroke = 7;
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
   const maxForRing = Math.max(value, ringValue, 1);
@@ -28,8 +28,8 @@ export function MetricStatCard({
   const offset = circumference - (pct / 100) * circumference;
 
   return (
-    <Card className={cn("p-6 md:p-7", className)}>
-      <div className="flex items-center gap-5">
+    <Card className={cn("p-5", className)}>
+      <div className="flex items-center gap-4">
         <div className="relative shrink-0">
           <svg width={size} height={size} className="-rotate-90" aria-hidden>
             <circle
@@ -58,7 +58,7 @@ export function MetricStatCard({
           </span>
         </div>
         <div className="min-w-0">
-          <p className="text-4xl font-semibold tracking-tight text-foreground">
+          <p className="text-3xl font-semibold tracking-tight text-foreground">
             {value}
           </p>
           <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-muted">

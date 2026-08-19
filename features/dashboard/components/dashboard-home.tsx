@@ -63,7 +63,7 @@ export function DashboardHome({
         }
       />
 
-      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <MetricStatCard
           label="Needs attention"
           value={stats.needsAttention}
@@ -87,7 +87,7 @@ export function DashboardHome({
         />
       </div>
 
-      <div className="mt-8">
+      <div className="mt-6">
         <ShiftProgress
           completed={completed}
           inProgress={inProgress}
@@ -95,7 +95,7 @@ export function DashboardHome({
         />
       </div>
 
-      <div className="mt-10">
+      <div className="mt-7">
         <LiveTaskQueue seedTasks={tasks} />
       </div>
     </PageShell>
