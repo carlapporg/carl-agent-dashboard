@@ -10,7 +10,7 @@ export function DashboardSidebar() {
 
   return (
     <aside className="hidden w-80 shrink-0 border-r border-border bg-surface lg:flex lg:w-[18.5rem] lg:flex-col xl:w-80">
-      <div className="flex h-[4.5rem] items-center border-b border-border px-7">
+      <div className="flex h-20 items-center border-b border-border px-7">
         <Link href={DASHBOARD_NAV[0].href} className="group block min-w-0">
           <p className="text-2xl font-semibold tracking-tight text-foreground">
             Carl

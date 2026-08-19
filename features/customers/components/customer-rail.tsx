@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Card, CardBody } from "@/components/ui/card";
 import { ROUTES } from "@/lib/constants/routes";
 import type { CustomerHistoryItem, CustomerProfile } from "@/types/customer";
 
@@ -7,67 +8,76 @@ type CustomerRailProps = {
   history: CustomerHistoryItem[];
 };
 
+function RailCard({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Card>
+      <CardBody className="p-5">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">
+          {title}
+        </h2>
+        <div className="mt-3">{children}</div>
+      </CardBody>
+    </Card>
+  );
+}
+
 export function CustomerRail({ profile, history }: CustomerRailProps) {
   return (
-    <aside className="space-y-6">
-      <section className="rounded-2xl border border-border bg-surface p-5">
-        <h2 className="text-sm font-medium uppercase tracking-wide text-muted-dim">
-          Customer
-        </h2>
-        <p className="mt-3 text-lg font-medium text-foreground">{profile.name}</p>
-        <p className="text-sm text-muted">{profile.email}</p>
+    <aside className="space-y-4">
+      <RailCard title="Customer">
+        <p className="text-lg font-semibold text-foreground">{profile.name}</p>
+        <p className="mt-1 text-base text-muted">{profile.email}</p>
         {profile.phone ? (
-          <p className="text-sm text-muted">{profile.phone}</p>
+          <p className="text-base text-muted">{profile.phone}</p>
         ) : null}
         {profile.notes ? (
-          <p className="mt-3 text-sm leading-relaxed text-foreground-soft">
+          <p className="mt-3 text-base leading-relaxed text-foreground-soft">
             {profile.notes}
           </p>
         ) : null}
-        <p className="mt-3 text-xs text-muted-dim">
+        <p className="mt-3 text-sm text-muted-dim">
           Member since {new Date(profile.memberSince).toLocaleDateString()}
         </p>
-      </section>
+      </RailCard>
 
-      <section className="rounded-2xl border border-border bg-surface p-5">
-        <h2 className="text-sm font-medium uppercase tracking-wide text-muted-dim">
-          Preferences
-        </h2>
-        <ul className="mt-3 space-y-2">
+      <RailCard title="Preferences">
+        <ul className="space-y-2">
           {profile.preferences.map((pref) => (
-            <li key={pref.key} className="text-sm">
+            <li key={pref.key} className="text-base">
               <span className="text-muted">{pref.key}: </span>
-              <span className="text-foreground-soft">{pref.value}</span>
+              <span className="font-medium text-foreground-soft">
+                {pref.value}
+              </span>
             </li>
           ))}
         </ul>
-      </section>
+      </RailCard>
 
-      <section className="rounded-2xl border border-border bg-surface p-5">
-        <h2 className="text-sm font-medium uppercase tracking-wide text-muted-dim">
-          Spending rules
-        </h2>
-        <dl className="mt-3 space-y-2 text-sm">
+      <RailCard title="Spending rules">
+        <dl className="space-y-2 text-base">
           <div className="flex justify-between gap-3">
             <dt className="text-muted">Auto-approve under</dt>
-            <dd className="text-foreground-soft">
+            <dd className="font-semibold text-foreground">
               ${profile.spendingRules.autoApproveUnder}
             </dd>
           </div>
           <div className="flex justify-between gap-3">
             <dt className="text-muted">Monthly limit</dt>
-            <dd className="text-foreground-soft">
+            <dd className="font-semibold text-foreground">
               ${profile.spendingRules.monthlyLimit.toLocaleString()}
             </dd>
           </div>
         </dl>
-      </section>
+      </RailCard>
 
-      <section className="rounded-2xl border border-border bg-surface p-5">
-        <h2 className="text-sm font-medium uppercase tracking-wide text-muted-dim">
-          Payment methods
-        </h2>
-        <ul className="mt-3 space-y-2 text-sm text-foreground-soft">
+      <RailCard title="Payment methods">
+        <ul className="space-y-2 text-base text-foreground-soft">
           {profile.paymentMethods.map((pm) => (
             <li key={pm.id}>
               {pm.brand} ···· {pm.last4}
@@ -77,14 +87,11 @@ export function CustomerRail({ profile, history }: CustomerRailProps) {
             </li>
           ))}
         </ul>
-      </section>
+      </RailCard>
 
       {profile.familyMembers.length > 0 ? (
-        <section className="rounded-2xl border border-border bg-surface p-5">
-          <h2 className="text-sm font-medium uppercase tracking-wide text-muted-dim">
-            Family
-          </h2>
-          <ul className="mt-3 space-y-2 text-sm">
+        <RailCard title="Family">
+          <ul className="space-y-2 text-base">
             {profile.familyMembers.map((member) => (
               <li key={member.id} className="text-foreground-soft">
                 {member.name}
@@ -98,31 +105,28 @@ export function CustomerRail({ profile, history }: CustomerRailProps) {
               </li>
             ))}
           </ul>
-        </section>
+        </RailCard>
       ) : null}
 
-      <section className="rounded-2xl border border-border bg-surface p-5">
-        <h2 className="text-sm font-medium uppercase tracking-wide text-muted-dim">
-          Relevant history
-        </h2>
-        <ul className="mt-3 space-y-2">
+      <RailCard title="Relevant history">
+        <ul className="space-y-1">
           {history.slice(0, 6).map((item) => (
             <li key={item.taskId}>
               <Link
                 href={ROUTES.task(item.taskId)}
-                className="block rounded-lg px-2 py-1.5 text-sm transition-colors hover:bg-surface-hover"
+                className="block rounded-lg px-2 py-2 text-base transition-colors hover:bg-surface-hover"
               >
-                <span className="text-foreground-soft">
+                <span className="font-medium text-foreground-soft">
                   #{item.taskNumber} {item.title}
                 </span>
-                <span className="mt-0.5 block text-xs capitalize text-muted-dim">
+                <span className="mt-0.5 block text-sm capitalize text-muted-dim">
                   {item.status.replaceAll("_", " ")}
                 </span>
               </Link>
             </li>
           ))}
         </ul>
-      </section>
+      </RailCard>
     </aside>
   );
 }

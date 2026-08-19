@@ -4,31 +4,44 @@ import Script from "next/script";
 import { AppProviders } from "@/components/providers/app-providers";
 import "./globals.css";
 
-/** Strips password-manager attrs before hydrate (stops blink loops in dev). */
+/** Strips password-manager attrs before/during hydrate (Bitwarden etc.). */
 const STRIP_EXTENSION_ATTRS = `
 (function () {
-  var ATTRS = ["bis_skin_checked", "bis_register"];
-  function strip(node) {
-    if (!node) return;
+  var ATTRS = ["bis_skin_checked", "bis_register", "data-bwignore", "data-lpignore"];
+  function strip(root) {
+    if (!root) return;
     for (var i = 0; i < ATTRS.length; i++) {
-      if (node.removeAttribute) node.removeAttribute(ATTRS[i]);
+      if (root.removeAttribute) root.removeAttribute(ATTRS[i]);
     }
-    if (!node.querySelectorAll) return;
+    if (!root.querySelectorAll) return;
     for (var a = 0; a < ATTRS.length; a++) {
-      var list = node.querySelectorAll("[" + ATTRS[a] + "]");
+      var list = root.querySelectorAll("[" + ATTRS[a] + "]");
       for (var j = 0; j < list.length; j++) list[j].removeAttribute(ATTRS[a]);
     }
   }
-  strip(document.documentElement);
-  var obs = new MutationObserver(function () {
+  function run() {
     strip(document.documentElement);
-  });
-  obs.observe(document.documentElement, {
-    attributes: true,
-    subtree: true,
-    attributeFilter: ATTRS,
-  });
-  setTimeout(function () { obs.disconnect(); }, 8000);
+    strip(document.body);
+  }
+  run();
+  var obs = new MutationObserver(function () { run(); });
+  function start() {
+    run();
+    if (document.documentElement) {
+      obs.observe(document.documentElement, {
+        attributes: true,
+        subtree: true,
+        attributeFilter: ATTRS,
+        childList: true,
+      });
+    }
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start);
+  } else {
+    start();
+  }
+  setTimeout(function () { obs.disconnect(); }, 15000);
 })();
 `;
 
