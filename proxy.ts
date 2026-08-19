@@ -32,6 +32,9 @@ export function proxy(request: NextRequest) {
 
   const isLoginRoute =
     pathname === ROUTES.login || pathname.startsWith(`${ROUTES.login}/`);
+  const isRegisterRoute =
+    pathname === ROUTES.register || pathname.startsWith(`${ROUTES.register}/`);
+  const isAuthRoute = isLoginRoute || isRegisterRoute;
   const isUnauthorizedRoute = pathname.startsWith(ROUTES.unauthorized);
   const isProtectedRoute =
     pathname === ROUTES.home ||
@@ -43,7 +46,7 @@ export function proxy(request: NextRequest) {
     return redirectToLogin(request, pathname);
   }
 
-  if (isLoginRoute && hasValidSession) {
+  if (isAuthRoute && hasValidSession) {
     return NextResponse.redirect(new URL(ROUTES.dashboard, request.url));
   }
 
@@ -58,6 +61,7 @@ export const config = {
   matcher: [
     "/",
     "/login",
+    "/register",
     "/unauthorized",
     "/dashboard",
     "/dashboard/:path*",

@@ -36,6 +36,7 @@ function statusToCode(status: number, kind: string): ApiErrorBody["code"] {
   if (status === 401) return "UNAUTHORIZED";
   if (status === 403) return "FORBIDDEN";
   if (status === 404) return "NOT_FOUND";
+  if (status === 409) return "CONFLICT";
   if (status === 429) return "RATE_LIMITED";
   if (status === 0) return "NETWORK_ERROR";
   if (status >= 500) return "SERVER_ERROR";

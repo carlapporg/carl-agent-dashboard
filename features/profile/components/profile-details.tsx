@@ -1,7 +1,10 @@
+import Link from "next/link";
 import type { BackendUser } from "@/types/user";
 import { getAgentDisplayName } from "@/types/user";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
+import { ROUTES } from "@/lib/constants/routes";
 
 function formatDate(value: string | null | undefined): string {
   if (!value) return "—";
@@ -42,7 +45,7 @@ export function ProfileDetails({ user }: { user: BackendUser }) {
           >
             {initials(user)}
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-lg font-semibold tracking-tight text-foreground">
                 {getAgentDisplayName(user)}
@@ -54,6 +57,11 @@ export function ProfileDetails({ user }: { user: BackendUser }) {
               Member since {formatDate(user.createdAt)}
             </p>
           </div>
+          <Link href={ROUTES.profileEdit} className="sm:ml-auto">
+            <Button type="button" variant="secondary" className="w-full sm:w-auto">
+              Edit profile
+            </Button>
+          </Link>
         </div>
 
         <dl className="mt-5 border-t border-border pt-1">

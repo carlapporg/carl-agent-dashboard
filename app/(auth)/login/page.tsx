@@ -1,7 +1,9 @@
+import Link from "next/link";
 import { Suspense } from "react";
 import { AuthCard } from "@/features/auth/components/auth-card";
 import { LoginForm } from "@/features/auth/components/login-form";
 import { env } from "@/lib/config/env";
+import { ROUTES } from "@/lib/constants/routes";
 
 export default function LoginPage() {
   return (
@@ -13,7 +15,13 @@ export default function LoginPage() {
         <>
           Need help? Contact your team lead.
           <span className="mt-1 block text-xs text-muted-dim">
-            Agents are invited by admin — no self-serve signup.
+            New agent?{" "}
+            <Link
+              href={ROUTES.register}
+              className="font-semibold text-accent hover:text-accent-hover"
+            >
+              Create an account
+            </Link>
           </span>
         </>
       }

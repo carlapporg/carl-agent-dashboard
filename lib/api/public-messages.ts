@@ -2,6 +2,11 @@ export const USER_MESSAGES = {
   emailRequired: "Please enter your email address",
   emailInvalid: "Please enter a valid email address",
   passwordRequired: "Please enter your password",
+  passwordMinLength: "Password must be at least 8 characters",
+  passwordMismatch: "Passwords do not match",
+  firstNameRequired: "Please enter your first name",
+  emailTaken: "An account with this email already exists.",
+  registerSuccess: "Account created successfully.",
   invalidCredentials: "Invalid email or password",
   unauthorizedApp: "You are not authorized to access this application",
   accountDisabled: "Your account has been disabled. Please contact support.",
@@ -18,6 +23,7 @@ export type AuthErrorKind =
   | "credentials"
   | "forbidden"
   | "disabled"
+  | "conflict"
   | "rate_limit"
   | "network"
   | "server"
@@ -43,6 +49,7 @@ export function classifyAuthError(
 ): AuthErrorKind {
   if (status === 0) return "network";
   if (status === 429) return "rate_limit";
+  if (status === 409) return "conflict";
   if (status === 503 || status === 502 || status === 500 || status >= 500) {
     return "server";
   }
@@ -85,6 +92,8 @@ export function messageForKind(kind: AuthErrorKind): string {
       return USER_MESSAGES.unauthorizedApp;
     case "disabled":
       return USER_MESSAGES.accountDisabled;
+    case "conflict":
+      return USER_MESSAGES.emailTaken;
     case "rate_limit":
       return USER_MESSAGES.rateLimited;
     case "network":

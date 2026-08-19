@@ -4,6 +4,7 @@ export type ApiErrorCode =
   | "DISABLED"
   | "VALIDATION_ERROR"
   | "NOT_FOUND"
+  | "CONFLICT"
   | "RATE_LIMITED"
   | "SERVER_ERROR"
   | "NETWORK_ERROR"

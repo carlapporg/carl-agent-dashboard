@@ -1,5 +1,21 @@
-import type { LoginCredentials, LoginResponse } from "@/types/auth";
+import type { LoginCredentials, LoginResponse, RegisterCredentials } from "@/types/auth";
 import type { BackendUser } from "@/types/user";
+
+export function createMockRegisterResponse(
+  credentials: RegisterCredentials,
+): BackendUser {
+  const login = createMockLoginResponse({
+    email: credentials.email,
+    password: credentials.password,
+  });
+
+  return {
+    ...login.user,
+    firstName: credentials.firstName,
+    lastName: credentials.lastName ?? null,
+    isEmailVerified: true,
+  };
+}
 
 export function createMockLoginResponse(
   credentials: LoginCredentials,

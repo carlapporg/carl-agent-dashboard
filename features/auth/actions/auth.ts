@@ -21,7 +21,8 @@ import {
 } from "@/lib/auth/session";
 import { ROUTES } from "@/lib/constants/routes";
 import { parseLoginFormData } from "@/features/auth/schemas/login";
-import type { LoginFormState } from "@/types/auth";
+import { parseRegisterFormData } from "@/features/auth/schemas/register";
+import type { LoginFormState, RegisterFormState } from "@/types/auth";
 
 async function clientKey(email: string): Promise<string> {
   const headerStore = await headers();
@@ -98,6 +99,95 @@ export async function loginAction(
   } catch (error) {
     recordLoginFailure(key);
     logAuthEvent("login_failed", {
+      email,
+      reason: isApiError(error) ? error.kind : "unknown",
+      status: isApiError(error) ? error.status : undefined,
+    });
+    return {
+      message: toUserMessage(error),
+    };
+  }
+
+  return { success: true };
+}
+
+export async function registerAction(
+  _prevState: RegisterFormState,
+  formData: FormData,
+): Promise<RegisterFormState> {
+  const validated = parseRegisterFormData(formData);
+
+  if (!validated.success) {
+    const fieldErrors = validated.error.flatten().fieldErrors;
+    return {
+      errors: {
+        email: fieldErrors.email,
+        password: fieldErrors.password,
+        confirmPassword: fieldErrors.confirmPassword,
+        firstName: fieldErrors.firstName,
+        lastName: fieldErrors.lastName,
+      },
+    };
+  }
+
+  const { email, password, firstName, lastName } = validated.data;
+  const key = await clientKey(email);
+
+  try {
+    assertLoginAllowed(key);
+  } catch (error) {
+    logAuthEvent("register_failed", { email, reason: "rate_limited" });
+    return { message: toUserMessage(error, USER_MESSAGES.rateLimited) };
+  }
+
+  try {
+    const registered = await authApi.register({
+      email,
+      password,
+      firstName,
+      lastName,
+    });
+
+    if (registered.role !== "AGENT") {
+      recordLoginFailure(key);
+      logAuthEvent("register_failed", { email, reason: "wrong_role" });
+      return { message: USER_MESSAGES.unauthorizedApp };
+    }
+
+    const result = await authApi.login({
+      email,
+      password,
+      rememberMe: false,
+    });
+
+    if (result.user.role !== "AGENT") {
+      recordLoginFailure(key);
+      logAuthEvent("register_failed", { email, reason: "wrong_role" });
+      await destroySession();
+      return { message: USER_MESSAGES.unauthorizedApp };
+    }
+
+    await createSession({
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
+      user: result.user,
+      rememberMe: false,
+    });
+
+    try {
+      const profile = await agentsApi.me();
+      if (profile.role === "AGENT") {
+        await updateSessionUser(profile);
+      }
+    } catch {
+      // Registered user payload is sufficient.
+    }
+
+    recordLoginSuccess(key);
+    logAuthEvent("register_success", { email });
+  } catch (error) {
+    recordLoginFailure(key);
+    logAuthEvent("register_failed", {
       email,
       reason: isApiError(error) ? error.kind : "unknown",
       status: isApiError(error) ? error.status : undefined,

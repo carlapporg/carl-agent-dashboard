@@ -9,6 +9,8 @@ function maskEmail(email: string): string {
 type AuthLogEvent =
   | "login_success"
   | "login_failed"
+  | "register_success"
+  | "register_failed"
   | "logout"
   | "unauthorized_access"
   | "session_expired";

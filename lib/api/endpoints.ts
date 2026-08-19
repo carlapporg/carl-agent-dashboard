@@ -10,6 +10,8 @@ export const API_ENDPOINTS = {
   auth: {
     /** POST — agent sign-in */
     agentLogin: "/auth/agent/login",
+    /** POST — agent self-registration */
+    agentRegister: "/auth/agent/register",
   },
   agents: {
     /** GET current agent · PATCH update name */

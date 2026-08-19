@@ -35,11 +35,11 @@ const nameSchema = z.object({
     .string()
     .trim()
     .min(1, "Enter your first name")
-    .max(50, "First name is too long"),
+    .max(100, "First name is too long"),
   lastName: z
     .string()
     .trim()
-    .max(50, "Last name is too long")
+    .max(100, "Last name is too long")
     .optional()
     .transform((v) => v || null),
 });
@@ -85,6 +85,7 @@ export async function updateAgentNameAction(
     });
     await updateSessionUser(user);
     revalidatePath(ROUTES.profile);
+    revalidatePath(ROUTES.profileEdit);
     revalidatePath(ROUTES.dashboard);
     return { success: true, message: "Name updated.", user };
   } catch (error) {
