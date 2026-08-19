@@ -91,6 +91,10 @@ export function LiveTaskQueue({ seedTasks }: LiveTaskQueueProps) {
 
   useEffect(() => {
     const id = window.setInterval(() => {
+      let incomingId: string | null = null;
+      let incomingTitle = "";
+      let incomingCustomer = "";
+
       setItems((current) => {
         const prev = current.filter((i) => i.isSimulated).length;
         const demo = DEMO_ARRIVALS[prev % DEMO_ARRIVALS.length];
@@ -102,27 +106,32 @@ export function LiveTaskQueue({ seedTasks }: LiveTaskQueueProps) {
           isSimulated: true,
         };
 
-        setLivePop(true);
-        toast(`${incoming.title} · ${incoming.customerName}`, "info", {
-          placement: "top",
-          title: "New task in queue",
-        });
-
-        window.setTimeout(() => setLivePop(false), 900);
+        incomingId = incoming.id;
+        incomingTitle = incoming.title;
+        incomingCustomer = incoming.customerName;
 
         const cleared = current.map((item) => ({ ...item, isNew: false }));
-        const next = [incoming, ...cleared].slice(0, 6);
-
-        window.setTimeout(() => {
-          setItems((latest) =>
-            latest.map((item) =>
-              item.id === incoming.id ? { ...item, isNew: false } : item,
-            ),
-          );
-        }, 1800);
-
-        return next;
+        return [incoming, ...cleared].slice(0, 6);
       });
+
+      if (!incomingId) return;
+
+      setLivePop(true);
+      toast(`${incomingTitle} · ${incomingCustomer}`, "info", {
+        placement: "top",
+        title: "New task in queue",
+      });
+
+      window.setTimeout(() => setLivePop(false), 900);
+
+      window.setTimeout(() => {
+        const idToClear = incomingId;
+        setItems((latest) =>
+          latest.map((item) =>
+            item.id === idToClear ? { ...item, isNew: false } : item,
+          ),
+        );
+      }, 1800);
     }, 8000);
 
     return () => window.clearInterval(id);
