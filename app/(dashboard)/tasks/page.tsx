@@ -18,7 +18,7 @@ export default async function TasksPage() {
     <PageShell wide>
       <PageHeader
         title="Tasks"
-        description="Pick the next request, open the workspace, and keep customers moving."
+        description="Assigned work appears here automatically. Open a task to start — no accept needed."
         className="mb-5 sm:mb-6"
       />
       <Suspense fallback={<PageSkeleton />}>

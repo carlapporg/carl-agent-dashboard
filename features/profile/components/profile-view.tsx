@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { AvailabilityStub } from "@/features/profile/components/availability-stub";
+import { AgentPrefsPanel } from "@/features/profile/components/agent-prefs-panel";
 import { ChangePasswordForm } from "@/features/profile/components/change-password-form";
 import { ProfileDetails } from "@/features/profile/components/profile-details";
 import { useAgentMe } from "@/features/agents/hooks";
@@ -95,6 +96,12 @@ export function ProfileView({ initialUser }: ProfileViewProps) {
           <Card>
             <CardBody>
               <AvailabilityStub />
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardBody>
+              <AgentPrefsPanel />
             </CardBody>
           </Card>
         </div>

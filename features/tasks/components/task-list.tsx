@@ -9,6 +9,7 @@ import {
   useTransition,
   type CSSProperties,
 } from "react";
+import { SlaCountdown } from "@/features/dashboard/components/sla-countdown";
 import {
   PriorityBadge,
   StatusBadge,
@@ -19,6 +20,7 @@ import {
   TASK_STAGES,
 } from "@/features/tasks/components/stage-progress";
 import { TaskBoard } from "@/features/tasks/components/task-board";
+import { MissedTaskWatcher } from "@/features/tasks/components/missed-task-watcher";
 import {
   readStoredTasksView,
   storeTasksView,
@@ -91,8 +93,18 @@ export function TaskList({ tasks }: TaskListProps) {
   const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
   const status = (searchParams.get("status") as TaskStatus | "all") || "all";
+  const typeFilter = searchParams.get("type") ?? "all";
   const search = searchParams.get("q") ?? "";
-  const hasFilters = status !== "all" || Boolean(search.trim());
+  const hasFilters =
+    status !== "all" || typeFilter !== "all" || Boolean(search.trim());
+
+  const typeOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const t of tasks) {
+      if (t.taskType) set.add(t.taskType);
+    }
+    return ["all", ...Array.from(set).sort()];
+  }, [tasks]);
   const [motionKey, setMotionKey] = useState(0);
   const [bounceFilter, setBounceFilter] = useState<string | null>(null);
   const [view, setView] = useState<TasksViewMode>("list");
@@ -131,19 +143,21 @@ export function TaskList({ tasks }: TaskListProps) {
     const q = search.trim().toLowerCase();
     return tasks.filter((task) => {
       if (status !== "all" && task.status !== status) return false;
+      if (typeFilter !== "all" && task.taskType !== typeFilter) return false;
       if (!q) return true;
       return (
         task.title.toLowerCase().includes(q) ||
         task.customerName.toLowerCase().includes(q) ||
         task.request.toLowerCase().includes(q) ||
-        String(task.number).includes(q)
+        String(task.number).includes(q) ||
+        (task.taskType?.toLowerCase().includes(q) ?? false)
       );
     });
-  }, [tasks, status, search]);
+  }, [tasks, status, typeFilter, search]);
 
   useEffect(() => {
     setMotionKey((k) => k + 1);
-  }, [status, search]);
+  }, [status, typeFilter, search]);
 
   function updateParams(next: Record<string, string>) {
     const params = new URLSearchParams(searchParams.toString());
@@ -163,6 +177,7 @@ export function TaskList({ tasks }: TaskListProps) {
 
   return (
     <div className={cn("task-card-in space-y-4", pending && "opacity-90")}>
+      <MissedTaskWatcher tasks={tasks} />
       <Card className="p-3 md:px-4 md:py-3">
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -239,6 +254,29 @@ export function TaskList({ tasks }: TaskListProps) {
               );
             })}
           </div>
+
+          {typeOptions.length > 1 ? (
+            <div className="flex min-w-0 flex-wrap gap-2">
+              {typeOptions.map((type) => {
+                const active = typeFilter === type;
+                return (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => updateParams({ type })}
+                    className={cn(
+                      "inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold transition-colors",
+                      active
+                        ? "border-accent/40 bg-accent/10 text-accent"
+                        : "border-border bg-surface text-muted hover:text-accent",
+                    )}
+                  >
+                    {type === "all" ? "All types" : type}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
         </div>
       </Card>
 
@@ -302,7 +340,7 @@ export function TaskList({ tasks }: TaskListProps) {
                 <Button
                   type="button"
                   variant="secondary"
-                  onClick={() => updateParams({ status: "all", q: "" })}
+                  onClick={() => updateParams({ status: "all", q: "", type: "all" })}
                 >
                   Clear filters
                 </Button>
@@ -351,7 +389,22 @@ export function TaskList({ tasks }: TaskListProps) {
                     </div>
 
                     <div className="min-w-0">
-                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {task.taskType ? (
+                          <span className="text-xs font-semibold uppercase tracking-wide text-muted">
+                            {task.taskType}
+                          </span>
+                        ) : null}
+                        {task.tier === "vip" || task.tier === "family" ? (
+                          <span className="rounded-full bg-accent/10 px-2 py-0.5 text-xs font-semibold text-accent">
+                            {task.tier.toUpperCase()}
+                          </span>
+                        ) : null}
+                        {task.expiresAt ? (
+                          <SlaCountdown expiresAt={task.expiresAt} />
+                        ) : null}
+                      </div>
+                      <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                         <span className="text-sm font-semibold text-muted">
                           #{task.number}
                         </span>
@@ -360,7 +413,7 @@ export function TaskList({ tasks }: TaskListProps) {
                         </p>
                       </div>
                       <p className="mt-1 line-clamp-1 text-sm text-muted">
-                        {task.request}
+                        {task.aiBrief?.summary ?? task.request}
                       </p>
                     </div>
 

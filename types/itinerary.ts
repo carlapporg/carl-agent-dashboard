@@ -14,6 +14,8 @@ export const itinerarySchema = z.object({
   title: z.string(),
   items: z.array(itineraryItemSchema).default([]),
   generatedAt: z.string(),
+  agentConfirmedAt: z.string().nullable().optional(),
+  sentAt: z.string().nullable().optional(),
 });
 
 export type ItineraryItem = z.infer<typeof itineraryItemSchema>;

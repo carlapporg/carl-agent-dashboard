@@ -54,30 +54,38 @@ export const tasksApi = {
 
   async accept(taskId: string): Promise<Task> {
     const task = updateTask(taskId, {
-      status: "in_progress",
+      status: "assigned",
       assignedAgentId: "agent_stub_001",
     });
     if (!task) throw new Error("NOT_FOUND");
     addTimelineEvent({
       taskId,
       kind: "status_change",
-      body: "Task accepted — now in progress",
+      body: "An agent has been assigned to your task.",
       visibleToCustomer: true,
     });
     return task;
   },
 
   async updateStatus(taskId: string, status: TaskStatus): Promise<Task> {
+    const existing = findTask(taskId);
+    if (!existing) throw new Error("NOT_FOUND");
+
     const patch: Partial<Task> = { status };
     if (status === "completed") {
       patch.completedAt = new Date().toISOString();
     }
     const task = updateTask(taskId, patch);
     if (!task) throw new Error("NOT_FOUND");
+
+    const { clientMessageForStatus } = await import(
+      "@/features/tasks/lib/workflow"
+    );
+
     addTimelineEvent({
       taskId,
       kind: "status_change",
-      body: `Status updated to ${status.replaceAll("_", " ")}`,
+      body: clientMessageForStatus(status),
       visibleToCustomer: true,
     });
     return task;

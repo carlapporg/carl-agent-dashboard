@@ -22,6 +22,36 @@ export async function acceptTaskAction(taskId: string) {
   revalidateTask(taskId);
 }
 
+/** Start task or complete task — the only two primary actions. */
+export async function advanceTaskAction(taskId: string) {
+  const task = await tasksApi.get(taskId);
+  const {
+    canCompleteTask,
+    hasStartedWork,
+  } = await import("@/features/tasks/lib/workflow");
+  const { paymentsApi } = await import("@/lib/api/payments");
+  const { updateTask } = await import("@/mocks/data");
+
+  if (!hasStartedWork(task) && task.status !== "completed") {
+    await tasksApi.updateStatus(taskId, "in_progress");
+    updateTask(taskId, {
+      assignedAgentId: task.assignedAgentId ?? "agent_stub_001",
+    });
+    revalidateTask(taskId);
+    return;
+  }
+
+  const authorizations = await paymentsApi.list(taskId);
+  const paymentApproved = authorizations.some(
+    (a) => a.status === "approved" || a.status === "spent",
+  );
+
+  if (!canCompleteTask(task, paymentApproved)) return;
+
+  await tasksApi.updateStatus(taskId, "completed");
+  revalidateTask(taskId);
+}
+
 export async function updateTaskStatusAction(taskId: string, status: TaskStatus) {
   await tasksApi.updateStatus(taskId, status);
   revalidateTask(taskId);
@@ -50,11 +80,13 @@ export async function requestApprovalAction(taskId: string, formData: FormData) 
   const amount = Number(formData.get("amount"));
   const merchant = String(formData.get("merchant") ?? "").trim();
   const merchantCategory = String(formData.get("merchantCategory") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim();
   if (!merchant || !Number.isFinite(amount) || amount <= 0) return;
   await paymentsApi.requestApproval(taskId, {
     amount,
     merchant,
     merchantCategory: merchantCategory || undefined,
+    description: description || undefined,
   });
   revalidateTask(taskId);
 }
@@ -92,6 +124,7 @@ export async function uploadReceiptAction(taskId: string, formData: FormData) {
   const fileName = String(formData.get("fileName") ?? "").trim();
   const amountRaw = formData.get("amount");
   const merchant = String(formData.get("merchant") ?? "").trim();
+  const authorizationId = String(formData.get("authorizationId") ?? "").trim();
   if (!fileName) return;
   const amount =
     amountRaw && String(amountRaw).trim()
@@ -101,6 +134,7 @@ export async function uploadReceiptAction(taskId: string, formData: FormData) {
     fileName,
     amount: Number.isFinite(amount) ? amount : undefined,
     merchant: merchant || undefined,
+    authorizationId: authorizationId || undefined,
   });
   revalidateTask(taskId);
 }
@@ -108,6 +142,24 @@ export async function uploadReceiptAction(taskId: string, formData: FormData) {
 export async function generateItineraryAction(parentTaskId: string) {
   try {
     await itineraryApi.generate(parentTaskId);
+  } catch {
+    return;
+  }
+  revalidateTask(parentTaskId);
+}
+
+export async function confirmItineraryAction(parentTaskId: string) {
+  try {
+    await itineraryApi.confirm(parentTaskId);
+  } catch {
+    return;
+  }
+  revalidateTask(parentTaskId);
+}
+
+export async function sendItineraryAction(parentTaskId: string) {
+  try {
+    await itineraryApi.send(parentTaskId);
   } catch {
     return;
   }

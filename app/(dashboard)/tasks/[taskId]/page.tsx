@@ -1,8 +1,13 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { TaskBriefPane } from "@/features/tasks/components/task-brief-pane";
+import { Suspense } from "react";
+import { TaskWorkspace } from "@/features/tasks/components/task-workspace";
+import { PageSkeleton } from "@/components/feedback/skeleton";
 import { PageShell } from "@/components/ui/page-shell";
+import { customersApi } from "@/lib/api/customers";
+import { itineraryApi } from "@/lib/api/itinerary";
 import { messagesApi } from "@/lib/api/messages";
+import { paymentsApi, receiptsApi } from "@/lib/api/payments";
 import { tasksApi } from "@/lib/api/tasks";
 
 type TaskPageProps = {
@@ -31,11 +36,48 @@ export default async function TaskWorkspacePage({ params }: TaskPageProps) {
     notFound();
   }
 
-  const timeline = await messagesApi.list(task.id);
+  const [
+    timeline,
+    authorizations,
+    customer,
+    customerHistory,
+    allTasks,
+    itinerary,
+    receipts,
+    card,
+  ] = await Promise.all([
+    messagesApi.list(task.id),
+    paymentsApi.list(task.id),
+    customersApi.getProfile(task.customerId).catch(() => null),
+    customersApi.getHistory(task.customerId).catch(() => []),
+    tasksApi.list(),
+    itineraryApi.get(task.id),
+    receiptsApi.list(task.id),
+    paymentsApi.getCard(task.id),
+  ]);
+
+  const childTasks = allTasks.filter((t) => t.parentId === task.id);
+  const parentTask = task.parentId
+    ? (allTasks.find((t) => t.id === task.parentId) ?? null)
+    : null;
 
   return (
     <PageShell>
-      <TaskBriefPane task={task} timeline={timeline} />
+      <Suspense fallback={<PageSkeleton />}>
+        <TaskWorkspace
+          task={task}
+          timeline={timeline}
+          authorizations={authorizations}
+          customer={customer}
+          customerHistory={customerHistory}
+          childTasks={childTasks}
+          parentTask={parentTask}
+          itinerary={itinerary}
+          receipts={receipts}
+          card={card}
+          readOnly={task.status === "completed"}
+        />
+      </Suspense>
     </PageShell>
   );
 }

@@ -41,6 +41,12 @@ export const taskSchema = z.object({
   aiBrief: aiBriefSchema.optional(),
   notes: z.array(taskNoteSchema).default([]),
   suggestedStepsDone: z.array(z.string()).default([]),
+  /** When true, workflow includes Awaiting Payment and shows Payment section */
+  requiresPayment: z.boolean().optional(),
+  /** Server-authoritative assignment SLA (ISO). Optional until Backend ships. */
+  expiresAt: z.string().optional(),
+  taskType: z.string().optional(),
+  tier: z.enum(["standard", "vip", "family"]).optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
   completedAt: z.string().nullable().optional(),

@@ -1,5 +1,6 @@
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils/cn";
+import type { CSSProperties } from "react";
 
 type MetricStatCardProps = {
   label: string;
@@ -8,6 +9,7 @@ type MetricStatCardProps = {
   hint: string;
   color: string;
   className?: string;
+  style?: CSSProperties;
 };
 
 export function MetricStatCard({
@@ -17,6 +19,7 @@ export function MetricStatCard({
   hint,
   color,
   className,
+  style,
 }: MetricStatCardProps) {
   const size = 64;
   const stroke = 7;
@@ -24,11 +27,13 @@ export function MetricStatCard({
   const circumference = 2 * Math.PI * radius;
   const maxForRing = Math.max(value, ringValue, 1);
   const pct =
-    value === 0 ? 0 : Math.min(100, Math.max(12, (ringValue / maxForRing) * 100));
+    value === 0
+      ? 0
+      : Math.min(100, Math.max(12, (ringValue / maxForRing) * 100));
   const offset = circumference - (pct / 100) * circumference;
 
   return (
-    <Card className={cn("p-5", className)}>
+    <Card className={cn("p-5", className)} style={style}>
       <div className="flex items-center gap-4">
         <div className="relative shrink-0">
           <svg width={size} height={size} className="-rotate-90" aria-hidden>

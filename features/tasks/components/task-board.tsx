@@ -23,6 +23,7 @@ import { CSS } from "@dnd-kit/utilities";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { updateTaskStatusAction } from "@/features/tasks/actions/task-actions";
+import { SlaCountdown } from "@/features/dashboard/components/sla-countdown";
 import { PriorityBadge } from "@/features/tasks/components/status-badge";
 import { TASK_STAGES } from "@/features/tasks/components/stage-progress";
 import { useToast } from "@/components/providers/toast-provider";
@@ -81,10 +82,25 @@ function TaskBoardCardContent({
         <span className="text-sm font-semibold text-muted">#{task.number}</span>
         <PriorityBadge priority={task.priority} />
       </div>
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+        {task.taskType ? (
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted">
+            {task.taskType}
+          </span>
+        ) : null}
+        {task.tier === "vip" || task.tier === "family" ? (
+          <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-semibold text-accent">
+            {task.tier.toUpperCase()}
+          </span>
+        ) : null}
+        {task.expiresAt ? <SlaCountdown expiresAt={task.expiresAt} /> : null}
+      </div>
       <p className="mt-1.5 text-sm font-semibold leading-snug text-foreground">
         {task.title}
       </p>
-      <p className="mt-1 truncate text-sm text-muted">{task.customerName}</p>
+      <p className="mt-1 line-clamp-2 text-sm text-muted">
+        {task.aiBrief?.summary ?? task.request}
+      </p>
       <p className="mt-2.5 text-sm tabular-nums text-muted-dim">
         {formatRelative(task.updatedAt)}
       </p>
@@ -172,7 +188,7 @@ function BoardColumn({
       <div
         ref={setNodeRef}
         className={cn(
-          "flex max-h-[min(70vh,640px)] min-h-[12rem] flex-1 flex-col gap-2.5 overflow-y-auto rounded-2xl border border-border bg-[#f8fafc] p-2.5 transition-colors",
+          "flex min-h-[12rem] flex-col gap-2.5 rounded-2xl border border-border bg-[#f8fafc] p-2.5 transition-colors",
           isOver && "border-accent/40 bg-accent/[0.04]",
         )}
       >

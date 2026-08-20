@@ -6,7 +6,14 @@ export const ROUTES = {
   tasks: "/tasks",
   task: (taskId: string) => `/tasks/${taskId}` as const,
   taskPayments: (taskId: string) => `/tasks/${taskId}/payments` as const,
+  /** Deep-link helper: panel = payment | chat | brief | log */
+  taskPanel: (taskId: string, panel: string) =>
+    `/tasks/${taskId}?panel=${encodeURIComponent(panel)}` as const,
   inbox: "/inbox",
+  messages: "/messages",
+  payments: "/payments",
+  history: "/history",
+  notifications: "/notifications",
   profile: "/profile",
   profileEdit: "/profile/edit",
   settings: "/settings",

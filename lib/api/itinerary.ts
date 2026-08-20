@@ -38,6 +38,23 @@ export const itineraryApi = {
       })),
     };
     mockItineraries[parentTaskId] = itinerary;
+    return itinerary;
+  },
+
+  async confirm(parentTaskId: string): Promise<Itinerary> {
+    const itinerary = mockItineraries[parentTaskId];
+    if (!itinerary) throw new Error("NOT_FOUND");
+    itinerary.agentConfirmedAt = new Date().toISOString();
+    return itinerary;
+  },
+
+  async send(parentTaskId: string): Promise<Itinerary> {
+    const itinerary = mockItineraries[parentTaskId];
+    if (!itinerary) throw new Error("NOT_FOUND");
+    if (!itinerary.agentConfirmedAt) {
+      throw new Error("Confirm itinerary before sending");
+    }
+    itinerary.sentAt = new Date().toISOString();
     updateTask(parentTaskId, {
       status: "completed",
       completedAt: new Date().toISOString(),

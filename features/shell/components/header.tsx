@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { AvailabilityToggle } from "@/features/dashboard/components/availability-toggle";
 import { logoutAction } from "@/features/auth/actions/auth";
 import { useAgentMe, useClearAppCache } from "@/features/agents/hooks";
 import { ConfirmDialog } from "@/components/ui/dialog";
@@ -40,6 +41,7 @@ export function DashboardHeader({ user }: DashboardHeaderProps) {
         </div>
 
         <div className="flex shrink-0 items-center gap-3 md:gap-4">
+          <AvailabilityToggle compact />
           <div className="hidden items-center gap-3 rounded-xl border border-border bg-surface-hover/60 px-3 py-2 sm:flex">
             <div
               className="flex size-10 items-center justify-center rounded-full bg-accent/10 text-sm font-semibold text-accent"

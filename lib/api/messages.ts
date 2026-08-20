@@ -21,7 +21,6 @@ export const messagesApi = {
       taskId,
       kind: "agent_message",
       body,
-      authorName: "Alex Morgan",
       visibleToCustomer,
     });
   },

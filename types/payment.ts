@@ -16,6 +16,9 @@ export const paymentAuthorizationSchema = z.object({
   currency: z.string().default("USD"),
   merchant: z.string(),
   merchantCategory: z.string().optional(),
+  description: z.string().optional(),
+  /** Partial approval: approved amount may be less than requested */
+  approvedAmount: z.number().optional(),
   status: paymentAuthStatusSchema,
   approvedBy: z.string().nullable().optional(),
   approvedAt: z.string().nullable().optional(),
@@ -39,6 +42,8 @@ export const receiptSchema = z.object({
   fileName: z.string(),
   amount: z.number().nullable().optional(),
   merchant: z.string().optional(),
+  /** Link receipt to a payment authorization (mock until live) */
+  authorizationId: z.string().optional(),
   uploadedAt: z.string(),
   uploadedBy: z.string(),
 });

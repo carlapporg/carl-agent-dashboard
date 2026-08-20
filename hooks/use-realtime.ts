@@ -1,22 +1,28 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { RealtimeEvent } from "@/types/realtime";
+import { useWebSocketOptional } from "@/components/providers/websocket-provider";
+import {
+  wsEnvelopeToRealtimeEvent,
+  type RealtimeEvent,
+} from "@/types/realtime";
 
 type UseRealtimeOptions = {
   enabled?: boolean;
+  /** @deprecated Polling is unused when WebSocket is configured. */
   pollMs?: number;
   onEvent?: (event: RealtimeEvent) => void;
 };
 
 /**
- * Placeholder realtime hook. Today it polls a local event bus mock.
- * Swap the fetcher for a WebSocket client when Backend is ready.
+ * App-level realtime hook.
+ * Uses native WebSocket when WebSocketProvider is mounted and configured;
+ * otherwise stays idle (no Socket.IO).
  */
 export function useRealtimeEvents(options: UseRealtimeOptions = {}) {
-  const { enabled = true, pollMs = 15000, onEvent } = options;
+  const { enabled = true, onEvent } = options;
+  const ws = useWebSocketOptional();
   const [events, setEvents] = useState<RealtimeEvent[]>([]);
-  const [connected, setConnected] = useState(false);
   const onEventRef = useRef(onEvent);
   onEventRef.current = onEvent;
 
@@ -29,31 +35,20 @@ export function useRealtimeEvents(options: UseRealtimeOptions = {}) {
   }, []);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !ws?.manager) return;
 
-    setConnected(true);
-    let cancelled = false;
+    return ws.subscribe("*", (envelope) => {
+      const mapped = wsEnvelopeToRealtimeEvent(envelope);
+      if (mapped) ingest([mapped]);
+    });
+  }, [enabled, ws, ingest]);
 
-    async function tick() {
-      // Future: replace with WebSocket subscription.
-      // Mock bus currently has no push stream — keep connection state honest.
-      if (cancelled) return;
-      ingest([]);
-    }
-
-    void tick();
-    const id = window.setInterval(() => {
-      void tick();
-    }, pollMs);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(id);
-      setConnected(false);
-    };
-  }, [enabled, pollMs, ingest]);
-
-  return { events, connected };
+  return {
+    events,
+    connected: enabled && (ws?.isConnected ?? false),
+    configured: ws?.configured ?? false,
+    connectionState: ws?.connectionState ?? "idle",
+  };
 }
 
 export function emitMockRealtimeEvent(event: RealtimeEvent) {

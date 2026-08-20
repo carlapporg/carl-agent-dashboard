@@ -19,7 +19,12 @@ export const paymentsApi = {
 
   async requestApproval(
     taskId: string,
-    input: { amount: number; merchant: string; merchantCategory?: string },
+    input: {
+      amount: number;
+      merchant: string;
+      merchantCategory?: string;
+      description?: string;
+    },
   ): Promise<PaymentAuthorization> {
     const auth: PaymentAuthorization = {
       id: `pay_${Date.now()}`,
@@ -29,6 +34,7 @@ export const paymentsApi = {
       currency: "USD",
       merchant: input.merchant,
       merchantCategory: input.merchantCategory,
+      description: input.description,
       status: "pending",
       approvedBy: null,
       approvedAt: null,
@@ -39,7 +45,7 @@ export const paymentsApi = {
     addTimelineEvent({
       taskId,
       kind: "approval_requested",
-      body: `Payment approval requested: $${input.amount.toFixed(0)} for ${input.merchant}`,
+      body: "The agent has requested payment approval before continuing this task.",
       visibleToCustomer: true,
     });
     return auth;
@@ -77,7 +83,12 @@ export const receiptsApi = {
 
   async upload(
     taskId: string,
-    input: { fileName: string; amount?: number; merchant?: string },
+    input: {
+      fileName: string;
+      amount?: number;
+      merchant?: string;
+      authorizationId?: string;
+    },
   ): Promise<Receipt> {
     const receipt: Receipt = {
       id: `rcpt_${Date.now()}`,
@@ -85,6 +96,7 @@ export const receiptsApi = {
       fileName: input.fileName,
       amount: input.amount ?? null,
       merchant: input.merchant,
+      authorizationId: input.authorizationId,
       uploadedAt: new Date().toISOString(),
       uploadedBy: "Alex Morgan",
     };
