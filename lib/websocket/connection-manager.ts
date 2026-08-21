@@ -199,25 +199,39 @@ export class WebSocketConnectionManager {
    * Backend contract (placeholder): { type: "subscribe", channel, taskId? }
    */
   subscribe(target: WsSubscribeTarget): boolean {
-    if (target.channel === "queue") {
-      return this.emit("subscribe", {}, { channel: "queue" });
+    switch (target.channel) {
+      case "queue":
+        return this.emit("subscribe", {}, { channel: "queue" });
+      case "task.messages":
+        return this.emit(
+          "subscribe",
+          {},
+          { channel: "task.messages", taskId: target.taskId },
+        );
+      case "agent.alerts":
+      case "agent.payments":
+        return this.emit("subscribe", {}, { channel: target.channel });
+      default:
+        return false;
     }
-    return this.emit(
-      "subscribe",
-      {},
-      { channel: "task.messages", taskId: target.taskId },
-    );
   }
 
   unsubscribe(target: WsSubscribeTarget): boolean {
-    if (target.channel === "queue") {
-      return this.emit("unsubscribe", {}, { channel: "queue" });
+    switch (target.channel) {
+      case "queue":
+        return this.emit("unsubscribe", {}, { channel: "queue" });
+      case "task.messages":
+        return this.emit(
+          "unsubscribe",
+          {},
+          { channel: "task.messages", taskId: target.taskId },
+        );
+      case "agent.alerts":
+      case "agent.payments":
+        return this.emit("unsubscribe", {}, { channel: target.channel });
+      default:
+        return false;
     }
-    return this.emit(
-      "unsubscribe",
-      {},
-      { channel: "task.messages", taskId: target.taskId },
-    );
   }
 
   private async handleOpen(): Promise<void> {

@@ -117,8 +117,10 @@ Subscribe: `{ type: "subscribe", channel: "queue" }`
 | `task.assigned` | Assigned to an agent |
 | `task.status_changed` | Status transition |
 | `task.completed` / `task.cancelled` | Terminal |
+| `task.missed` | SLA / reassignment — informational |
+| `queue.updated` | Bulk queue refresh hint |
 
-Payload placeholder: `{ taskId, status?, priority?, title?, customerLabel?, updatedAt? }`  
+Payload: `{ taskId, number?, status?, priority?, title?, summary?, taskType?, tier?, expiresAt?, customerLabel?, updatedAt? }`  
 Use `customerLabel` only — **no** email / phone / real name from profile APIs.
 
 ### Task messaging (privacy)
@@ -130,11 +132,35 @@ Subscribe: `{ type: "subscribe", channel: "task.messages", taskId }`
 | `message.send` | C→S | Agent sends chat line |
 | `message.created` | S→C | New chat line (broadcast) |
 | `message.read` | both | Read receipt (optional) |
-| `task.started` | both | Status |
-| `task.in_progress` | both | Status |
-| `task.clarification_requested` | both | Ask for info |
-| `task.progress_updated` | both | Progress note |
+| `task.clarification_requested` / `task.clarification_answered` | both | Q&A |
+| `task.started` / `task.in_progress` / `task.progress_updated` | both | Progress |
+| `task.waiting_for_customer` / `task.waiting_for_payment` | S→C | Status |
 | `task.completed` | both | Done |
+
+### Payments
+
+Subscribe: task channel and/or `agent.payments`
+
+| Type | Meaning |
+|------|---------|
+| `payment.requested` | Agent created approval request |
+| `payment.approved` / `payment.declined` / `payment.expired` | Client / TTL outcome |
+| `payment.charged` | Spend recorded |
+| `payment.card_issued` | Masked virtual card available |
+| `payment.receipt_uploaded` | Receipt linked |
+
+### Alerts
+
+Subscribe: `agent.alerts` — `alert.created`, `alert.resolved`, `notification.created`
+
+### Agent presence
+
+| Type | Direction | Meaning |
+|------|-----------|---------|
+| `agent.availability` | C→S | Mirror of PATCH availability (optional) |
+| `agent.forced_offline` | S→C | Idle timeout / force |
+
+HTTP path registry (REST): `lib/api/endpoints.ts` (`API_ENDPOINTS`, `API_BY_SCREEN`, payment/task state lists).
 
 Chat payload:
 
