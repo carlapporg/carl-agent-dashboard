@@ -242,6 +242,10 @@ body {
   animation: dashDropIn 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+.dash-drop-in {
+  animation: dashDropIn 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 .dash-row-flash {
   animation: dashFlash 1.8s ease-out both;
 }
@@ -258,8 +262,68 @@ body {
   animation: dashPulse 1.4s ease-in-out infinite;
 }
 
+.dash-live-dot {
+  animation: dashPulse 1.4s ease-in-out infinite;
+}
+
 .dash-live-badge-pop {
   animation: dashPulse 0.9s ease-in-out 2;
+}
+
+.dash-live-badge-pop {
+  animation: dashPulse 0.9s ease-in-out 2;
+}
+
+@keyframes opsToastIn {
+  from {
+    opacity: 0;
+    transform: translateX(24px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes opsToastOut {
+  to {
+    opacity: 0;
+    transform: translateX(16px) scale(0.98);
+  }
+}
+
+.ops-toast-in {
+  animation: opsToastIn 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.ops-toast-out {
+  animation: opsToastOut 260ms ease-in both;
+}
+
+.ops-toast-bar {
+  transform-origin: left center;
+  animation: dashToastBar 8s linear both;
+}
+
+.ops-timer-pulse {
+  animation: dashPulse 0.7s ease-in-out infinite;
+}
+
+.ops-toast-in {
+  animation: opsToastIn 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.ops-toast-out {
+  animation: opsToastOut 260ms ease-in both;
+}
+
+.ops-toast-bar {
+  transform-origin: left center;
+  animation: dashToastBar 8s linear both;
+}
+
+.ops-timer-pulse {
+  animation: dashPulse 0.7s ease-in-out infinite;
 }
 
 .dash-progress-fill {

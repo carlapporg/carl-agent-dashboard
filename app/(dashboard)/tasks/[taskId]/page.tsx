@@ -2,12 +2,14 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { TaskWorkspace } from "@/features/tasks/components/task-workspace";
+import { EmptyState } from "@/components/feedback/empty-state";
 import { PageSkeleton } from "@/components/feedback/skeleton";
 import { PageShell } from "@/components/ui/page-shell";
 import { customersApi } from "@/lib/api/customers";
 import { itineraryApi } from "@/lib/api/itinerary";
 import { messagesApi } from "@/lib/api/messages";
 import { paymentsApi, receiptsApi } from "@/lib/api/payments";
+import { isApiError } from "@/lib/api/errors";
 import { tasksApi } from "@/lib/api/tasks";
 
 type TaskPageProps = {
@@ -32,7 +34,17 @@ export default async function TaskWorkspacePage({ params }: TaskPageProps) {
   let task;
   try {
     task = await tasksApi.get(taskId);
-  } catch {
+  } catch (error) {
+    if (isApiError(error) && error.kind === "network") {
+      return (
+        <PageShell>
+          <EmptyState
+            title="Can't reach the server"
+            description="Your login is still saved. The API tunnel may be down. Wait a moment and refresh."
+          />
+        </PageShell>
+      );
+    }
     notFound();
   }
 
@@ -46,14 +58,14 @@ export default async function TaskWorkspacePage({ params }: TaskPageProps) {
     receipts,
     card,
   ] = await Promise.all([
-    messagesApi.list(task.id),
-    paymentsApi.list(task.id),
+    messagesApi.list(task.id).catch(() => []),
+    paymentsApi.list(task.id).catch(() => []),
     customersApi.getProfile(task.customerId).catch(() => null),
     customersApi.getHistory(task.customerId).catch(() => []),
-    tasksApi.list(),
-    itineraryApi.get(task.id),
-    receiptsApi.list(task.id),
-    paymentsApi.getCard(task.id),
+    tasksApi.list().catch(() => []),
+    itineraryApi.get(task.id).catch(() => null),
+    receiptsApi.list(task.id).catch(() => []),
+    paymentsApi.getCard(task.id).catch(() => null),
   ]);
 
   const childTasks = allTasks.filter((t) => t.parentId === task.id);

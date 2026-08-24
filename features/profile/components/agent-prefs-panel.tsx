@@ -1,13 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { dashboardApi } from "@/lib/api/dashboard";
+import {
+  getAgentMetricsAction,
+  getAgentPreferencesAction,
+} from "@/features/dashboard/actions";
+import { saveSkillsAction } from "@/features/agents/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-type Prefs = Awaited<ReturnType<typeof dashboardApi.getAgentPreferences>>;
-type Metrics = Awaited<ReturnType<typeof dashboardApi.getAgentMetrics>>;
+type Prefs = Awaited<ReturnType<typeof getAgentPreferencesAction>>;
+type Metrics = Awaited<ReturnType<typeof getAgentMetricsAction>>;
 
 export function AgentPrefsPanel() {
   const [prefs, setPrefs] = useState<Prefs | null>(null);
@@ -17,8 +21,8 @@ export function AgentPrefsPanel() {
 
   useEffect(() => {
     void Promise.all([
-      dashboardApi.getAgentPreferences(),
-      dashboardApi.getAgentMetrics(),
+      getAgentPreferencesAction(),
+      getAgentMetricsAction(),
     ]).then(([p, m]) => {
       setPrefs(p);
       setMetrics(m);
@@ -151,8 +155,9 @@ export function AgentPrefsPanel() {
       <Button
         type="button"
         onClick={() => {
-          // Mock local persist until PATCH /agents/me
-          setSaved(true);
+          void saveSkillsAction(prefs.skills, prefs.isGeneralist).then(() => {
+            setSaved(true);
+          });
         }}
       >
         {saved ? "Saved" : "Save preferences"}

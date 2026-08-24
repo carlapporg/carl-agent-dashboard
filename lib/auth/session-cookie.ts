@@ -8,6 +8,25 @@ import {
  * Keep this free of `next/headers` so proxy can import it.
  */
 
+export const SESSION_MAX_AGE_DEFAULT = 60 * 60 * 24;
+export const SESSION_MAX_AGE_REMEMBER = 60 * 60 * 24 * 30;
+export const ACCESS_TOKEN_REQUEST_HEADER = "x-agent-access-token";
+// Single name only — do not also export ACCESS_TOKEN_REQUEST_HEADER here.
+
+export function sessionCookieMaxAge(rememberMe?: boolean): number {
+  return rememberMe ? SESSION_MAX_AGE_REMEMBER : SESSION_MAX_AGE_DEFAULT;
+}
+
+export function sessionCookieSetOptions(rememberMe?: boolean) {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    path: "/",
+    maxAge: sessionCookieMaxAge(rememberMe),
+  };
+}
+
 export function encodeSessionCookie(value: unknown): string {
   return Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
 }

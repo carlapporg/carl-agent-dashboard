@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { dashboardApi } from "@/lib/api/dashboard";
+import { getQuickStatsAction } from "@/features/dashboard/actions";
 import type { AgentQuickStats } from "@/types/dashboard";
 
 const REFRESH_MS = 3 * 60_000;
@@ -12,7 +12,7 @@ export function QuickStats() {
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      const data = await dashboardApi.getQuickStats();
+      const data = await getQuickStatsAction();
       if (!cancelled) setStats(data);
     }
     void load();

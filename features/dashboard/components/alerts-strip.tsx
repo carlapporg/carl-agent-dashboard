@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useToast } from "@/components/providers/toast-provider";
 import { Button } from "@/components/ui/button";
-import { dashboardApi } from "@/lib/api/dashboard";
+import { getAlertsAction } from "@/features/dashboard/actions";
 import { ROUTES } from "@/lib/constants/routes";
 import type { AgentAlert } from "@/types/dashboard";
 
@@ -13,7 +13,7 @@ export function AlertsStrip() {
   const [alerts, setAlerts] = useState<AgentAlert[]>([]);
 
   useEffect(() => {
-    void dashboardApi.getAlerts().then(setAlerts);
+    void getAlertsAction().then(setAlerts);
   }, []);
 
   function dismiss(id: string) {

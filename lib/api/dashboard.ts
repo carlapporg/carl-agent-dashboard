@@ -1,192 +1,106 @@
 import type {
   ActiveTaskSummary,
   AgentAlert,
-  AgentAvailability,
   AgentQuickStats,
   ConversationSummary,
   NotificationItem,
   QueuePreviewItem,
 } from "@/types/dashboard";
-import { mockTasks, mockPayments, mockTimeline, mockCards } from "@/mocks/data";
-import { hasStartedWork } from "@/features/tasks/lib/workflow";
+import { presenceToUi, uiToPresence } from "@/lib/agent/presence";
+import { messagesApi } from "@/lib/api/messages";
+import { tasksApi } from "@/lib/api/tasks";
+import { agentsApi } from "@/lib/api/agents";
+import type { Task } from "@/types/task";
 
-const AVAIL_KEY = "carl.agent.availability";
+export { presenceToUi, uiToPresence };
 
-export function readLocalAvailability(): AgentAvailability {
-  if (typeof window === "undefined") return "online";
-  try {
-    const v = window.localStorage.getItem(AVAIL_KEY);
-    if (v === "online" || v === "busy" || v === "offline") return v;
-  } catch {
-    /* ignore */
-  }
-  return "online";
+function toQueueItem(task: Task): QueuePreviewItem {
+  return {
+    id: task.id,
+    number: task.number,
+    title: task.title,
+    summary: task.aiBrief?.summary ?? task.request,
+    taskType: task.taskType ?? "TASK",
+    priority: task.priority,
+    expiresAt: task.expiresAt ?? task.updatedAt,
+  };
 }
 
-export function writeLocalAvailability(status: AgentAvailability) {
-  try {
-    window.localStorage.setItem(AVAIL_KEY, status);
-  } catch {
-    /* ignore */
-  }
+function toActiveSummary(task: Task): ActiveTaskSummary {
+  return {
+    id: task.id,
+    number: task.number,
+    title: task.title,
+    customerLabel: task.customerName,
+    stage: (task.backendStatus ?? task.status).replaceAll("_", " "),
+    status: task.status,
+    priority: task.priority,
+    urgency: "normal",
+    unreadCount: 0,
+    pendingApprovalCount: 0,
+    actionRequired:
+      task.backendStatus === "ASSIGNED" ||
+      task.backendStatus === "WAITING_FOR_AGENT" ||
+      task.status === "assigned",
+  };
 }
 
-function isoPlusMins(mins: number): string {
-  return new Date(Date.now() + mins * 60_000).toISOString();
-}
-
-/** Mock adapters — swap to apiRequest(API_ENDPOINTS...) when Backend is live. */
 export const dashboardApi = {
   async getQueuePreview(limit = 3): Promise<QueuePreviewItem[]> {
-    const incoming = mockTasks
-      .filter((t) => !t.parentId)
-      .filter(
-        (t) =>
-          t.status === "queued" ||
-          t.status === "assigned" ||
-          t.priority === "urgent",
-      )
-      .slice(0, limit)
-      .map((t, i) => ({
-        id: t.id,
-        number: t.number,
-        title: t.title,
-        summary: t.aiBrief?.summary ?? t.request,
-        taskType: t.title.toLowerCase().includes("hotel")
-          ? "Travel"
-          : t.title.toLowerCase().includes("pharmacy")
-            ? "Errand"
-            : "General",
-        tier:
-          t.priority === "urgent"
-            ? ("vip" as const)
-            : ("standard" as const),
-        priority: t.priority,
-        expiresAt: isoPlusMins(8 + i * 4),
-        estimatedComplexity:
-          t.priority === "urgent"
-            ? ("high" as const)
-            : t.priority === "high"
-              ? ("medium" as const)
-              : ("low" as const),
-      }));
-    return incoming;
+    const offered = await tasksApi.listByInbox("OFFERED");
+    return offered.slice(0, limit).map(toQueueItem);
   },
 
   async getActiveTasks(): Promise<ActiveTaskSummary[]> {
-    const roots = mockTasks.filter((t) => !t.parentId && hasStartedWork(t));
-    const items: ActiveTaskSummary[] = roots.map((t) => {
-      const unread = mockTimeline.filter(
-        (e) =>
-          e.taskId === t.id &&
-          e.kind === "customer_message",
-      ).length;
-      const pendingApproval = mockPayments.filter(
-        (p) => p.taskId === t.id && p.status === "pending",
-      ).length;
-      const actionRequired =
-        t.status === "waiting_for_payment" ||
-        t.status === "waiting_for_customer" ||
-        unread > 0 ||
-        pendingApproval > 0;
-      return {
-        id: t.id,
-        number: t.number,
-        title: t.title,
-        customerLabel: t.customerName.split(" ")[0] ?? "Client",
-        stage: t.status.replaceAll("_", " "),
-        status: t.status,
-        priority: t.priority,
-        urgency:
-          t.priority === "urgent"
-            ? "urgent"
-            : t.priority === "high"
-              ? "high"
-              : t.priority === "low"
-                ? "low"
-                : "normal",
-        unreadCount: Math.min(unread, 3) || (actionRequired && t.status === "waiting_for_customer" ? 1 : 0),
-        pendingApprovalCount: pendingApproval,
-        actionRequired,
-      };
-    });
-
-    return items.sort((a, b) => {
-      if (a.actionRequired !== b.actionRequired) {
-        return a.actionRequired ? -1 : 1;
-      }
-      return 0;
-    });
+    const active = await tasksApi.listByInbox("ACTIVE");
+    return active.map(toActiveSummary);
   },
 
   async getAlerts(): Promise<AgentAlert[]> {
-    return [
-      {
-        id: "alert_1",
-        kind: "payment_approved",
-        title: "Payment approved",
-        body: "Client approved the payment request. Virtual card is ready.",
-        taskId: "task_4821",
-        panel: "payment",
-        createdAt: new Date(Date.now() - 5 * 60_000).toISOString(),
-      },
-      {
-        id: "alert_2",
-        kind: "sla_reply",
-        title: "Reply SLA warning",
-        body: "Client messaged over 15 minutes ago with no agent reply.",
-        taskId: "task_4815",
-        panel: "chat",
-        createdAt: new Date(Date.now() - 12 * 60_000).toISOString(),
-      },
-      {
-        id: "alert_3",
-        kind: "payment_declined",
-        title: "Payment declined",
-        body: "Client declined a payment request on an active task.",
-        taskId: "task_4821",
-        panel: "payment",
-        createdAt: new Date(Date.now() - 40 * 60_000).toISOString(),
-      },
-    ];
+    const offered = await tasksApi.listByInbox("OFFERED");
+    return offered.map((task) => ({
+      id: `offer-${task.id}`,
+      kind: "task_assigned" as const,
+      title: "New task assigned",
+      body: task.title,
+      taskId: task.id,
+      panel: "brief" as const,
+      createdAt: task.updatedAt,
+    }));
   },
 
   async getQuickStats(): Promise<AgentQuickStats> {
-    const completed = mockTasks.filter(
-      (t) => !t.parentId && t.status === "completed",
-    ).length;
+    const history = await tasksApi.listByInbox("HISTORY");
+    const completed = history.filter((t) => t.status === "completed");
     return {
-      completedToday: Math.max(completed, 1),
-      completedWeek: Math.max(completed + 4, 5),
-      avgResponseMins: 6,
-      ratingAvg: 4.8,
+      completedToday: completed.length,
+      completedWeek: completed.length,
+      avgResponseMins: 0,
+      ratingAvg: null,
     };
   },
 
   async getConversations(): Promise<ConversationSummary[]> {
-    const byTask = new Map<string, ConversationSummary>();
-    for (const e of mockTimeline) {
-      const task = mockTasks.find((t) => t.id === e.taskId);
-      if (!task || task.parentId) continue;
-      const existing = byTask.get(task.id);
-      const at = e.createdAt;
-      if (
-        !existing ||
-        new Date(at).getTime() > new Date(existing.lastActivityAt).getTime()
-      ) {
-        byTask.set(task.id, {
-          taskId: task.id,
-          taskNumber: task.number,
-          taskTitle: task.title,
-          taskStatus: task.status,
-          lastMessage: e.body,
-          lastActivityAt: at,
-          unreadCount:
-            e.kind === "customer_message" ? 1 : existing?.unreadCount ?? 0,
-        });
-      }
+    const [offered, active] = await Promise.all([
+      tasksApi.listByInbox("OFFERED"),
+      tasksApi.listByInbox("ACTIVE"),
+    ]);
+    const tasks = [...offered, ...active];
+    const conversations: ConversationSummary[] = [];
+    for (const task of tasks) {
+      const timeline = await messagesApi.list(task.id).catch(() => []);
+      const last = timeline[timeline.length - 1];
+      conversations.push({
+        taskId: task.id,
+        taskNumber: task.number,
+        taskTitle: task.title,
+        taskStatus: task.status,
+        lastMessage: last?.body ?? "No messages yet",
+        lastActivityAt: last?.createdAt ?? task.updatedAt,
+        unreadCount: 0,
+      });
     }
-    return [...byTask.values()].sort(
+    return conversations.sort(
       (a, b) =>
         new Date(b.lastActivityAt).getTime() -
         new Date(a.lastActivityAt).getTime(),
@@ -206,54 +120,69 @@ export const dashboardApi = {
     }));
   },
 
-  async getPaymentsOverview() {
-    const pending = mockPayments.filter((p) => p.status === "pending");
-    const cards = [...mockCards];
-    const transactions = mockPayments.map((p) => ({
-      id: p.id,
-      taskId: p.taskId,
-      amount: p.amount,
-      merchant: p.merchant,
-      status: p.status,
-      at: p.approvedAt ?? p.requestedAt,
-      needsReconcile: p.status === "approved" && p.remaining === p.amount,
-    }));
-    return { pending, cards, transactions };
+  async getPaymentsOverview(): Promise<{
+    pending: Array<{
+      id: string;
+      taskId: string;
+      amount: number;
+      merchant: string;
+    }>;
+    cards: Array<{
+      id: string;
+      taskId: string;
+      network: string;
+      last4: string;
+      remaining: number;
+      spendingLimit: number;
+    }>;
+    transactions: Array<{
+      id: string;
+      taskId: string;
+      amount: number;
+      merchant: string;
+      status: string;
+      at: string;
+      needsReconcile?: boolean;
+    }>;
+  }> {
+    return { pending: [], cards: [], transactions: [] };
   },
 
   async getAgentPreferences() {
+    const skills = await agentsApi.getSkills();
     return {
-      skills: ["Travel", "Errands", "Dining", "Hotels"],
-      schedule: [
-        { day: "Mon", start: "09:00", end: "17:00", enabled: true },
-        { day: "Tue", start: "09:00", end: "17:00", enabled: true },
-        { day: "Wed", start: "09:00", end: "17:00", enabled: true },
-        { day: "Thu", start: "09:00", end: "17:00", enabled: true },
-        { day: "Fri", start: "09:00", end: "15:00", enabled: true },
-        { day: "Sat", start: "10:00", end: "14:00", enabled: false },
-        { day: "Sun", start: "10:00", end: "14:00", enabled: false },
-      ],
+      skills: skills.skills,
+      isGeneralist: skills.isGeneralist,
+      schedule: [] as Array<{
+        day: string;
+        enabled: boolean;
+        start: string;
+        end: string;
+      }>,
       notifications: {
         taskAssigned: true,
-        paymentResult: true,
+        paymentResult: false,
         slaWarning: true,
         customerReply: true,
-        desktop: true,
+        desktop: false,
         sound: false,
       },
     };
   },
 
   async getAgentMetrics() {
+    const history = await tasksApi.listByInbox("HISTORY");
+    const completed = history.filter((t) => t.status === "completed");
     return {
-      completedWeek: 12,
-      avgResponseMins: 6,
-      ratingAvg: 4.8,
-      onTimeRate: 0.94,
+      completedWeek: completed.length,
+      avgResponseMins: 0,
+      ratingAvg: 0,
+      onTimeRate: 0,
     };
   },
 
-  countActiveTasks(): number {
-    return mockTasks.filter((t) => !t.parentId && hasStartedWork(t)).length;
+  async countActiveTasks(): Promise<number> {
+    const active = await tasksApi.listByInbox("ACTIVE");
+    return active.length;
   },
 };

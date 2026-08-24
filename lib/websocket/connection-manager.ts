@@ -57,7 +57,7 @@ export class WebSocketConnectionManager {
 
   constructor(options: WebSocketManagerOptions = {}) {
     this.options = {
-      maxReconnectAttempts: 0,
+      maxReconnectAttempts: 6,
       reconnectBaseMs: 1000,
       reconnectMaxMs: 30_000,
       heartbeatMs: 25_000,

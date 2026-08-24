@@ -94,6 +94,12 @@ export async function loginAction(
       // Login payload user is already from Backend.
     }
 
+    try {
+      await agentsApi.setAvailability("AVAILABLE");
+    } catch {
+      // Presence is best-effort after login.
+    }
+
     recordLoginSuccess(key);
     logAuthEvent("login_success", { email });
   } catch (error) {

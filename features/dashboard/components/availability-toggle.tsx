@@ -1,51 +1,97 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
-import { useWebSocketOptional } from "@/components/providers/websocket-provider";
+import { useEffect, useRef, useState } from "react";
 import { ConfirmDialog } from "@/components/ui/dialog";
-import {
-  dashboardApi,
-  readLocalAvailability,
-  writeLocalAvailability,
-} from "@/lib/api/dashboard";
+import { setAvailabilityAction } from "@/features/agents/actions";
+import { useOps } from "@/features/ops/ops-provider";
+import { presenceToUi, uiToPresence, writeToPresence } from "@/lib/agent/presence";
 import { cn } from "@/lib/utils/cn";
+import type { AgentPresence } from "@/types/agent";
 import type { AgentAvailability } from "@/types/dashboard";
 
-const OPTIONS: AgentAvailability[] = ["online", "busy", "offline"];
+const OPTIONS: Array<{
+  value: AgentAvailability;
+  label: string;
+  color: string;
+  active: string;
+}> = [
+  {
+    value: "available",
+    label: "Available",
+    color: "bg-emerald-500",
+    active: "bg-emerald-500 text-white",
+  },
+  {
+    value: "online",
+    label: "Online",
+    color: "bg-sky-500",
+    active: "bg-sky-500 text-white",
+  },
+  {
+    value: "busy",
+    label: "Busy",
+    color: "bg-amber-500",
+    active: "bg-amber-500 text-white",
+  },
+  {
+    value: "offline",
+    label: "Offline",
+    color: "bg-slate-500",
+    active: "bg-slate-600 text-white",
+  },
+];
 
 type AvailabilityToggleProps = {
   activeTaskCount?: number;
   compact?: boolean;
+  presence?: AgentPresence;
 };
 
 export function AvailabilityToggle({
   activeTaskCount,
   compact = false,
+  presence,
 }: AvailabilityToggleProps) {
-  const ws = useWebSocketOptional();
-  const [status, setStatus] = useState<AgentAvailability>("online");
+  const ops = useOps();
   const [confirmOffline, setConfirmOffline] = useState(false);
-  const [pending, startTransition] = useTransition();
-  const [count, setCount] = useState(activeTaskCount ?? 0);
+  const [saving, setSaving] = useState(false);
+  const inFlight = useRef(false);
+  const count = activeTaskCount ?? 0;
 
   useEffect(() => {
-    setStatus(readLocalAvailability());
-    if (activeTaskCount == null) {
-      setCount(dashboardApi.countActiveTasks());
+    if (presence) {
+      ops?.setPresence(presence);
     }
-  }, [activeTaskCount]);
+  }, [ops, presence]);
+
+  const current = ops
+    ? presenceToUi(ops.presence)
+    : presenceToUi(presence ?? "ONLINE");
 
   function apply(next: AgentAvailability) {
-    startTransition(() => {
-      setStatus(next);
-      writeLocalAvailability(next);
-      // Future: PATCH /agents/me/availability + WS agent.availability
-      ws?.send("agent.availability", { status: next });
-    });
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setSaving(true);
+
+    const previous = ops?.presence ?? presence ?? "ONLINE";
+    const nextWrite = uiToPresence(next);
+    ops?.setPresence(writeToPresence(nextWrite));
+
+    void setAvailabilityAction(nextWrite)
+      .then((result) => {
+        ops?.setPresence(result.status);
+      })
+      .catch(() => {
+        ops?.setPresence(previous);
+      })
+      .finally(() => {
+        inFlight.current = false;
+        setSaving(false);
+      });
   }
 
   function onSelect(next: AgentAvailability) {
-    if (next === status || pending) return;
+    if (next === current || inFlight.current || saving) return;
     if (next === "offline" && count > 0) {
       setConfirmOffline(true);
       return;
@@ -62,27 +108,30 @@ export function AvailabilityToggle({
         )}
         role="group"
         aria-label="Availability"
+        aria-busy={saving}
       >
         {OPTIONS.map((option) => {
-          const active = status === option;
+          const active = current === option.value;
           return (
             <button
-              key={option}
+              key={option.value}
               type="button"
-              disabled={pending}
-              onClick={() => onSelect(option)}
+              disabled={saving}
+              title={option.label}
+              onClick={() => onSelect(option.value)}
               className={cn(
-                "rounded-full px-2.5 py-1 font-semibold capitalize transition-colors",
-                active
-                  ? option === "online"
-                    ? "bg-emerald-500 text-white"
-                    : option === "busy"
-                      ? "bg-amber-500 text-white"
-                      : "bg-muted text-white"
-                  : "text-muted hover:text-foreground",
+                "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-semibold transition-colors",
+                active ? option.active : "text-muted hover:text-foreground",
+                saving && "cursor-not-allowed opacity-70",
               )}
             >
-              {option}
+              <span
+                className={cn(
+                  "size-1.5 rounded-full",
+                  active ? "bg-white" : option.color,
+                )}
+              />
+              {compact ? option.label.slice(0, 3) : option.label}
             </button>
           );
         })}
@@ -92,9 +141,9 @@ export function AvailabilityToggle({
         open={confirmOffline}
         onClose={() => setConfirmOffline(false)}
         title="Go offline?"
-        description={`Aapke paas ${count} active task${count === 1 ? "" : "s"} hain. Kya sach mein offline jaana hai? Queue matching ruk jayega.`}
+        description={`You have ${count} active task${count === 1 ? "" : "s"}. Going offline stops new assignments.`}
         confirmLabel="Go offline"
-        cancelLabel="Stay available"
+        cancelLabel="Stay online"
         destructive
         onConfirm={() => {
           setConfirmOffline(false);

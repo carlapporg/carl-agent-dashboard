@@ -50,6 +50,21 @@ export const taskSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   completedAt: z.string().nullable().optional(),
+  /** Nest task.status when loaded from API */
+  backendStatus: z
+    .enum([
+      "ASSIGNED",
+      "IN_PROGRESS",
+      "WAITING_FOR_USER",
+      "WAITING_FOR_AGENT",
+      "COMPLETED",
+      "FAILED",
+      "CANCELLED",
+      "REJECTED",
+    ])
+    .optional(),
+  clientAlias: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).nullable().optional(),
 });
 
 export type TaskStatus = z.infer<typeof taskStatusSchema>;

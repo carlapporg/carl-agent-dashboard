@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { dashboardApi } from "@/lib/api/dashboard";
+import { getAgentPreferencesAction } from "@/features/dashboard/actions";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageShell } from "@/components/ui/page-shell";
 import { Card, CardBody } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 
 type NotifPrefs = Awaited<
-  ReturnType<typeof dashboardApi.getAgentPreferences>
+  ReturnType<typeof getAgentPreferencesAction>
 >["notifications"];
 
 const LABELS: Record<keyof NotifPrefs, { title: string; detail: string }> = {
@@ -44,7 +44,7 @@ export function SettingsView() {
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    void dashboardApi.getAgentPreferences().then((p) => setPrefs(p.notifications));
+    void getAgentPreferencesAction().then((p) => setPrefs(p.notifications));
   }, []);
 
   return (

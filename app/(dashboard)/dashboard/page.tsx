@@ -9,9 +9,21 @@ export const metadata: Metadata = {
 };
 
 export default async function DashboardPage() {
-  const [session, tasks] = await Promise.all([getSession(), tasksApi.list()]);
-
+  const session = await getSession();
   const welcomeName = session ? getAgentDisplayName(session.user) : "there";
 
-  return <DashboardHome welcomeName={welcomeName} tasks={tasks} />;
+  const [offered, active, history] = await Promise.all([
+    tasksApi.listByInbox("OFFERED").catch(() => []),
+    tasksApi.listByInbox("ACTIVE").catch(() => []),
+    tasksApi.listByInbox("HISTORY").catch(() => []),
+  ]);
+
+  const tasks = [...offered, ...active, ...history];
+
+  return (
+    <DashboardHome
+      welcomeName={welcomeName}
+      tasks={tasks}
+    />
+  );
 }

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { dashboardApi } from "@/lib/api/dashboard";
+import { getActiveTasksAction } from "@/features/dashboard/actions";
 import { ROUTES } from "@/lib/constants/routes";
 import { cn } from "@/lib/utils/cn";
 import type { ActiveTaskSummary } from "@/types/dashboard";
@@ -12,7 +12,7 @@ export function ActiveTasksSummary() {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    void dashboardApi.getActiveTasks().then((data) => {
+    void getActiveTasksAction().then((data) => {
       setItems(data);
       setLoaded(true);
     });

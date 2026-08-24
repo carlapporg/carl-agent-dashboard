@@ -17,10 +17,32 @@ export const metadata: Metadata = {
 };
 
 export default async function InboxPage() {
-  const [waitingCustomer, waitingPayment] = await Promise.all([
-    tasksApi.list({ waitingOn: "customer" }),
-    tasksApi.list({ waitingOn: "payment" }),
-  ]);
+  let waitingCustomer: Awaited<ReturnType<typeof tasksApi.list>> = [];
+  let waitingPayment: Awaited<ReturnType<typeof tasksApi.list>> = [];
+  let loadFailed = false;
+  try {
+    [waitingCustomer, waitingPayment] = await Promise.all([
+      tasksApi.list({ waitingOn: "customer" }),
+      tasksApi.list({ waitingOn: "payment" }),
+    ]);
+  } catch {
+    loadFailed = true;
+  }
+
+  if (loadFailed) {
+    return (
+      <PageShell wide>
+        <PageHeader
+          title="Inbox"
+          description="Blocked on the customer or a payment approval — these need a nudge or follow-up."
+        />
+        <EmptyState
+          title="Can't reach the server"
+          description="Your login is still saved. The API tunnel may be down. Wait a moment and refresh."
+        />
+      </PageShell>
+    );
+  }
 
   const items = [...waitingCustomer, ...waitingPayment]
     .filter((t) => !t.parentId || t.status === "waiting_for_customer")

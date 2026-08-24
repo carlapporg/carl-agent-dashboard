@@ -1,9 +1,7 @@
 /**
  * Resolve the native WebSocket URL.
  *
- * Prefer NEXT_PUBLIC_WS_URL (e.g. wss://api.example.com/ws).
- * If unset, derive from API_BASE_URL / NEXT_PUBLIC_API_BASE_URL by swapping
- * http(s) → ws(s) and appending /ws (placeholder path until backend is ready).
+ * Only NEXT_PUBLIC_WS_URL. Socket.IO is the live channel; do not guess /ws.
  */
 
 function trimSlash(value: string): string {
@@ -31,18 +29,10 @@ export function resolveWebSocketUrl(
 
   if (fromEnv) return trimSlash(fromEnv);
 
-  const apiBase =
-    process.env.NEXT_PUBLIC_API_BASE_URL?.trim() ||
-    process.env.API_BASE_URL?.trim() ||
-    "";
-
-  if (!apiBase) return null;
-
-  const origin = stripApiPrefix(httpToWs(apiBase));
-  if (!origin.startsWith("ws://") && !origin.startsWith("wss://")) return null;
-
-  // Placeholder path — backend should document the final route.
-  return `${origin}/ws`;
+  // Do not invent `/ws` from the REST URL. Nest talks Socket.IO, not a
+  // native WebSocket at /ws. Guessing that path causes reconnect storms
+  // through ngrok and then REST calls fail with "Unable to connect".
+  return null;
 }
 
 export function isWebSocketConfigured(): boolean {

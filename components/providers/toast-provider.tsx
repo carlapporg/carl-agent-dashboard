@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import Link from "next/link";
 import { cn } from "@/lib/utils/cn";
 
 type ToastVariant = "info" | "success" | "error";
@@ -19,13 +20,23 @@ type ToastItem = {
   variant: ToastVariant;
   placement?: "top" | "bottom";
   title?: string;
+  href?: string;
+  actionLabel?: string;
+};
+
+type ToastOptions = {
+  placement?: "top" | "bottom";
+  title?: string;
+  href?: string;
+  actionLabel?: string;
+  stack?: boolean;
 };
 
 type ToastContextValue = {
   toast: (
     message: string,
     variant?: ToastVariant,
-    options?: { placement?: "top" | "bottom"; title?: string },
+    options?: ToastOptions,
   ) => void;
   comingSoon: (message?: string) => void;
 };
@@ -54,23 +65,48 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     (
       message: string,
       variant: ToastVariant = "info",
-      options?: { placement?: "top" | "bottom"; title?: string },
+      options?: ToastOptions,
     ) => {
       const id = `toast_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
       const placement = options?.placement ?? "bottom";
+      const stack = options?.stack ?? placement !== "top";
       setItems((prev) => {
-        const kept =
-          placement === "top"
-            ? prev.filter((item) => item.placement !== "top")
-            : prev;
-        return [...kept, { id, message, variant, placement, title: options?.title }].slice(
-          -4,
-        );
+        let kept = prev;
+        if (placement === "top" && !stack) {
+          kept = prev.filter((item) => item.placement !== "top");
+        } else if (options?.href) {
+          kept = prev.filter((item) => item.href !== options.href);
+        }
+        return [
+          ...kept,
+          {
+            id,
+            message,
+            variant,
+            placement,
+            title: options?.title,
+            href: options?.href,
+            actionLabel: options?.actionLabel,
+          },
+        ].slice(-4);
       });
-      window.setTimeout(() => dismiss(id), placement === "top" ? 4500 : 3500);
+      window.setTimeout(() => dismiss(id), placement === "top" ? 7000 : 3500);
     },
     [dismiss],
   );
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setItems((prev) => {
+        const top = [...prev].reverse().find((item) => item.placement === "top");
+        if (!top) return prev;
+        return prev.filter((item) => item.id !== top.id);
+      });
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const comingSoon = useCallback(
     (message = "This feature is coming soon") => {
@@ -90,7 +126,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {mounted ? (
         <>
           <div
-            className="pointer-events-none fixed top-4 right-4 z-[100] flex w-[min(100%-2rem,24rem)] flex-col items-end gap-2 sm:top-5 sm:right-5"
+            className="pointer-events-none fixed top-4 right-4 z-[110] flex w-[min(100%-2rem,24rem)] flex-col items-end gap-2 sm:top-5 sm:right-5"
+            role="region"
+            aria-label="Notifications"
             aria-live="polite"
             suppressHydrationWarning
           >
@@ -108,9 +146,18 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                     <p className="text-xs font-bold uppercase tracking-[0.14em] text-accent">
                       {item.title ?? "New task"}
                     </p>
-                    <p className="mt-1 text-[15px] font-semibold leading-snug text-foreground">
+                    <p className="mt-1 whitespace-pre-line text-[15px] font-semibold leading-snug text-foreground">
                       {item.message}
                     </p>
+                    {item.href ? (
+                      <Link
+                        href={item.href}
+                        onClick={() => dismiss(item.id)}
+                        className="mt-2 inline-flex text-sm font-semibold text-accent underline-offset-2 hover:underline"
+                      >
+                        {item.actionLabel ?? "Open"}
+                      </Link>
+                    ) : null}
                   </div>
                   <button
                     type="button"

@@ -1,51 +1,58 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, type CSSProperties } from "react";
+import { useEffect, useMemo, type CSSProperties } from "react";
 import { AvailabilityToggle } from "@/features/dashboard/components/availability-toggle";
 import { LiveTaskQueue } from "@/features/dashboard/components/live-task-queue";
 import { MetricStatCard } from "@/features/dashboard/components/metric-stat-card";
 import { ShiftProgress } from "@/features/dashboard/components/shift-progress";
 import { WsConnectionBanner } from "@/features/dashboard/components/ws-connection-banner";
+import { useOps } from "@/features/ops/ops-provider";
 import { hasStartedWork } from "@/features/tasks/lib/workflow";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageShell } from "@/components/ui/page-shell";
 import { ROUTES } from "@/lib/constants/routes";
+import type { AgentPresence } from "@/types/agent";
 import type { Task } from "@/types/task";
 
 type DashboardHomeProps = {
   welcomeName: string;
   tasks: Task[];
+  presence?: AgentPresence;
 };
 
-export function DashboardHome({ welcomeName, tasks }: DashboardHomeProps) {
+export function DashboardHome({
+  welcomeName,
+  tasks,
+  presence,
+}: DashboardHomeProps) {
+  const ops = useOps();
   const firstName = welcomeName.split(" ")[0] || welcomeName;
 
-  const roots = useMemo(
-    () => tasks.filter((t) => !t.parentId),
-    [tasks],
-  );
+  const roots = useMemo(() => tasks.filter((t) => !t.parentId), [tasks]);
+
+  useEffect(() => {
+    if (presence) {
+      ops?.setPresence(presence);
+    }
+  }, [ops, presence]);
 
   const stats = useMemo(() => {
-    const needsAttention = roots.filter(
-      (t) =>
-        t.status === "queued" ||
-        t.status === "assigned" ||
-        t.status === "waiting_for_payment" ||
-        t.priority === "urgent",
+    const offered = roots.filter((t) => t.backendStatus === "ASSIGNED").length;
+    const inProgress = roots.filter(
+      (t) => t.backendStatus === "IN_PROGRESS",
     ).length;
-    const inProgress = roots.filter((t) => t.status === "in_progress").length;
     const waitingCustomer = roots.filter(
-      (t) => t.status === "waiting_for_customer",
+      (t) => t.backendStatus === "WAITING_FOR_USER",
     ).length;
     const completed = roots.filter((t) => t.status === "completed").length;
     const inMotion = roots.filter((t) => hasStartedWork(t)).length;
     const total = Math.max(roots.length, 1);
-    const activeCount = roots.filter((t) => hasStartedWork(t)).length;
+    const activeCount = roots.filter((t) => hasStartedWork(t) || t.backendStatus === "ASSIGNED").length;
 
     return {
-      needsAttention,
+      offered,
       inProgress,
       waitingCustomer,
       completed,
@@ -59,13 +66,16 @@ export function DashboardHome({ welcomeName, tasks }: DashboardHomeProps) {
     <PageShell wide>
       <WsConnectionBanner />
 
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <AvailabilityToggle activeTaskCount={stats.activeCount} />
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <AvailabilityToggle
+          activeTaskCount={stats.activeCount}
+          presence={presence}
+        />
       </div>
 
       <PageHeader
         title={`Welcome back, ${firstName}`}
-        description="Here’s your shift at a glance — metrics, progress, and the live queue."
+        description="Live assignments, timers, and queue — all driven by Nest."
         action={
           <div className="flex flex-wrap gap-2">
             <Link href={ROUTES.tasks}>
@@ -80,13 +90,13 @@ export function DashboardHome({ welcomeName, tasks }: DashboardHomeProps) {
         }
       />
 
-      <div className="space-y-4">
-        <div className="grid gap-3 sm:grid-cols-3">
+      <div className="space-y-6">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <MetricStatCard
             label="Needs attention"
-            value={stats.needsAttention}
-            ringValue={stats.needsAttention}
-            hint="Queued, urgent, or waiting on payment."
+            value={stats.offered}
+            ringValue={stats.offered}
+            hint="Assigned offers waiting for Start."
             color="#ef4444"
             className="dash-slide-in"
           />
@@ -94,7 +104,7 @@ export function DashboardHome({ welcomeName, tasks }: DashboardHomeProps) {
             label="In progress"
             value={stats.inProgress}
             ringValue={stats.inProgress}
-            hint="Actively being handled."
+            hint="Started work in motion."
             color="#4f7cff"
             className="dash-slide-in"
             style={{ animationDelay: "60ms" } as CSSProperties}
@@ -103,10 +113,19 @@ export function DashboardHome({ welcomeName, tasks }: DashboardHomeProps) {
             label="Waiting on customer"
             value={stats.waitingCustomer}
             ringValue={stats.waitingCustomer}
-            hint="Blocked until they reply."
-            color="#94a3b8"
+            hint="WAITING_FOR_USER from Nest."
+            color="#d97706"
             className="dash-slide-in"
             style={{ animationDelay: "120ms" } as CSSProperties}
+          />
+          <MetricStatCard
+            label="Completed"
+            value={stats.completed}
+            ringValue={stats.completed}
+            hint="Finished in this list."
+            color="#059669"
+            className="dash-slide-in"
+            style={{ animationDelay: "180ms" } as CSSProperties}
           />
         </div>
 

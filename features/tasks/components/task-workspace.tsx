@@ -3,7 +3,11 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { advanceTaskAction } from "@/features/tasks/actions/task-actions";
+import {
+  startTaskAction,
+  rejectTaskAction,
+  updateTaskAgentStatusAction,
+} from "@/features/tasks/actions/task-actions";
 import { ItineraryPanel } from "@/features/itinerary/components/itinerary-panel";
 import { TaskActionLog } from "@/features/tasks/components/task-action-log";
 import { TaskAiBrief } from "@/features/tasks/components/task-ai-brief";
@@ -16,6 +20,7 @@ import { TaskCustomerSnippet } from "@/features/tasks/components/task-customer-s
 import { TaskPaymentSection } from "@/features/tasks/components/task-payment-section";
 import { TaskReceipts } from "@/features/tasks/components/task-receipts";
 import { TaskStatusStepper } from "@/features/tasks/components/task-status-stepper";
+import { TaskStatusForm } from "@/features/tasks/components/task-status-form";
 import { TaskSubtasks } from "@/features/tasks/components/task-subtasks";
 import {
   allStepsComplete,
@@ -133,15 +138,24 @@ export function TaskWorkspace({
       return;
     }
     startTransition(async () => {
-      await advanceTaskAction(task.id);
+      await startTaskAction(task.id);
       router.refresh();
     });
   }
 
   function confirmComplete() {
     startTransition(async () => {
-      await advanceTaskAction(task.id);
+      await updateTaskAgentStatusAction(task.id, "COMPLETED");
       setCompleteOpen(false);
+      router.refresh();
+    });
+  }
+
+  function rejectOffer() {
+    const reason = window.prompt("Why are you rejecting this task?");
+    if (!reason?.trim()) return;
+    startTransition(async () => {
+      await rejectTaskAction(task.id, reason.trim());
       router.refresh();
     });
   }
@@ -203,16 +217,28 @@ export function TaskWorkspace({
               />
             </div>
 
-            {actionLabel ? (
-              <div className="mt-4">
-                <Button
-                  type="button"
-                  loading={pending}
-                  disabled={pending}
-                  onClick={runPrimary}
-                >
-                  {actionLabel}
-                </Button>
+            {actionLabel || task.backendStatus === "ASSIGNED" ? (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {actionLabel ? (
+                  <Button
+                    type="button"
+                    loading={pending}
+                    disabled={pending}
+                    onClick={runPrimary}
+                  >
+                    {actionLabel}
+                  </Button>
+                ) : null}
+                {task.backendStatus === "ASSIGNED" ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={pending}
+                    onClick={rejectOffer}
+                  >
+                    Reject (60s)
+                  </Button>
+                ) : null}
               </div>
             ) : showCompleteHint ? (
               <p className="mt-4 text-sm text-muted">
@@ -224,6 +250,8 @@ export function TaskWorkspace({
               </p>
             ) : null}
           </section>
+
+          <TaskStatusForm task={task} disabled={readOnly || !started} />
 
           <TaskAiBrief
             summary={task.aiBrief?.summary}

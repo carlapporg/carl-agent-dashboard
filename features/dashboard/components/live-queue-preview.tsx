@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { SlaCountdown } from "@/features/dashboard/components/sla-countdown";
 import { useTaskQueueSocket } from "@/hooks/use-task-queue-socket";
-import { dashboardApi } from "@/lib/api/dashboard";
+import { getQueuePreviewAction } from "@/features/dashboard/actions";
 import { ROUTES } from "@/lib/constants/routes";
 import type { QueuePreviewItem } from "@/types/dashboard";
 
@@ -13,13 +13,13 @@ export function LiveQueuePreview() {
   const [loaded, setLoaded] = useState(false);
   const { isConnected, configured } = useTaskQueueSocket({
     onEvent: () => {
-      void dashboardApi.getQueuePreview(3).then(setItems);
+      void getQueuePreviewAction(3).then(setItems);
     },
   });
 
   useEffect(() => {
     let cancelled = false;
-    void dashboardApi.getQueuePreview(3).then((data) => {
+    void getQueuePreviewAction(3).then((data) => {
       if (!cancelled) {
         setItems(data);
         setLoaded(true);

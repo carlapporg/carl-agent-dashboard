@@ -1,4 +1,4 @@
-export type AgentAvailability = "online" | "busy" | "offline";
+export type AgentAvailability = "available" | "online" | "busy" | "offline";
 
 export type QueuePreviewItem = {
   id: string;
@@ -28,6 +28,7 @@ export type ActiveTaskSummary = {
 };
 
 export type AgentAlertKind =
+  | "task_assigned"
   | "payment_approved"
   | "payment_declined"
   | "sla_reply"

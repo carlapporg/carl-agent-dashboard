@@ -18,7 +18,7 @@ export const loginResponseSchema = z.object({
 
 export const tokenPairSchema = z.object({
   accessToken: z.string().min(1),
-  refreshToken: z.string().min(1),
+  refreshToken: z.string().min(1).optional(),
 });
 
 export const messageDataSchema = z.object({

@@ -1,46 +1,52 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import {
+  ACCESS_TOKEN_REQUEST_HEADER,
   encodeSessionCookie,
   parseSessionCookie,
+  sessionCookieSetOptions,
 } from "@/lib/auth/session-cookie";
 import { AUTH_COOKIE_NAME } from "@/lib/constants/routes";
 import type { SessionPayload } from "@/types/auth";
 import type { BackendUser } from "@/types/user";
 
-const SESSION_MAX_AGE_DEFAULT = 60 * 60 * 24; // 1 day
-const SESSION_MAX_AGE_REMEMBER = 60 * 60 * 24 * 30; // 30 days
-
 export async function createSession(session: SessionPayload): Promise<void> {
   const cookieStore = await cookies();
-  const maxAge = session.rememberMe
-    ? SESSION_MAX_AGE_REMEMBER
-    : SESSION_MAX_AGE_DEFAULT;
-
-  cookieStore.set(AUTH_COOKIE_NAME, encodeSessionCookie(session), {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge,
-  });
+  cookieStore.set(
+    AUTH_COOKIE_NAME,
+    encodeSessionCookie(session),
+    sessionCookieSetOptions(session.rememberMe),
+  );
 }
 
 export async function getSession(): Promise<SessionPayload | null> {
   const cookieStore = await cookies();
   const raw = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-  return parseSessionCookie(raw);
+  const session = parseSessionCookie(raw);
+  if (!session) return null;
+
+  try {
+    const headerStore = await headers();
+    const overlay = headerStore.get(ACCESS_TOKEN_REQUEST_HEADER);
+    if (overlay) {
+      return { ...session, accessToken: overlay };
+    }
+  } catch {
+    /* headers() unavailable outside a request */
+  }
+
+  return session;
 }
 
 export async function updateSessionTokens(
   accessToken: string,
-  refreshToken: string,
+  refreshToken?: string | null,
 ): Promise<void> {
   const session = await getSession();
   if (!session) return;
   await createSession({
     ...session,
     accessToken,
-    refreshToken,
+    refreshToken: refreshToken || session.refreshToken,
   });
 }
 

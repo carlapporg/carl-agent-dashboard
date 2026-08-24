@@ -122,9 +122,56 @@ function parseSuccessData<TSchema extends z.ZodTypeAny>(
   return dataParsed.data;
 }
 
-async function tryRefreshAccessToken(): Promise<string | null> {
-  // Refresh is not in the current Backend surface. Expired access tokens require re-login.
-  return null;
+let memoryAccessToken: string | null = null;
+let refreshInFlight: Promise<RefreshAttempt> | null = null;
+
+type RefreshAttempt =
+  | { ok: true; token: string }
+  | { ok: false; reason: "invalid" | "network" };
+
+async function tryRefreshAccessToken(): Promise<RefreshAttempt> {
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = refreshAccessTokenOnce().finally(() => {
+    refreshInFlight = null;
+  });
+  return refreshInFlight;
+}
+
+async function refreshAccessTokenOnce(): Promise<RefreshAttempt> {
+  if (typeof window !== "undefined") {
+    try {
+      const response = await fetch("/api/auth/refresh", {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      if (response.status === 503) return { ok: false, reason: "network" };
+      if (!response.ok) return { ok: false, reason: "invalid" };
+      const raw: unknown = await response.json();
+      const accessToken =
+        raw &&
+        typeof raw === "object" &&
+        "accessToken" in raw &&
+        typeof (raw as { accessToken: unknown }).accessToken === "string"
+          ? (raw as { accessToken: string }).accessToken
+          : null;
+      if (!accessToken) return { ok: false, reason: "network" };
+      memoryAccessToken = accessToken;
+      return { ok: true, token: accessToken };
+    } catch {
+      return { ok: false, reason: "network" };
+    }
+  }
+
+  const { getSession } = await import("@/lib/auth/session");
+  const { refreshSessionAccessToken } = await import(
+    "@/lib/auth/refresh-session"
+  );
+  const session = await getSession();
+  if (!session?.refreshToken) return { ok: false, reason: "invalid" };
+  const result = await refreshSessionAccessToken(session.refreshToken);
+  if (!result.ok) return result;
+  memoryAccessToken = result.accessToken;
+  return { ok: true, token: result.accessToken };
 }
 
 async function executeRequest<TSchema extends z.ZodTypeAny>(
@@ -152,6 +199,9 @@ async function executeRequest<TSchema extends z.ZodTypeAny>(
         Accept: "application/json",
         ...(options.body ? { "Content-Type": "application/json" } : {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(/ngrok/i.test(url)
+          ? { "ngrok-skip-browser-warning": "1" }
+          : {}),
         ...options.headers,
       },
       body: options.body ? JSON.stringify(options.body) : undefined,
@@ -177,9 +227,16 @@ async function executeRequest<TSchema extends z.ZodTypeAny>(
     !options.skipRefresh &&
     !hasRetried
   ) {
-    const nextToken = await tryRefreshAccessToken();
-    if (nextToken) {
-      return executeRequest(path, options, nextToken, true);
+    const refreshed = await tryRefreshAccessToken();
+    if (refreshed.ok) {
+      memoryAccessToken = refreshed.token;
+      return executeRequest(path, options, refreshed.token, true);
+    }
+    if (refreshed.reason === "network") {
+      throwMappedError(0, undefined, undefined, context);
+    }
+    if (typeof window !== "undefined") {
+      window.location.assign("/session/clear?reason=expired");
     }
     throwMappedError(401, undefined, undefined, "api");
   }
@@ -211,7 +268,9 @@ export async function apiRequest<TSchema extends z.ZodTypeAny>(
   const shouldDedupe = options.dedupe ?? method === "GET";
   const token = options.skipAuth
     ? null
-    : await resolveAccessToken(options.token);
+    : options.token ??
+      memoryAccessToken ??
+      (await resolveAccessToken(options.token));
   const url = joinApiUrl(path);
   const key = dedupeKey(method, url, options.body, token);
 

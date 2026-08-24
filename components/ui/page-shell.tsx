@@ -13,7 +13,7 @@ export function PageShell({ children, className, wide }: PageShellProps) {
     <div
       className={cn(
         "mx-auto w-full",
-        wide ? "max-w-[1400px]" : "max-w-6xl",
+        wide ? "max-w-[1600px]" : "max-w-6xl",
         className,
       )}
     >

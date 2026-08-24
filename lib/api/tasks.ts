@@ -1,18 +1,16 @@
 import { z } from "zod";
+import { apiRequest } from "@/lib/api/client";
+import { API_ENDPOINTS } from "@/lib/api/endpoints";
+import { mapAgentTaskToUi } from "@/lib/api/map-task";
 import {
-  addTimelineEvent,
-  findTask,
-  mockTasks,
-  updateTask,
-} from "@/mocks/data";
-import {
-  type Task,
-  type TaskListFilters,
-  type TaskStatus,
-} from "@/types/task";
+  agentTaskListSchema,
+  agentTaskSchema,
+  type InboxFilter,
+} from "@/types/agent";
+import type { Task, TaskListFilters } from "@/types/task";
 
-function filterTasks(filters: TaskListFilters = {}): Task[] {
-  let list = [...mockTasks];
+function applyClientFilters(tasks: Task[], filters: TaskListFilters = {}): Task[] {
+  let list = [...tasks];
 
   if (filters.status && filters.status !== "all") {
     list = list.filter((t) => t.status === filters.status);
@@ -31,6 +29,7 @@ function filterTasks(filters: TaskListFilters = {}): Task[] {
         t.title.toLowerCase().includes(q) ||
         t.request.toLowerCase().includes(q) ||
         t.customerName.toLowerCase().includes(q) ||
+        (t.taskType?.toLowerCase().includes(q) ?? false) ||
         String(t.number).includes(q),
     );
   }
@@ -40,92 +39,65 @@ function filterTasks(filters: TaskListFilters = {}): Task[] {
   );
 }
 
-/** Task APIs are not live yet — always mock. Swap to apiRequest when Backend ships. */
 export const tasksApi = {
+  async listByInbox(status?: InboxFilter): Promise<Task[]> {
+    const query = status ? `?status=${encodeURIComponent(status)}` : "";
+    const rows = await apiRequest(`${API_ENDPOINTS.agents.tasks}${query}`, {
+      method: "GET",
+      schema: agentTaskListSchema,
+    });
+    return rows.map(mapAgentTaskToUi);
+  },
+
   async list(filters: TaskListFilters = {}): Promise<Task[]> {
-    return filterTasks(filters);
+    const inbox: InboxFilter | undefined =
+      filters.status === "completed" ||
+      filters.status === "cancelled" ||
+      filters.status === "failed"
+        ? "HISTORY"
+        : undefined;
+    const tasks = await this.listByInbox(inbox);
+    return applyClientFilters(tasks, filters);
   },
 
   async get(taskId: string): Promise<Task> {
-    const task = findTask(taskId);
-    if (!task) throw new Error("NOT_FOUND");
-    return task;
+    const row = await apiRequest(API_ENDPOINTS.agents.task(taskId), {
+      method: "GET",
+      schema: agentTaskSchema,
+    });
+    return mapAgentTaskToUi(row);
   },
 
-  async accept(taskId: string): Promise<Task> {
-    const task = updateTask(taskId, {
-      status: "assigned",
-      assignedAgentId: "agent_stub_001",
+  async reject(taskId: string, reason: string): Promise<{ message: string }> {
+    return apiRequest(API_ENDPOINTS.agents.taskReject(taskId), {
+      method: "POST",
+      body: { reason },
+      schema: z.object({ message: z.string() }),
+      dedupe: false,
     });
-    if (!task) throw new Error("NOT_FOUND");
-    addTimelineEvent({
-      taskId,
-      kind: "status_change",
-      body: "An agent has been assigned to your task.",
-      visibleToCustomer: true,
-    });
-    return task;
   },
 
-  async updateStatus(taskId: string, status: TaskStatus): Promise<Task> {
-    const existing = findTask(taskId);
-    if (!existing) throw new Error("NOT_FOUND");
-
-    const patch: Partial<Task> = { status };
-    if (status === "completed") {
-      patch.completedAt = new Date().toISOString();
-    }
-    const task = updateTask(taskId, patch);
-    if (!task) throw new Error("NOT_FOUND");
-
-    const { clientMessageForStatus } = await import(
-      "@/features/tasks/lib/workflow"
-    );
-
-    addTimelineEvent({
-      taskId,
-      kind: "status_change",
-      body: clientMessageForStatus(status),
-      visibleToCustomer: true,
+  async start(taskId: string): Promise<Task> {
+    const row = await apiRequest(API_ENDPOINTS.agents.taskStart(taskId), {
+      method: "POST",
+      schema: agentTaskSchema,
+      dedupe: false,
     });
-    return task;
+    return mapAgentTaskToUi(row);
   },
 
-  async addNote(taskId: string, body: string): Promise<Task> {
-    const existing = findTask(taskId);
-    if (!existing) throw new Error("NOT_FOUND");
-    const note = {
-      id: `note_${Date.now()}`,
-      body,
-      createdAt: new Date().toISOString(),
-      authorName: "Alex Morgan",
-    };
-    const task = updateTask(taskId, {
-      notes: [...existing.notes, note],
+  async updateAgentStatus(
+    taskId: string,
+    status: "COMPLETED" | "FAILED" | "CANCELLED" | "WAITING_FOR_USER",
+    note?: string,
+  ): Promise<Task> {
+    const row = await apiRequest(API_ENDPOINTS.agents.taskStatus(taskId), {
+      method: "PATCH",
+      body: { status, note: note || undefined },
+      schema: agentTaskSchema,
+      dedupe: false,
     });
-    if (!task) throw new Error("NOT_FOUND");
-    addTimelineEvent({
-      taskId,
-      kind: "agent_note",
-      body,
-      authorName: "Alex Morgan",
-    });
-    return task;
-  },
-
-  async toggleStep(taskId: string, step: string): Promise<Task> {
-    const existing = findTask(taskId);
-    if (!existing) throw new Error("NOT_FOUND");
-    const done = existing.suggestedStepsDone.includes(step)
-      ? existing.suggestedStepsDone.filter((s) => s !== step)
-      : [...existing.suggestedStepsDone, step];
-    const task = updateTask(taskId, { suggestedStepsDone: done });
-    if (!task) throw new Error("NOT_FOUND");
-    return task;
-  },
-
-  async listChildren(parentId: string): Promise<Task[]> {
-    return mockTasks.filter((t) => t.parentId === parentId);
+    return mapAgentTaskToUi(row);
   },
 };
 
@@ -138,18 +110,15 @@ export const overviewStatsSchema = z.object({
 export type OverviewStats = z.infer<typeof overviewStatsSchema>;
 
 export async function getOverviewStats(): Promise<OverviewStats> {
-  const tasks = await tasksApi.list();
-  const roots = tasks.filter((t) => !t.parentId);
+  const [offered, active] = await Promise.all([
+    tasksApi.listByInbox("OFFERED"),
+    tasksApi.listByInbox("ACTIVE"),
+  ]);
   return {
-    needsAttention: roots.filter(
-      (t) =>
-        t.status === "queued" ||
-        t.status === "waiting_for_payment" ||
-        t.priority === "urgent",
-    ).length,
-    inProgress: roots.filter((t) => t.status === "in_progress").length,
-    waitingOnCustomer: roots.filter(
-      (t) => t.status === "waiting_for_customer",
+    needsAttention: offered.length,
+    inProgress: active.filter((t) => t.backendStatus === "IN_PROGRESS").length,
+    waitingOnCustomer: active.filter(
+      (t) => t.backendStatus === "WAITING_FOR_USER",
     ).length,
   };
 }

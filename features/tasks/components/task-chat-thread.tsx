@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import {
   forwardRef,
+  useEffect,
   useImperativeHandle,
   useRef,
   useState,
@@ -79,6 +80,23 @@ export const TaskChatThread = forwardRef<
     prefills: (text: string) => applyDraft(text),
   }));
 
+  const [newBanner, setNewBanner] = useState(false);
+  const prevCount = useRef(timeline.length);
+
+  useEffect(() => {
+    if (timeline.length > prevCount.current) {
+      const last = timeline[timeline.length - 1];
+      if (last?.kind === "customer_message") setNewBanner(true);
+    }
+    prevCount.current = timeline.length;
+  }, [timeline]);
+
+  useEffect(() => {
+    if (!newBanner) return;
+    const id = window.setTimeout(() => setNewBanner(false), 4000);
+    return () => window.clearTimeout(id);
+  }, [newBanner]);
+
   const thread = timeline.filter(
     (e) =>
       e.kind === "agent_message" ||
@@ -105,6 +123,12 @@ export const TaskChatThread = forwardRef<
           {wsLive ? " · live" : ""}
         </p>
       </div>
+
+      {newBanner ? (
+        <p className="shrink-0 border-b border-emerald-100 bg-emerald-50 px-4 py-1.5 text-xs font-semibold text-emerald-800">
+          New client message
+        </p>
+      ) : null}
 
       <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto px-4 py-3">
         {thread.length === 0 ? (

@@ -1,11 +1,16 @@
+import { z } from "zod";
 import { apiRequest } from "@/lib/api/client";
 import { API_ENDPOINTS } from "@/lib/api/endpoints";
 import { env } from "@/lib/config/env";
-import { createMockLoginResponse, createMockRegisterResponse } from "@/mocks/auth";
+import {
+  createMockLoginResponse,
+  createMockRegisterResponse,
+} from "@/mocks/auth";
 import {
   loginCredentialsSchema,
   loginResponseSchema,
   registerCredentialsSchema,
+  tokenPairSchema,
   type LoginCredentials,
   type LoginResponse,
   type RegisterCredentials,
@@ -57,7 +62,33 @@ export const authApi = {
     });
   },
 
-  async logout(_refreshToken: string): Promise<void> {
-    // Logout endpoint is not in the current Backend surface.
+  async refresh(refreshToken: string): Promise<{
+    accessToken: string;
+    refreshToken?: string;
+  }> {
+    return apiRequest(API_ENDPOINTS.auth.refresh, {
+      method: "POST",
+      body: { refreshToken },
+      schema: tokenPairSchema,
+      skipAuth: true,
+      skipRefresh: true,
+      dedupe: false,
+    });
+  },
+
+  async logout(refreshToken: string): Promise<void> {
+    if (!env.isApiConfigured) return;
+    try {
+      await apiRequest(API_ENDPOINTS.auth.logout, {
+        method: "POST",
+        body: { refreshToken },
+        schema: z.object({ message: z.string().optional() }).passthrough(),
+        skipAuth: true,
+        skipRefresh: true,
+        dedupe: false,
+      });
+    } catch {
+      // Always clear local session even if the API call fails.
+    }
   },
 };
