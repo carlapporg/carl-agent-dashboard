@@ -15,7 +15,7 @@ import {
   StatusBadge,
 } from "@/features/tasks/components/status-badge";
 import {
-  MiniRing,
+  MiniRingLabel,
   stageProgressPercent,
   TASK_STAGES,
 } from "@/features/tasks/components/stage-progress";
@@ -27,21 +27,71 @@ import {
   TaskViewToggle,
   type TasksViewMode,
 } from "@/features/tasks/components/task-view-toggle";
+import { useOps } from "@/features/ops/ops-provider";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ROUTES } from "@/lib/constants/routes";
+import { mergeTaskLists } from "@/lib/tasks/merge-live-task";
 import { cn } from "@/lib/utils/cn";
 import type { Task, TaskStatus } from "@/types/task";
 
-const STATUS_FILTERS: Array<{ value: TaskStatus | "all"; label: string }> = [
-  { value: "all", label: "All" },
-  { value: "queued", label: "Queued" },
-  { value: "in_progress", label: "In progress" },
-  { value: "waiting_for_customer", label: "Waiting on customer" },
-  { value: "waiting_for_payment", label: "Waiting on payment" },
-  { value: "completed", label: "Completed" },
+const STATUS_FILTERS: Array<{
+  value: TaskStatus | "all";
+  label: string;
+  match: TaskStatus[];
+  color: string;
+}> = [
+  { value: "all", label: "All", match: [], color: "#4f7cff" },
+  {
+    value: "queued",
+    label: "Offered",
+    match: ["queued"],
+    color: "#9ca3af",
+  },
+  {
+    value: "assigned",
+    label: "Assigned",
+    match: ["assigned"],
+    color: "#60a5fa",
+  },
+  {
+    value: "in_progress",
+    label: "In progress",
+    match: ["in_progress"],
+    color: "#4f7cff",
+  },
+  {
+    value: "waiting_for_customer",
+    label: "Waiting on customer",
+    match: ["waiting_for_customer"],
+    color: "#f59e0b",
+  },
+  {
+    value: "waiting_for_payment",
+    label: "Waiting on payment",
+    match: ["waiting_for_payment"],
+    color: "#f97316",
+  },
+  {
+    value: "completed",
+    label: "Completed",
+    match: ["completed"],
+    color: "#10b981",
+  },
+  {
+    value: "failed",
+    label: "Failed",
+    match: ["failed"],
+    color: "#dc2626",
+  },
+  {
+    value: "cancelled",
+    label: "Cancelled",
+    match: ["cancelled"],
+    color: "#6b7280",
+  },
 ];
 
 type TaskListProps = {
@@ -69,46 +119,23 @@ function stageColor(status: TaskStatus): string {
   );
 }
 
-function CheckIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="3"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="M20 6 9 17l-5-5" />
-    </svg>
-  );
-}
-
 export function TaskList({ tasks }: TaskListProps) {
   const router = useRouter();
+  const ops = useOps();
   const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
   const status = (searchParams.get("status") as TaskStatus | "all") || "all";
-  const typeFilter = searchParams.get("type") ?? "all";
   const search = searchParams.get("q") ?? "";
-  const hasFilters =
-    status !== "all" || typeFilter !== "all" || Boolean(search.trim());
-
-  const typeOptions = useMemo(() => {
-    const set = new Set<string>();
-    for (const t of tasks) {
-      if (t.taskType) set.add(t.taskType);
-    }
-    return ["all", ...Array.from(set).sort()];
-  }, [tasks]);
+  const hasFilters = status !== "all" || Boolean(search.trim());
   const [motionKey, setMotionKey] = useState(0);
   const [bounceFilter, setBounceFilter] = useState<string | null>(null);
   const [view, setView] = useState<TasksViewMode>("list");
   const [viewReady, setViewReady] = useState(false);
+
+  const allTasks = useMemo(
+    () => mergeTaskLists(tasks, ops?.liveTasks ?? [], ops?.offer),
+    [ops?.liveTasks, ops?.offer, tasks],
+  );
 
   useEffect(() => {
     setView(readStoredTasksView());
@@ -116,34 +143,27 @@ export function TaskList({ tasks }: TaskListProps) {
   }, []);
 
   const statusCounts = useMemo(() => {
-    const counts: Record<string, number> = { all: tasks.length };
+    const counts: Record<string, number> = { all: allTasks.length };
     for (const filter of STATUS_FILTERS) {
       if (filter.value === "all") continue;
       counts[filter.value] = 0;
     }
-    for (const task of tasks) {
-      if (counts[task.status] != null) counts[task.status] += 1;
+    for (const task of allTasks) {
+      for (const filter of STATUS_FILTERS) {
+        if (filter.value === "all") continue;
+        if (filter.match.includes(task.status)) counts[filter.value] += 1;
+      }
     }
     return counts;
-  }, [tasks]);
-
-  const distribution = useMemo(() => {
-    const total = Math.max(tasks.length, 1);
-    return TASK_STAGES.map((stage) => {
-      const count = tasks.filter((t) => t.status === stage.status).length;
-      return {
-        ...stage,
-        count,
-        pct: Math.round((count / total) * 100),
-      };
-    });
-  }, [tasks]);
+  }, [allTasks]);
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return tasks.filter((task) => {
-      if (status !== "all" && task.status !== status) return false;
-      if (typeFilter !== "all" && task.taskType !== typeFilter) return false;
+    const activeFilter = STATUS_FILTERS.find((f) => f.value === status);
+    return allTasks.filter((task) => {
+      if (status !== "all" && !activeFilter?.match.includes(task.status)) {
+        return false;
+      }
       if (!q) return true;
       return (
         task.title.toLowerCase().includes(q) ||
@@ -153,11 +173,11 @@ export function TaskList({ tasks }: TaskListProps) {
         (task.taskType?.toLowerCase().includes(q) ?? false)
       );
     });
-  }, [tasks, status, typeFilter, search]);
+  }, [allTasks, status, search]);
 
   useEffect(() => {
     setMotionKey((k) => k + 1);
-  }, [status, typeFilter, search]);
+  }, [status, search]);
 
   function updateParams(next: Record<string, string>) {
     const params = new URLSearchParams(searchParams.toString());
@@ -177,7 +197,7 @@ export function TaskList({ tasks }: TaskListProps) {
 
   return (
     <div className={cn("task-card-in space-y-4", pending && "opacity-90")}>
-      <MissedTaskWatcher tasks={tasks} />
+      <MissedTaskWatcher tasks={allTasks} />
       <Card className="p-3 md:px-4 md:py-3">
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -225,7 +245,7 @@ export function TaskList({ tasks }: TaskListProps) {
             </div>
           </div>
 
-          <div className="flex min-w-0 flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {STATUS_FILTERS.map((filter) => {
               const active = status === filter.value;
               const count = statusCounts[filter.value] ?? 0;
@@ -236,91 +256,45 @@ export function TaskList({ tasks }: TaskListProps) {
                   onClick={() => {
                     setBounceFilter(filter.value);
                     window.setTimeout(() => setBounceFilter(null), 400);
-                    updateParams({ status: filter.value });
+                    updateParams({ status: filter.value, type: "all" });
                   }}
                   className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-semibold transition-colors",
+                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors",
                     active
-                      ? "border-accent bg-accent text-accent-foreground shadow-sm"
-                      : "border-border bg-surface text-foreground-soft hover:border-accent/35 hover:text-accent",
+                      ? "border-accent bg-accent/10 text-accent"
+                      : "border-border bg-surface text-foreground hover:border-accent/30 hover:text-accent",
                     bounceFilter === filter.value && "task-chip-bounce",
                   )}
                 >
-                  {active ? <CheckIcon className="opacity-95" /> : null}
-                  <span>
-                    {filter.label} {count}
+                  <span
+                    className="size-1.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: filter.color }}
+                    aria-hidden
+                  />
+                  {filter.label}
+                  <span
+                    className={cn(
+                      "tabular-nums",
+                      active ? "text-accent" : "text-muted",
+                    )}
+                  >
+                    {count}
                   </span>
                 </button>
               );
             })}
+            {status !== "all" ? (
+              <button
+                type="button"
+                onClick={() => updateParams({ status: "all" })}
+                className="inline-flex items-center rounded-full px-2.5 py-1.5 text-sm font-medium text-muted hover:text-foreground"
+              >
+                Clear
+              </button>
+            ) : null}
           </div>
-
-          {typeOptions.length > 1 ? (
-            <div className="flex min-w-0 flex-wrap gap-2">
-              {typeOptions.map((type) => {
-                const active = typeFilter === type;
-                return (
-                  <button
-                    key={type}
-                    type="button"
-                    onClick={() => updateParams({ type })}
-                    className={cn(
-                      "inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold transition-colors",
-                      active
-                        ? "border-accent/40 bg-accent/10 text-accent"
-                        : "border-border bg-surface text-muted hover:text-accent",
-                    )}
-                  >
-                    {type === "all" ? "All types" : type}
-                  </button>
-                );
-              })}
-            </div>
-          ) : null}
         </div>
       </Card>
-
-      <section>
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <h2 className="text-base font-semibold text-foreground">
-            Queue health
-          </h2>
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-emerald-700">
-            <span className="dash-live-dot size-1.5 rounded-full bg-emerald-500" />
-            Live
-          </span>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          {distribution.map((stage, index) => (
-            <div
-              key={stage.status}
-              className="task-health-in rounded-xl border border-border bg-surface px-3 py-2.5 shadow-[var(--shadow-card)]"
-              style={{ "--health-i": index } as CSSProperties}
-            >
-              <p className="truncate text-sm font-medium text-muted">
-                {stage.label}
-              </p>
-              <p
-                key={`${motionKey}-${stage.status}-n`}
-                className="task-count-pop mt-1 text-xl font-semibold tabular-nums tracking-tight text-foreground"
-              >
-                {stage.count}
-              </p>
-              <div className="mt-3 h-1 overflow-hidden rounded-full bg-surface-hover">
-                <div
-                  key={`${motionKey}-${stage.status}-bar`}
-                  className="dash-progress-fill h-full rounded-full"
-                  style={{
-                    width: `${stage.count > 0 ? Math.max(stage.pct, 18) : 0}%`,
-                    backgroundColor: stage.color,
-                  }}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
 
       {view === "board" ? (
         <TaskBoard tasks={visible} />
@@ -350,7 +324,7 @@ export function TaskList({ tasks }: TaskListProps) {
         </Card>
       ) : (
         <Card className="overflow-hidden p-0">
-          <div className="hidden grid-cols-[48px_minmax(0,1.8fr)_minmax(0,0.9fr)_100px_160px_80px_80px] gap-2 border-b border-border bg-[#f8fafc] px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.08em] text-muted xl:grid">
+          <div className="hidden grid-cols-[56px_minmax(0,1.8fr)_minmax(0,0.9fr)_100px_160px_80px_80px] gap-2 border-b border-border bg-[#f8fafc] px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.08em] text-muted xl:grid">
             <span>Prog</span>
             <span>Task</span>
             <span>Customer</span>
@@ -372,20 +346,17 @@ export function TaskList({ tasks }: TaskListProps) {
                 >
                   <Link
                     href={ROUTES.task(task.id)}
-                    className="group relative grid gap-2 px-3 py-3 transition-colors hover:bg-accent/[0.04] sm:px-4 xl:grid-cols-[48px_minmax(0,1.8fr)_minmax(0,0.9fr)_100px_160px_80px_80px] xl:items-center"
+                    className="group relative grid gap-2 px-3 py-3 transition-colors hover:bg-accent/[0.04] sm:px-4 xl:grid-cols-[56px_minmax(0,1.8fr)_minmax(0,0.9fr)_100px_160px_80px_80px] xl:items-center"
                   >
                     <span className="absolute inset-y-3 left-0 w-0 rounded-r bg-accent transition-[width] duration-200 group-hover:w-1" />
 
-                    <div className="relative hidden size-10 xl:block">
-                      <MiniRing
+                    <div className="hidden xl:flex xl:justify-center">
+                      <MiniRingLabel
                         percent={pct}
                         color={color}
-                        size={40}
+                        size={44}
                         animate
                       />
-                      <span className="absolute inset-0 flex items-center justify-center text-xs font-bold tabular-nums text-foreground">
-                        {pct}%
-                      </span>
                     </div>
 
                     <div className="min-w-0">
@@ -425,17 +396,12 @@ export function TaskList({ tasks }: TaskListProps) {
 
                     <div className="flex flex-wrap items-center gap-2 xl:contents">
                       <div className="xl:hidden">
-                        <div className="relative inline-flex size-9">
-                          <MiniRing
-                            percent={pct}
-                            color={color}
-                            size={36}
-                            animate
-                          />
-                          <span className="absolute inset-0 flex items-center justify-center text-xs font-bold">
-                            {pct}%
-                          </span>
-                        </div>
+                        <MiniRingLabel
+                          percent={pct}
+                          color={color}
+                          size={40}
+                          animate
+                        />
                       </div>
                       <p className="text-sm text-muted xl:hidden">
                         {task.customerName}

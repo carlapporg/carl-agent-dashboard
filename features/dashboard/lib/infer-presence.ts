@@ -5,6 +5,7 @@ import type { Task } from "@/types/task";
 export function inferPresence(tasks: Task[]): AgentPresence {
   const busy = tasks.some(
     (task) =>
+      task.backendStatus === "OFFERED" ||
       task.backendStatus === "ASSIGNED" ||
       task.backendStatus === "IN_PROGRESS" ||
       task.backendStatus === "WAITING_FOR_USER" ||

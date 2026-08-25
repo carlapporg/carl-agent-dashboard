@@ -10,6 +10,7 @@ import { presenceToUi, uiToPresence } from "@/lib/agent/presence";
 import { messagesApi } from "@/lib/api/messages";
 import { tasksApi } from "@/lib/api/tasks";
 import { agentsApi } from "@/lib/api/agents";
+import { isFailedOrCancelled } from "@/features/tasks/lib/workflow";
 import type { Task } from "@/types/task";
 
 export { presenceToUi, uiToPresence };
@@ -39,8 +40,10 @@ function toActiveSummary(task: Task): ActiveTaskSummary {
     unreadCount: 0,
     pendingApprovalCount: 0,
     actionRequired:
+      task.backendStatus === "OFFERED" ||
       task.backendStatus === "ASSIGNED" ||
       task.backendStatus === "WAITING_FOR_AGENT" ||
+      task.status === "queued" ||
       task.status === "assigned",
   };
 }
@@ -81,11 +84,22 @@ export const dashboardApi = {
   },
 
   async getConversations(): Promise<ConversationSummary[]> {
-    const [offered, active] = await Promise.all([
+    const [offered, active, history] = await Promise.all([
       tasksApi.listByInbox("OFFERED"),
       tasksApi.listByInbox("ACTIVE"),
+      tasksApi.listByInbox("HISTORY").catch(() => [] as Task[]),
     ]);
-    const tasks = [...offered, ...active];
+    const seen = new Set<string>();
+    const tasks: Task[] = [];
+    for (const task of [
+      ...offered,
+      ...active,
+      ...history.filter(isFailedOrCancelled),
+    ]) {
+      if (seen.has(task.id)) continue;
+      seen.add(task.id);
+      tasks.push(task);
+    }
     const conversations: ConversationSummary[] = [];
     for (const task of tasks) {
       const timeline = await messagesApi.list(task.id).catch(() => []);
@@ -111,6 +125,7 @@ export const dashboardApi = {
     const alerts = await this.getAlerts();
     return alerts.map((a) => ({
       id: a.id,
+      kind: "task_offered" as const,
       title: a.title,
       body: a.body,
       createdAt: a.createdAt,
@@ -161,11 +176,11 @@ export const dashboardApi = {
       }>,
       notifications: {
         taskAssigned: true,
-        paymentResult: false,
+        paymentResult: true,
         slaWarning: true,
         customerReply: true,
         desktop: false,
-        sound: false,
+        sound: true,
       },
     };
   },

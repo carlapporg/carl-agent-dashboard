@@ -3,6 +3,7 @@ import { MessagesView } from "@/features/messages/components/messages-view";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageShell } from "@/components/ui/page-shell";
+import { isFailedOrCancelled } from "@/features/tasks/lib/workflow";
 import { dashboardApi } from "@/lib/api/dashboard";
 import { messagesApi } from "@/lib/api/messages";
 import { tasksApi } from "@/lib/api/tasks";
@@ -14,11 +15,13 @@ export const metadata: Metadata = {
 export default async function MessagesPage() {
   let conversations: Awaited<ReturnType<typeof dashboardApi.getConversations>> =
     [];
-  let allTasks: Awaited<ReturnType<typeof tasksApi.list>> = [];
+  let openTasks: Awaited<ReturnType<typeof tasksApi.list>> = [];
+  let historyTasks: Awaited<ReturnType<typeof tasksApi.listByInbox>> = [];
   try {
-    [conversations, allTasks] = await Promise.all([
+    [conversations, openTasks, historyTasks] = await Promise.all([
       dashboardApi.getConversations(),
       tasksApi.list(),
+      tasksApi.listByInbox("HISTORY").catch(() => []),
     ]);
   } catch {
     return (
@@ -44,7 +47,12 @@ export default async function MessagesPage() {
     }),
   );
 
-  const tasks = Object.fromEntries(allTasks.map((t) => [t.id, t]));
+  const tasks = Object.fromEntries(
+    [...openTasks, ...historyTasks.filter(isFailedOrCancelled)].map((t) => [
+      t.id,
+      t,
+    ]),
+  );
 
   return (
     <PageShell wide>

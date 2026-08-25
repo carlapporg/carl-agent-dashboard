@@ -29,7 +29,11 @@ export function RejectDialog({
     if (!taskId || trimmed.length < 1) return;
     startTransition(async () => {
       try {
-        await rejectTaskAction(taskId, trimmed);
+        const result = await rejectTaskAction(taskId, trimmed);
+        if (!result.ok) {
+          toast(result.message, "error");
+          return;
+        }
         toast("Task rejected and re-queued.", "success");
         setReason("");
         onClose();

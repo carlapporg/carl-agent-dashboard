@@ -13,8 +13,9 @@ export function MissedTaskWatcher({ tasks }: { tasks: Task[] }) {
     const id = window.setInterval(() => {
       const now = Date.now();
       for (const task of tasks) {
+        if (task.backendStatus && task.backendStatus !== "OFFERED") continue;
+        if (task.status !== "queued") continue;
         if (!task.expiresAt) continue;
-        if (task.status === "completed" || task.status === "cancelled") continue;
         const exp = new Date(task.expiresAt).getTime();
         if (exp > now) continue;
         if (toasted.current.has(task.id)) continue;

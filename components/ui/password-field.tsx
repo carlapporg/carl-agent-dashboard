@@ -22,6 +22,7 @@ type PasswordFieldProps = Omit<
   hasError?: boolean;
   errorMessage?: string;
   hint?: string;
+  reserveErrorSpace?: boolean;
 };
 
 export const PasswordField = forwardRef<HTMLInputElement, PasswordFieldProps>(
@@ -32,6 +33,7 @@ export const PasswordField = forwardRef<HTMLInputElement, PasswordFieldProps>(
       hasError,
       errorMessage,
       hint,
+      reserveErrorSpace = true,
       className,
       disabled,
       ...props
@@ -95,12 +97,16 @@ export const PasswordField = forwardRef<HTMLInputElement, PasswordFieldProps>(
             {hint}
           </p>
         ) : null}
-        <p
-          id={errorId}
-          className="mt-1.5 min-h-5 text-sm text-danger-foreground"
-        >
-          {hasError && errorMessage ? errorMessage : ""}
-        </p>
+        {hasError && errorMessage ? (
+          <p id={errorId} className="mt-1.5 text-sm text-danger-foreground">
+            {errorMessage}
+          </p>
+        ) : reserveErrorSpace ? (
+          <p
+            id={errorId}
+            className="mt-1.5 min-h-5 text-sm text-danger-foreground"
+          />
+        ) : null}
       </div>
     );
   },

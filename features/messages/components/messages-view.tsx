@@ -6,6 +6,11 @@ import { TaskChatThread } from "@/features/tasks/components/task-chat-thread";
 import { StatusBadge } from "@/features/tasks/components/status-badge";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { Card } from "@/components/ui/card";
+import {
+  canMessageClient,
+  isFailedOrCancelled,
+  messageClientHint,
+} from "@/features/tasks/lib/workflow";
 import { ROUTES } from "@/lib/constants/routes";
 import { cn } from "@/lib/utils/cn";
 import type { ConversationSummary } from "@/types/dashboard";
@@ -55,37 +60,50 @@ export function MessagesView({
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.2fr)]">
-      <Card className="overflow-hidden p-0">
-        <ul className="divide-y divide-border">
+    <div className="grid min-h-128 gap-4 lg:h-[calc(100dvh-11rem)] lg:grid-cols-[minmax(16rem,0.85fr)_minmax(0,1.35fr)] lg:items-stretch">
+      <Card className="flex min-h-0 flex-col overflow-hidden p-0">
+        <div className="shrink-0 border-b border-border px-3 py-2">
+          <p className="text-sm font-semibold text-foreground">Inbox</p>
+          <p className="text-[11px] text-muted">
+            {conversations.length} conversation
+            {conversations.length === 1 ? "" : "s"}
+          </p>
+        </div>
+        <ul className="min-h-0 flex-1 overflow-y-auto">
           {conversations.map((c) => {
             const active = c.taskId === selectedId;
+            const rowTask = tasks[c.taskId];
             return (
-              <li key={c.taskId}>
+              <li key={c.taskId} className="border-b border-border last:border-b-0">
                 <button
                   type="button"
                   onClick={() => setSelectedId(c.taskId)}
                   className={cn(
-                    "flex w-full flex-col gap-1 px-4 py-3 text-left transition-colors",
-                    active ? "bg-accent/5" : "hover:bg-accent/[0.04]",
+                    "flex w-full items-start gap-2 px-3 py-2.5 text-left transition-colors",
+                    active ? "bg-accent/5" : "hover:bg-accent/4",
                   )}
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="truncate text-sm font-semibold text-foreground">
-                      #{c.taskNumber} {c.taskTitle}
-                    </p>
-                    <span className="shrink-0 text-xs tabular-nums text-muted">
-                      {formatRel(c.lastActivityAt)}
+                  <span
+                    className={cn(
+                      "mt-1.5 size-2 shrink-0 rounded-full",
+                      c.unreadCount > 0 ? "bg-accent" : "bg-transparent",
+                    )}
+                    aria-hidden
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="truncate text-sm font-semibold text-foreground">
+                        #{c.taskNumber} {c.taskTitle}
+                      </span>
+                      <span className="shrink-0 text-[11px] tabular-nums text-muted">
+                        {formatRel(c.lastActivityAt)}
+                      </span>
                     </span>
-                  </div>
-                  <p className="line-clamp-1 text-sm text-muted">
-                    {c.lastMessage}
-                  </p>
-                  {c.unreadCount > 0 ? (
-                    <span className="mt-0.5 w-fit rounded-full bg-accent px-2 py-0.5 text-xs font-semibold text-accent-foreground">
-                      {c.unreadCount} unread
+                    <span className="mt-0.5 line-clamp-1 block text-[12px] text-muted">
+                      {rowTask?.customerName ? `${rowTask.customerName} · ` : ""}
+                      {c.lastMessage}
                     </span>
-                  ) : null}
+                  </span>
                 </button>
               </li>
             );
@@ -93,35 +111,43 @@ export function MessagesView({
         </ul>
       </Card>
 
-      <div className="space-y-3">
+      <div className="flex min-h-112 flex-col gap-2 lg:min-h-0">
         {selected && task ? (
           <>
-            <Card className="p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-foreground">
-                    #{task.number} {task.title}
-                  </p>
-                  <p className="mt-1 line-clamp-2 text-sm text-muted">
-                    {task.aiBrief?.summary ?? task.request}
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <StatusBadge status={task.status} />
-                  <Link
-                    href={ROUTES.taskPanel(task.id, "chat")}
-                    className="text-sm font-semibold text-accent hover:text-accent-hover"
-                  >
-                    Open workspace
-                  </Link>
-                </div>
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-(--radius-card) border border-border bg-surface px-3 py-2">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-foreground">
+                  #{task.number} {task.title}
+                </p>
+                <p className="truncate text-[11px] text-muted">
+                  {task.customerName}
+                </p>
               </div>
-            </Card>
-            <TaskChatThread
-              taskId={selected.taskId}
-              timeline={timeline}
-              quickActions={task.aiBrief?.missingInfo ?? []}
-            />
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusBadge status={task.status} />
+                <Link
+                  href={ROUTES.taskPanel(task.id, "chat")}
+                  className="text-xs font-semibold text-accent hover:text-accent-hover"
+                >
+                  Open workspace
+                </Link>
+              </div>
+            </div>
+            <div className="min-h-0 flex-1">
+              <TaskChatThread
+                taskId={selected.taskId}
+                timeline={timeline}
+                quickActions={task.aiBrief?.missingInfo ?? []}
+                title="Conversation"
+                subtitle={`With ${task.customerName}`}
+                clientLabel={task.customerName}
+                fillHeight={false}
+                className="h-full min-h-0"
+                showTemplates={canMessageClient(task) && !isFailedOrCancelled(task)}
+                disabled={!canMessageClient(task)}
+                disabledHint={messageClientHint(task)}
+              />
+            </div>
           </>
         ) : (
           <EmptyState

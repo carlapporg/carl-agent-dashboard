@@ -9,6 +9,8 @@ export const USER_MESSAGES = {
   registerSuccess: "Account created successfully.",
   invalidCredentials: "Invalid email or password",
   unauthorizedApp: "You are not authorized to access this application",
+  offerGone: "This offer expired or went to another agent.",
+  taskGone: "This task isn't yours anymore. Refresh to see your current list.",
   accountDisabled: "Your account has been disabled. Please contact support.",
   network:
     "Unable to connect to server. Please check your internet connection and try again.",

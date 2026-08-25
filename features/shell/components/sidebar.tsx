@@ -2,11 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useNotifications } from "@/features/notifications/notification-provider";
 import { DASHBOARD_NAV } from "@/features/shell/nav-items";
+import { ROUTES } from "@/lib/constants/routes";
 import { cn } from "@/lib/utils/cn";
 
 export function DashboardSidebar() {
   const pathname = usePathname();
+  const { unreadCount } = useNotifications();
 
   return (
     <aside className="hidden w-64 shrink-0 border-r border-border bg-surface lg:flex lg:flex-col xl:w-72">
@@ -32,13 +35,15 @@ export function DashboardSidebar() {
                 ? pathname === item.href
                 : pathname === item.href ||
                   pathname.startsWith(`${item.href}/`);
+            const showUnread =
+              item.href === ROUTES.notifications && unreadCount > 0;
 
             return (
               <Link
                 key={item.label}
                 href={item.href}
                 className={cn(
-                  "relative flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                  "relative flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                   active
                     ? "bg-accent/10 text-accent shadow-sm"
                     : "text-foreground-soft hover:bg-surface-hover hover:text-foreground",
@@ -50,7 +55,12 @@ export function DashboardSidebar() {
                     aria-hidden
                   />
                 ) : null}
-                {item.label}
+                <span>{item.label}</span>
+                {showUnread ? (
+                  <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-danger px-1.5 text-[10px] font-bold text-white">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                ) : null}
               </Link>
             );
           })}

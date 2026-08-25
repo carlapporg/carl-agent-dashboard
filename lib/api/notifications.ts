@@ -7,7 +7,7 @@ export const notificationsApi = {
     return apiRequest(API_ENDPOINTS.notifications.fcmToken, {
       method: "PUT",
       body: { token },
-      schema: z.object({ message: z.string() }),
+      schema: z.object({ message: z.string() }).passthrough(),
       dedupe: false,
     });
   },

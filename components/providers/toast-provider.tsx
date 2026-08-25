@@ -126,7 +126,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {mounted ? (
         <>
           <div
-            className="pointer-events-none fixed top-4 right-4 z-[110] flex w-[min(100%-2rem,24rem)] flex-col items-end gap-2 sm:top-5 sm:right-5"
+            className="pointer-events-none fixed top-4 right-4 z-[110] flex w-[min(100%-2rem,18rem)] flex-col items-end gap-1.5"
             role="region"
             aria-label="Notifications"
             aria-live="polite"
@@ -136,24 +136,22 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               <div
                 key={item.id}
                 role="status"
-                className="dash-notify-glow pointer-events-auto w-full overflow-hidden rounded-2xl border-2 border-accent/40 bg-surface shadow-[0_12px_40px_rgba(79,124,255,0.22),0_4px_14px_rgba(0,0,0,0.08)]"
+                className="pointer-events-auto w-full overflow-hidden rounded-xl border border-border bg-surface shadow-(--shadow-card)"
               >
-                <div className="flex gap-3.5 bg-accent/[0.06] px-4 py-3.5">
-                  <span className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground shadow-sm ring-4 ring-accent/20">
-                    <span className="size-2.5 rounded-full bg-white dash-live-dot" />
-                  </span>
+                <div className="flex items-start gap-2 px-2.5 py-2">
+                  <span className="mt-0.5 size-2 shrink-0 rounded-full bg-accent" />
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-accent">
-                      {item.title ?? "New task"}
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-accent">
+                      {item.title ?? "Update"}
                     </p>
-                    <p className="mt-1 whitespace-pre-line text-[15px] font-semibold leading-snug text-foreground">
+                    <p className="mt-0.5 line-clamp-2 text-[13px] leading-snug text-foreground">
                       {item.message}
                     </p>
                     {item.href ? (
                       <Link
                         href={item.href}
                         onClick={() => dismiss(item.id)}
-                        className="mt-2 inline-flex text-sm font-semibold text-accent underline-offset-2 hover:underline"
+                        className="mt-1 inline-flex text-[12px] font-semibold text-accent hover:text-accent-hover"
                       >
                         {item.actionLabel ?? "Open"}
                       </Link>
@@ -162,14 +160,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                   <button
                     type="button"
                     onClick={() => dismiss(item.id)}
-                    className="shrink-0 rounded-lg px-2 text-lg leading-none text-muted hover:bg-accent/10 hover:text-foreground"
+                    className="shrink-0 rounded px-1 text-sm leading-none text-muted hover:text-foreground"
                     aria-label="Dismiss"
                   >
                     ×
                   </button>
-                </div>
-                <div className="h-1 w-full bg-accent/15">
-                  <div className="dash-toast-bar h-full bg-accent" />
                 </div>
               </div>
             ))}

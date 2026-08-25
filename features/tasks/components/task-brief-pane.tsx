@@ -84,7 +84,11 @@ export function TaskBriefPane({ task, timeline }: TaskBriefPaneProps) {
               </div>
               <div className="flex flex-wrap gap-2">
                 {task.status === "queued" ? (
-                  <form action={acceptTaskAction.bind(null, task.id)}>
+                  <form
+                    action={async () => {
+                      await acceptTaskAction(task.id);
+                    }}
+                  >
                     <Button type="submit">Accept task</Button>
                   </form>
                 ) : null}
@@ -152,7 +156,9 @@ export function TaskBriefPane({ task, timeline }: TaskBriefPaneProps) {
                   return (
                     <form
                       key={next}
-                      action={updateTaskStatusAction.bind(null, task.id, next)}
+                      action={async () => {
+                        await updateTaskStatusAction(task.id, next);
+                      }}
                     >
                       <button
                         type="submit"
@@ -180,6 +186,7 @@ export function TaskBriefPane({ task, timeline }: TaskBriefPaneProps) {
           taskId={task.id}
           timeline={timeline}
           suggestedQuestions={task.aiBrief?.missingInfo ?? []}
+          clientLabel={task.customerName}
         />
       </div>
     </div>

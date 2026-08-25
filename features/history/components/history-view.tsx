@@ -7,7 +7,17 @@ import { EmptyState } from "@/components/feedback/empty-state";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ROUTES } from "@/lib/constants/routes";
-import type { Task } from "@/types/task";
+import { cn } from "@/lib/utils/cn";
+import type { Task, TaskStatus } from "@/types/task";
+
+type HistoryFilter = "all" | Extract<TaskStatus, "completed" | "failed" | "cancelled">;
+
+const FILTERS: Array<{ value: HistoryFilter; label: string; color: string }> = [
+  { value: "all", label: "All", color: "#4f7cff" },
+  { value: "completed", label: "Completed", color: "#10b981" },
+  { value: "failed", label: "Failed", color: "#dc2626" },
+  { value: "cancelled", label: "Cancelled", color: "#6b7280" },
+];
 
 type HistoryViewProps = {
   tasks: Task[];
@@ -15,32 +25,85 @@ type HistoryViewProps = {
 
 export function HistoryView({ tasks }: HistoryViewProps) {
   const [q, setQ] = useState("");
+  const [status, setStatus] = useState<HistoryFilter>("all");
+
+  const counts = useMemo(() => {
+    const next: Record<HistoryFilter, number> = {
+      all: tasks.length,
+      completed: 0,
+      failed: 0,
+      cancelled: 0,
+    };
+    for (const task of tasks) {
+      if (task.status === "completed") next.completed += 1;
+      if (task.status === "failed") next.failed += 1;
+      if (task.status === "cancelled") next.cancelled += 1;
+    }
+    return next;
+  }, [tasks]);
+
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    if (!needle) return tasks;
-    return tasks.filter(
-      (t) =>
+    return tasks.filter((t) => {
+      if (status !== "all" && t.status !== status) return false;
+      if (!needle) return true;
+      return (
         t.title.toLowerCase().includes(needle) ||
         t.request.toLowerCase().includes(needle) ||
         t.customerName.toLowerCase().includes(needle) ||
-        String(t.number).includes(needle),
-    );
-  }, [tasks, q]);
+        String(t.number).includes(needle)
+      );
+    });
+  }, [tasks, q, status]);
 
   return (
     <div className="space-y-4">
-      <Input
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder="Search completed tasks…"
-        aria-label="Search history"
-        className="max-w-md"
-      />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
+          {FILTERS.map((filter) => {
+            const active = status === filter.value;
+            return (
+              <button
+                key={filter.value}
+                type="button"
+                onClick={() => setStatus(filter.value)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors",
+                  active
+                    ? "border-accent bg-accent/10 text-accent"
+                    : "border-border bg-surface text-foreground hover:border-accent/30 hover:text-accent",
+                )}
+              >
+                <span
+                  className="size-1.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: filter.color }}
+                  aria-hidden
+                />
+                {filter.label}
+                <span className={cn("tabular-nums", active ? "text-accent" : "text-muted")}>
+                  {counts[filter.value]}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <Input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search history…"
+          aria-label="Search history"
+          className="max-w-md"
+        />
+      </div>
 
       {filtered.length === 0 ? (
         <EmptyState
-          title="No completed tasks"
-          description="Finished work will archive here. Reopen is not available yet."
+          title={tasks.length === 0 ? "No finished tasks" : "No tasks match these filters"}
+          description={
+            tasks.length === 0
+              ? "Completed, failed, and cancelled work will show up here."
+              : "Try another status or clear your search."
+          }
         />
       ) : (
         <Card className="overflow-hidden p-0">
@@ -59,7 +122,7 @@ export function HistoryView({ tasks }: HistoryViewProps) {
                       {task.customerName} ·{" "}
                       {task.completedAt
                         ? new Date(task.completedAt).toLocaleDateString()
-                        : "—"}
+                        : new Date(task.updatedAt).toLocaleDateString()}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">

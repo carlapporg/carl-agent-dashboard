@@ -1,3 +1,5 @@
+import type { TaskConfirmation } from "@/types/confirmation";
+import { isConfirmationConfirmed } from "@/types/confirmation";
 import type { Task, TaskStatus } from "@/types/task";
 
 /**
@@ -7,6 +9,7 @@ import type { Task, TaskStatus } from "@/types/task";
  */
 
 export type WorkflowStageId =
+  | "offered"
   | "assigned"
   | "started"
   | "waiting_customer"
@@ -23,7 +26,8 @@ export type WorkflowStage = {
 
 export function workflowStagesForTask(_task: Task): WorkflowStage[] {
   return [
-    { id: "assigned", label: "Assigned", matches: ["queued", "assigned"] },
+    { id: "offered", label: "Offered", matches: ["queued"] },
+    { id: "assigned", label: "Assigned", matches: ["assigned"] },
     {
       id: "started",
       label: "Started",
@@ -57,7 +61,8 @@ export function currentStageId(task: Task): WorkflowStageId | null {
   if (task.status === "in_progress") {
     return task.suggestedStepsDone.length === 0 ? "started" : "in_progress";
   }
-  if (task.status === "queued" || task.status === "assigned") return "assigned";
+  if (task.status === "queued") return "offered";
+  if (task.status === "assigned") return "assigned";
   return "assigned";
 }
 
@@ -81,11 +86,117 @@ export function taskRequiresPayment(task: Task): boolean {
 }
 
 export function hasStartedWork(task: Task): boolean {
+  if (isClosedTask(task)) return false;
+  const backend = task.backendStatus;
   return (
+    backend === "IN_PROGRESS" ||
+    backend === "WAITING_FOR_USER" ||
+    backend === "WAITING_FOR_AGENT" ||
     task.status === "in_progress" ||
     task.status === "waiting_for_customer" ||
     task.status === "waiting_for_payment"
   );
+}
+
+const CLOSED_BACKEND = new Set([
+  "COMPLETED",
+  "FAILED",
+  "CANCELLED",
+  "REJECTED",
+]);
+
+const CLOSED_UI = new Set(["completed", "failed", "cancelled"]);
+
+/** Finished, failed, cancelled, or rejected — no more work. */
+export function isClosedTask(task: Task): boolean {
+  if (task.backendStatus && CLOSED_BACKEND.has(task.backendStatus)) return true;
+  return CLOSED_UI.has(task.status);
+}
+
+export function isOfferOpen(task: Task): boolean {
+  if (isClosedTask(task)) return false;
+  return (
+    task.backendStatus === "OFFERED" ||
+    task.backendStatus === "QUEUED" ||
+    task.status === "queued"
+  );
+}
+
+export function canStartTask(task: Task): boolean {
+  if (isClosedTask(task) || isOfferOpen(task)) return false;
+  if (hasStartedWork(task)) return false;
+  return (
+    task.backendStatus === "ASSIGNED" ||
+    task.status === "assigned"
+  );
+}
+
+export function canSendConfirmationForTask(task: Task): boolean {
+  if (isClosedTask(task) || isOfferOpen(task)) return false;
+  return (
+    task.backendStatus === "ASSIGNED" ||
+    task.backendStatus === "IN_PROGRESS" ||
+    task.backendStatus === "WAITING_FOR_USER" ||
+    task.backendStatus === "WAITING_FOR_AGENT" ||
+    task.status === "assigned" ||
+    task.status === "in_progress" ||
+    task.status === "waiting_for_customer" ||
+    task.status === "waiting_for_payment"
+  );
+}
+
+export function canUpdateAgentStatus(task: Task): boolean {
+  return hasStartedWork(task) && !isClosedTask(task);
+}
+
+export function isFailedOrCancelled(task: Task): boolean {
+  return (
+    task.backendStatus === "FAILED" ||
+    task.backendStatus === "CANCELLED" ||
+    task.status === "failed" ||
+    task.status === "cancelled"
+  );
+}
+
+export function canMessageClient(task: Task): boolean {
+  if (isOfferOpen(task)) return false;
+  if (task.backendStatus === "COMPLETED" || task.status === "completed") {
+    return false;
+  }
+  if (task.backendStatus === "REJECTED") return false;
+  return true;
+}
+
+export function messageClientHint(task: Task): string | undefined {
+  if (isOfferOpen(task)) {
+    return "Accept the offer before messaging the client.";
+  }
+  if (task.backendStatus === "COMPLETED" || task.status === "completed") {
+    return "This task is completed, so messages cannot be sent.";
+  }
+  if (task.backendStatus === "REJECTED") {
+    return "This offer was rejected, so messages cannot be sent.";
+  }
+  if (task.backendStatus === "FAILED" || task.status === "failed") {
+    return "Tell the client why this task failed.";
+  }
+  if (task.backendStatus === "CANCELLED" || task.status === "cancelled") {
+    return "Tell the client why this task was cancelled.";
+  }
+  return undefined;
+}
+
+export function closedTaskMessage(task: Task): string {
+  if (task.backendStatus === "FAILED" || task.status === "failed") {
+    return "This task failed. You cannot start it, send confirmation, or change status. You can still message the client to explain why.";
+  }
+  if (task.backendStatus === "CANCELLED" || task.status === "cancelled") {
+    return "This task is cancelled. You cannot continue work on it. You can still message the client to explain why.";
+  }
+  if (task.backendStatus === "REJECTED") {
+    return "This offer was rejected. No further actions are available.";
+  }
+  return "This task is completed. It is read-only.";
 }
 
 /** @deprecated Prefer currentStageId — kept for progress bar. */
@@ -132,52 +243,59 @@ export function checklistProgressPercent(task: Task): number {
 
 /** 0% until Start; then checklist %; 100% when completed. */
 export function overallProgressPercent(task: Task): number {
-  if (task.status === "completed") return 100;
-  if (!hasStartedWork(task)) return 0;
+  if (task.backendStatus === "COMPLETED" || task.status === "completed") {
+    return 100;
+  }
+  if (isClosedTask(task) || !hasStartedWork(task)) return 0;
   return checklistProgressPercent(task);
 }
 
-export type PrimaryActionLabel = "Start task" | "Complete task";
+export type PrimaryActionLabel = "Start task" | "Complete task" | "Complete booking";
 
 export function primaryActionLabel(
   task: Task,
   paymentApproved: boolean,
+  confirmation?: TaskConfirmation | null,
 ): PrimaryActionLabel | null {
-  if (task.status === "completed" || task.status === "cancelled") {
-    return null;
-  }
-
-  if (!hasStartedWork(task)) {
-    return "Start task";
-  }
-
-  if (!canCompleteTask(task, paymentApproved)) {
-    return null;
-  }
-
-  return "Complete task";
+  if (isClosedTask(task) || isOfferOpen(task)) return null;
+  if (canStartTask(task)) return "Start task";
+  if (!canCompleteTask(task, paymentApproved, confirmation)) return null;
+  return "Complete booking";
 }
 
 export function canCompleteTask(
   task: Task,
   paymentApproved: boolean,
+  confirmation?: TaskConfirmation | null,
 ): boolean {
-  if (!hasStartedWork(task)) return false;
-  if (!allStepsComplete(task)) return false;
-  if (taskRequiresPayment(task) && !paymentApproved) return false;
+  if (isClosedTask(task) || !hasStartedWork(task)) return false;
+  if (!isConfirmationConfirmed(confirmation)) return false;
+  if (completeRequiresPayment(task) && !paymentApproved) return false;
   return true;
+}
+
+export function completeRequiresPayment(task: Task): boolean {
+  return task.requiresPayment === true || task.status === "waiting_for_payment";
 }
 
 export function completeGateReasons(
   task: Task,
   paymentApproved: boolean,
+  confirmation?: TaskConfirmation | null,
 ): string[] {
+  if (isClosedTask(task)) return [];
   const reasons: string[] = [];
-  if (!allStepsComplete(task)) {
-    reasons.push("All suggested steps must be marked done");
+  if (!isConfirmationConfirmed(confirmation)) {
+    if (confirmation?.status === "PENDING") {
+      reasons.push("Wait for the client to confirm the details");
+    } else if (confirmation?.status === "DECLINED") {
+      reasons.push("Client declined. Send a new confirmation");
+    } else {
+      reasons.push("Send details to the client and wait for confirmation");
+    }
   }
-  if (taskRequiresPayment(task) && !paymentApproved) {
-    reasons.push("Payment must be approved (or reconciled) when required");
+  if (completeRequiresPayment(task) && !paymentApproved) {
+    reasons.push("Payment must be completed before you mark this done");
   }
   return reasons;
 }

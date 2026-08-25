@@ -10,9 +10,9 @@ export const metadata: Metadata = {
 };
 
 export default async function HistoryPage() {
-  let tasks: Awaited<ReturnType<typeof tasksApi.list>> | null = null;
+  let tasks: Awaited<ReturnType<typeof tasksApi.listByInbox>> | null = null;
   try {
-    tasks = await tasksApi.list({ status: "completed" });
+    tasks = await tasksApi.listByInbox("HISTORY");
   } catch {
     tasks = null;
   }
@@ -22,7 +22,7 @@ export default async function HistoryPage() {
       <PageShell wide>
         <PageHeader
           title="History"
-          description="Completed tasks (read-only). Reopen is planned for a later release."
+          description="Completed, failed, and cancelled tasks. Open one to review or message the client."
           className="mb-5 sm:mb-6"
         />
         <EmptyState
@@ -39,7 +39,7 @@ export default async function HistoryPage() {
     <PageShell wide>
       <PageHeader
         title="History"
-        description="Completed tasks (read-only). Reopen is planned for a later release."
+        description="Completed, failed, and cancelled tasks. Open one to review or message the client."
         className="mb-5 sm:mb-6"
       />
       <HistoryView tasks={roots} />

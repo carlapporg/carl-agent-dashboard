@@ -60,3 +60,22 @@ export function CheckIcon({ className, ...props }: IconProps) {
     </svg>
   );
 }
+
+export function CloseIcon({ className, ...props }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.25"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={cn("size-5", className)}
+      aria-hidden
+      {...props}
+    >
+      <path d="M6 6l12 12" />
+      <path d="M18 6L6 18" />
+    </svg>
+  );
+}

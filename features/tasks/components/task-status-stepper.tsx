@@ -102,7 +102,7 @@ export function TaskStatusStepper({
         />
       </div>
 
-      <ol className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+      <ol className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-7">
         {stages.map((stage) => {
           const active = current === stage.id;
           return (
@@ -125,5 +125,13 @@ export function TaskStatusStepper({
 }
 
 function phaseFallback(task: Task): string {
+  if (task.backendStatus === "FAILED" || task.status === "failed") return "Failed";
+  if (task.backendStatus === "CANCELLED" || task.status === "cancelled") {
+    return "Cancelled";
+  }
+  if (task.backendStatus === "REJECTED") return "Rejected";
+  if (task.backendStatus === "COMPLETED" || task.status === "completed") {
+    return "Completed";
+  }
   return task.status.replaceAll("_", " ");
 }

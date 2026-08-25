@@ -9,6 +9,8 @@ import { useOps } from "@/features/ops/ops-provider";
 import { Card } from "@/components/ui/card";
 import { ROUTES } from "@/lib/constants/routes";
 import { cn } from "@/lib/utils/cn";
+import { mergeTaskLists } from "@/lib/tasks/merge-live-task";
+import { offerWindowEnd } from "@/types/agent";
 import type { Task } from "@/types/task";
 
 type LiveTaskQueueProps = {
@@ -22,6 +24,7 @@ function receivedLabel(iso: string): string {
 }
 
 function statusBadgeLabel(task: Task): string {
+  if (task.backendStatus === "OFFERED") return "Offered";
   if (task.backendStatus === "ASSIGNED") return "Assigned";
   if (task.backendStatus === "WAITING_FOR_USER") return "Waiting";
   if (task.backendStatus === "IN_PROGRESS") return "Active";
@@ -36,14 +39,16 @@ export function LiveTaskQueue({ seedTasks }: LiveTaskQueueProps) {
   const [newIds, setNewIds] = useState<Set<string>>(new Set());
 
   const items = useMemo(() => {
-    return [...seedTasks]
+    return mergeTaskLists(seedTasks, ops?.liveTasks ?? [], ops?.offer)
       .filter((t) => !t.parentId)
       .filter(
         (t) =>
+          t.backendStatus === "OFFERED" ||
           t.backendStatus === "ASSIGNED" ||
           t.backendStatus === "IN_PROGRESS" ||
           t.backendStatus === "WAITING_FOR_USER" ||
           t.backendStatus === "WAITING_FOR_AGENT" ||
+          t.status === "queued" ||
           t.status === "assigned" ||
           t.status === "in_progress" ||
           t.status === "waiting_for_customer",
@@ -52,7 +57,7 @@ export function LiveTaskQueue({ seedTasks }: LiveTaskQueueProps) {
         (a, b) =>
           new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
       );
-  }, [seedTasks]);
+  }, [ops?.liveTasks, ops?.offer, seedTasks]);
 
   useEffect(() => {
     const next = new Set(items.map((t) => t.id));
@@ -106,7 +111,7 @@ export function LiveTaskQueue({ seedTasks }: LiveTaskQueueProps) {
         )}
       >
         <div className="border-b border-border bg-[#f8fafc] px-4 py-3 text-sm text-muted">
-          Newest assignments stay on top. Offers can be rejected for 60 seconds.
+          Newest first. First offer: 30s to accept or reject. Later assignment: Start only.
         </div>
 
         {items.length === 0 ? (
@@ -117,7 +122,8 @@ export function LiveTaskQueue({ seedTasks }: LiveTaskQueueProps) {
           <ul className="flex flex-col gap-2 p-3">
             {items.map((item, index) => {
               const isNew = newIds.has(item.id);
-              const offered = item.backendStatus === "ASSIGNED";
+              const offered = item.backendStatus === "OFFERED";
+              const assigned = item.backendStatus === "ASSIGNED";
               return (
                 <li key={item.id}>
                   <div
@@ -151,8 +157,10 @@ export function LiveTaskQueue({ seedTasks }: LiveTaskQueueProps) {
                             className={cn(
                               "rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide",
                               offered
-                                ? "bg-accent/10 text-accent"
-                                : item.backendStatus === "WAITING_FOR_USER"
+                                ? "bg-amber-50 text-amber-800"
+                                : assigned
+                                  ? "bg-accent/10 text-accent"
+                                  : item.backendStatus === "WAITING_FOR_USER"
                                   ? "bg-amber-50 text-amber-800"
                                   : "bg-emerald-50 text-emerald-800",
                             )}
@@ -179,15 +187,17 @@ export function LiveTaskQueue({ seedTasks }: LiveTaskQueueProps) {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-3 sm:justify-end">
-                      {offered && item.expiresAt ? (
+                      {offered ? (
                         <OfferCountdown
-                          expiresAt={item.expiresAt}
+                          expiresAt={offerWindowEnd(item)}
+                          taskId={item.id}
+                          autoAccept
                           onExpire={() => ops?.refresh()}
                         />
                       ) : (
                         <StatusBadge status={item.status} />
                       )}
-                      {offered ? <OfferActions task={item} /> : null}
+                      {offered || assigned ? <OfferActions task={item} /> : null}
                       <Link
                         href={ROUTES.task(item.id)}
                         className="inline-flex h-9 items-center rounded-full bg-accent/10 px-3 text-sm font-semibold text-accent transition-colors hover:bg-accent hover:text-accent-foreground"

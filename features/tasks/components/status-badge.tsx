@@ -39,6 +39,7 @@ export function priorityBadgeVariant(
 }
 
 export function formatStatus(status: TaskStatus): string {
+  if (status === "queued") return "offered";
   return status.replaceAll("_", " ");
 }
 

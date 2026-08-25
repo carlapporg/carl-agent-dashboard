@@ -65,12 +65,35 @@ export type ConversationSummary = {
   unreadCount: number;
 };
 
+export type NotificationKind =
+  | "task_offered"
+  | "task_assigned"
+  | "client_message"
+  | "payment_approved"
+  | "payment_declined"
+  | "payment_expired"
+  | "task_cancelled"
+  | "waiting_for_agent"
+  | "missed_task"
+  | "confirmation_confirmed"
+  | "confirmation_declined";
+
 export type NotificationItem = {
   id: string;
+  kind: NotificationKind;
   title: string;
   body: string;
   createdAt: string;
   read: boolean;
   taskId?: string;
   panel?: "payment" | "chat" | "brief" | "log";
+};
+
+export type NotificationPrefs = {
+  taskAssigned: boolean;
+  paymentResult: boolean;
+  slaWarning: boolean;
+  customerReply: boolean;
+  desktop: boolean;
+  sound: boolean;
 };

@@ -24,13 +24,54 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { updateTaskStatusAction } from "@/features/tasks/actions/task-actions";
 import { SlaCountdown } from "@/features/dashboard/components/sla-countdown";
-import { PriorityBadge } from "@/features/tasks/components/status-badge";
-import { TASK_STAGES } from "@/features/tasks/components/stage-progress";
 import { useToast } from "@/components/providers/toast-provider";
-import { Card } from "@/components/ui/card";
 import { ROUTES } from "@/lib/constants/routes";
 import { cn } from "@/lib/utils/cn";
 import type { Task, TaskStatus } from "@/types/task";
+
+type BoardColumnId = "assigned" | "in_progress" | "waiting" | "done";
+
+const BOARD_COLUMNS: Array<{
+  id: BoardColumnId;
+  label: string;
+  hint: string;
+  color: string;
+  statuses: TaskStatus[];
+  dropStatus: TaskStatus;
+}> = [
+  {
+    id: "assigned",
+    label: "Assigned",
+    hint: "Ready to start",
+    color: "#64748b",
+    statuses: ["queued", "assigned"],
+    dropStatus: "assigned",
+  },
+  {
+    id: "in_progress",
+    label: "In progress",
+    hint: "Being worked",
+    color: "#4f7cff",
+    statuses: ["in_progress"],
+    dropStatus: "in_progress",
+  },
+  {
+    id: "waiting",
+    label: "Waiting",
+    hint: "Customer or payment",
+    color: "#d97706",
+    statuses: ["waiting_for_customer", "waiting_for_payment"],
+    dropStatus: "waiting_for_customer",
+  },
+  {
+    id: "done",
+    label: "Done",
+    hint: "Completed, failed, or cancelled",
+    color: "#059669",
+    statuses: ["completed", "failed", "cancelled"],
+    dropStatus: "completed",
+  },
+];
 
 type TaskBoardProps = {
   tasks: Task[];
@@ -50,61 +91,75 @@ function formatRelative(value: string): string {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-function isBoardStatus(status: string): status is TaskStatus {
-  return TASK_STAGES.some((stage) => stage.status === status);
+function columnKey(id: BoardColumnId) {
+  return `col:${id}`;
 }
 
-function columnId(status: TaskStatus) {
-  return `col:${status}`;
-}
-
-function parseColumnId(id: string | undefined | null): TaskStatus | null {
+function parseColumnKey(id: string | undefined | null): BoardColumnId | null {
   if (!id?.startsWith("col:")) return null;
-  const status = id.slice(4);
-  return isBoardStatus(status) ? status : null;
+  const key = id.slice(4) as BoardColumnId;
+  return BOARD_COLUMNS.some((column) => column.id === key) ? key : null;
 }
 
-function TaskBoardCardContent({
+function columnForStatus(status: TaskStatus): BoardColumnId | null {
+  return BOARD_COLUMNS.find((column) => column.statuses.includes(status))?.id ?? null;
+}
+
+function TaskBoardCard({
   task,
   dragging,
 }: {
   task: Task;
   dragging?: boolean;
 }) {
+  const typeLabel = task.taskType?.replaceAll("_", " ") ?? "Task";
+  const initial = task.customerName.trim().slice(0, 1).toUpperCase() || "C";
+
   return (
-    <div
+    <article
       className={cn(
-        "rounded-xl border border-border bg-surface p-4 shadow-[var(--shadow-card)]",
-        dragging && "shadow-[var(--shadow-soft)] ring-2 ring-accent/30",
+        "rounded-lg border border-transparent bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/80 transition-all",
+        "hover:-translate-y-px hover:shadow-[0_8px_18px_rgba(15,23,42,0.08)] hover:ring-slate-300",
+        dragging && "rotate-1 shadow-[0_16px_32px_rgba(15,23,42,0.16)] ring-accent/40",
       )}
     >
       <div className="flex items-start justify-between gap-2">
-        <span className="text-sm font-semibold text-muted">#{task.number}</span>
-        <PriorityBadge priority={task.priority} />
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+          {typeLabel}
+        </p>
+        <span
+          className={cn(
+            "rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase",
+            task.priority === "urgent"
+              ? "bg-red-50 text-red-700"
+              : task.priority === "high"
+                ? "bg-orange-50 text-orange-700"
+                : "bg-slate-100 text-slate-600",
+          )}
+        >
+          {task.priority}
+        </span>
       </div>
-      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-        {task.taskType ? (
-          <span className="text-xs font-semibold uppercase tracking-wide text-muted">
-            {task.taskType}
-          </span>
-        ) : null}
-        {task.tier === "vip" || task.tier === "family" ? (
-          <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-semibold text-accent">
-            {task.tier.toUpperCase()}
-          </span>
-        ) : null}
-        {task.expiresAt ? <SlaCountdown expiresAt={task.expiresAt} /> : null}
-      </div>
-      <p className="mt-1.5 text-sm font-semibold leading-snug text-foreground">
+      <p className="mt-1.5 text-[13px] font-semibold leading-snug text-slate-900">
         {task.title}
       </p>
-      <p className="mt-1 line-clamp-2 text-sm text-muted">
-        {task.aiBrief?.summary ?? task.request}
-      </p>
-      <p className="mt-2.5 text-sm tabular-nums text-muted-dim">
-        {formatRelative(task.updatedAt)}
-      </p>
-    </div>
+      {task.expiresAt ? (
+        <div className="mt-2">
+          <SlaCountdown expiresAt={task.expiresAt} />
+        </div>
+      ) : null}
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <span className="text-[11px] font-medium tabular-nums text-slate-400">
+          #{task.number} · {formatRelative(task.updatedAt)}
+        </span>
+        <span
+          className="flex size-6 items-center justify-center rounded-full bg-slate-100 text-[10px] font-bold text-slate-600"
+          title={task.customerName}
+        >
+          {initial}
+        </span>
+      </div>
+    </article>
   );
 }
 
@@ -121,16 +176,14 @@ function SortableTaskCard({ task }: { task: Task }) {
     data: { type: "task", task, status: task.status },
   });
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
-
   return (
     <div
       ref={setNodeRef}
-      style={style}
-      className={cn(isDragging && "opacity-40")}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+      }}
+      className={cn(isDragging && "opacity-30")}
     >
       <div
         {...attributes}
@@ -142,9 +195,9 @@ function SortableTaskCard({ task }: { task: Task }) {
           onClick={(event) => {
             if (isDragging) event.preventDefault();
           }}
-          className="block rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
+          className="block rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
         >
-          <TaskBoardCardContent task={task} />
+          <TaskBoardCard task={task} />
         </Link>
       </div>
     </div>
@@ -152,60 +205,51 @@ function SortableTaskCard({ task }: { task: Task }) {
 }
 
 function BoardColumn({
-  status,
-  label,
-  color,
+  column,
   tasks,
 }: {
-  status: TaskStatus;
-  label: string;
-  color: string;
+  column: (typeof BOARD_COLUMNS)[number];
   tasks: Task[];
 }) {
   const { setNodeRef, isOver } = useDroppable({
-    id: columnId(status),
-    data: { type: "column", status },
+    id: columnKey(column.id),
+    data: { type: "column", columnId: column.id },
   });
 
   return (
-    <div className="flex w-[280px] shrink-0 flex-col md:w-[300px]">
-      <div className="mb-3 flex items-center justify-between gap-2 px-1">
-        <div className="flex min-w-0 items-center gap-2">
-          <span
-            className="size-2.5 shrink-0 rounded-full"
-            style={{ backgroundColor: color }}
-            aria-hidden
-          />
-          <h3 className="truncate text-sm font-semibold text-foreground">
-            {label}
+    <section className="flex min-h-0 min-w-0 flex-col">
+      <header className="mb-2 flex items-end justify-between gap-2 px-1">
+        <div className="min-w-0">
+          <h3 className="truncate text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
+            {column.label}
           </h3>
+          <p className="truncate text-[11px] text-slate-400">{column.hint}</p>
         </div>
-        <span className="rounded-full bg-surface-hover px-2.5 py-0.5 text-sm font-semibold tabular-nums text-muted">
+        <span className="rounded-full bg-slate-200/80 px-2 py-0.5 text-[11px] font-bold tabular-nums text-slate-600">
           {tasks.length}
         </span>
-      </div>
-
+      </header>
       <div
         ref={setNodeRef}
         className={cn(
-          "flex min-h-[12rem] flex-col gap-2.5 rounded-2xl border border-border bg-[#f8fafc] p-2.5 transition-colors",
-          isOver && "border-accent/40 bg-accent/[0.04]",
+          "flex min-h-[12rem] flex-1 flex-col gap-2 overflow-y-auto rounded-xl bg-slate-100/80 p-2 ring-1 ring-inset ring-slate-200/80 transition-colors",
+          isOver && "bg-accent/[0.06] ring-2 ring-accent/30",
         )}
       >
         <SortableContext
-          items={tasks.map((t) => t.id)}
+          items={tasks.map((task) => task.id)}
           strategy={verticalListSortingStrategy}
         >
           {tasks.length === 0 ? (
-            <p className="m-auto px-3 py-6 text-center text-sm text-muted">
-              No tasks here
+            <p className="m-auto px-2 py-8 text-center text-[12px] text-slate-400">
+              Drop a card here
             </p>
           ) : (
             tasks.map((task) => <SortableTaskCard key={task.id} task={task} />)
           )}
         </SortableContext>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -227,25 +271,26 @@ export function TaskBoard({ tasks }: TaskBoardProps) {
     }),
   );
 
-  const byStatus = useMemo(() => {
-    const map = new Map<TaskStatus, Task[]>();
-    for (const stage of TASK_STAGES) map.set(stage.status, []);
+  const byColumn = useMemo(() => {
+    const map = new Map<BoardColumnId, Task[]>();
+    for (const column of BOARD_COLUMNS) map.set(column.id, []);
     for (const task of items) {
-      if (!map.has(task.status)) continue;
-      map.get(task.status)!.push(task);
+      const columnId = columnForStatus(task.status);
+      if (!columnId) continue;
+      map.get(columnId)!.push(task);
     }
     return map;
   }, [items]);
 
   const activeTask = activeId
-    ? (items.find((t) => t.id === activeId) ?? null)
+    ? (items.find((task) => task.id === activeId) ?? null)
     : null;
 
-  function findStatusForId(id: string): TaskStatus | null {
-    const asColumn = parseColumnId(id);
+  function findColumnForId(id: string): BoardColumnId | null {
+    const asColumn = parseColumnKey(id);
     if (asColumn) return asColumn;
-    const task = items.find((t) => t.id === id);
-    return task?.status ?? null;
+    const task = items.find((item) => item.id === id);
+    return task ? columnForStatus(task.status) : null;
   }
 
   function handleDragStart(event: DragStartEvent) {
@@ -255,84 +300,60 @@ export function TaskBoard({ tasks }: TaskBoardProps) {
   function handleDragOver(event: DragOverEvent) {
     const { active, over } = event;
     if (!over) return;
+    const from = findColumnForId(String(active.id));
+    const to = findColumnForId(String(over.id));
+    if (!from || !to || from === to) return;
+    const dropStatus = BOARD_COLUMNS.find((column) => column.id === to)?.dropStatus;
+    if (!dropStatus) return;
 
-    const activeTaskId = String(active.id);
-    const overId = String(over.id);
-    const fromStatus = findStatusForId(activeTaskId);
-    const toStatus =
-      parseColumnId(overId) ?? findStatusForId(overId);
-
-    if (!fromStatus || !toStatus || fromStatus === toStatus) return;
-
-    setItems((current) => {
-      const moving = current.find((t) => t.id === activeTaskId);
-      if (!moving || moving.status === toStatus) return current;
-      return current.map((task) =>
-        task.id === activeTaskId
-          ? {
-              ...task,
-              status: toStatus,
-              updatedAt: new Date().toISOString(),
-            }
+    setItems((current) =>
+      current.map((task) =>
+        task.id === String(active.id)
+          ? { ...task, status: dropStatus, updatedAt: new Date().toISOString() }
           : task,
-      );
-    });
+      ),
+    );
   }
 
   async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     setActiveId(null);
-
     if (!over) {
       setItems(tasks);
       return;
     }
 
     const taskId = String(active.id);
-    const overId = String(over.id);
-    const nextStatus = parseColumnId(overId) ?? findStatusForId(overId);
-    const previous = tasks.find((t) => t.id === taskId);
-    const current = items.find((t) => t.id === taskId);
+    const nextColumn = findColumnForId(String(over.id));
+    const previous = tasks.find((task) => task.id === taskId);
+    const current = items.find((task) => task.id === taskId);
+    const dropStatus = BOARD_COLUMNS.find((column) => column.id === nextColumn)
+      ?.dropStatus;
 
-    if (!nextStatus || !previous || !current) {
+    if (!nextColumn || !previous || !current || !dropStatus) {
       setItems(tasks);
       return;
     }
-
     if (previous.status === current.status) return;
 
     const snapshot = previous;
-
-    setItems((latest) =>
-      latest.map((task) =>
-        task.id === taskId
-          ? {
-              ...task,
-              status: current.status,
-              updatedAt: new Date().toISOString(),
-            }
-          : task,
-      ),
-    );
-
-    try {
-      await updateTaskStatusAction(taskId, current.status);
-    } catch {
+    const result = await updateTaskStatusAction(taskId, dropStatus);
+    if (!result.ok) {
       setItems((latest) =>
         latest.map((task) => (task.id === taskId ? snapshot : task)),
       );
-      toast("Couldn’t update task status. Try again.", "error");
+      toast(result.message || "Couldn’t update task status. Try again.", "error");
     }
   }
 
   if (tasks.length === 0) {
     return (
-      <Card className="p-8 text-center">
-        <p className="text-sm font-medium text-foreground">No tasks to show</p>
+      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 py-16 text-center">
+        <p className="text-sm font-semibold text-foreground">No tasks to show</p>
         <p className="mt-1 text-sm text-muted">
           Adjust filters or search to see work on the board.
         </p>
-      </Card>
+      </div>
     );
   }
 
@@ -344,22 +365,19 @@ export function TaskBoard({ tasks }: TaskBoardProps) {
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex gap-4 overflow-x-auto pb-2">
-        {TASK_STAGES.map((stage) => (
+      <div className="grid min-h-[28rem] grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4 xl:min-h-[min(68vh,40rem)]">
+        {BOARD_COLUMNS.map((column) => (
           <BoardColumn
-            key={stage.status}
-            status={stage.status}
-            label={stage.label}
-            color={stage.color}
-            tasks={byStatus.get(stage.status) ?? []}
+            key={column.id}
+            column={column}
+            tasks={byColumn.get(column.id) ?? []}
           />
         ))}
       </div>
-
       <DragOverlay>
         {activeTask ? (
-          <div className="w-[268px] md:w-[288px]">
-            <TaskBoardCardContent task={activeTask} dragging />
+          <div className="w-72">
+            <TaskBoardCard task={activeTask} dragging />
           </div>
         ) : null}
       </DragOverlay>

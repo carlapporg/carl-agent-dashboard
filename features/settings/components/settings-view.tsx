@@ -1,57 +1,51 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { getAgentPreferencesAction } from "@/features/dashboard/actions";
+import { useState } from "react";
+import { useNotifications } from "@/features/notifications/notification-provider";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageShell } from "@/components/ui/page-shell";
 import { Card, CardBody } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
+import type { NotificationPrefs } from "@/types/dashboard";
 
-type NotifPrefs = Awaited<
-  ReturnType<typeof getAgentPreferencesAction>
->["notifications"];
-
-const LABELS: Record<keyof NotifPrefs, { title: string; detail: string }> = {
-  taskAssigned: {
-    title: "Task assigned",
-    detail: "When the system auto-assigns you a new task.",
-  },
-  paymentResult: {
-    title: "Payment approved / declined",
-    detail: "When a client responds to a payment request.",
-  },
-  slaWarning: {
-    title: "SLA reply warning",
-    detail: "When a client message is waiting too long.",
-  },
-  customerReply: {
-    title: "Customer reply",
-    detail: "When the client sends a new message on a task.",
-  },
-  desktop: {
-    title: "Desktop notifications",
-    detail: "Show system notifications in the browser.",
-  },
-  sound: {
-    title: "Sound",
-    detail: "Play a soft chime for urgent alerts.",
-  },
-};
+const LABELS: Record<keyof NotificationPrefs, { title: string; detail: string }> =
+  {
+    taskAssigned: {
+      title: "Task assigned",
+      detail: "When a new task is offered or assigned to you.",
+    },
+    paymentResult: {
+      title: "Payment approved / declined",
+      detail: "When a client responds to a payment request.",
+    },
+    slaWarning: {
+      title: "Needs your attention",
+      detail: "When a task is waiting for you to reply or continue.",
+    },
+    customerReply: {
+      title: "Customer reply",
+      detail: "When the client sends a new message and you are not in that chat.",
+    },
+    desktop: {
+      title: "Desktop notifications",
+      detail: "Show a system notification when this tab is in the background.",
+    },
+    sound: {
+      title: "Notification sound",
+      detail: "Play a short chime when a new notification arrives.",
+    },
+  };
 
 export function SettingsView() {
-  const [prefs, setPrefs] = useState<NotifPrefs | null>(null);
+  const { prefs, setPrefs } = useNotifications();
   const [compactList, setCompactList] = useState(false);
   const [saved, setSaved] = useState(false);
-
-  useEffect(() => {
-    void getAgentPreferencesAction().then((p) => setPrefs(p.notifications));
-  }, []);
 
   return (
     <PageShell>
       <PageHeader
         title="Settings"
-        description="Granular notification preferences. Payout settings are not included."
+        description="Choose which notifications you get, and whether they play a sound."
       />
 
       <div className="mx-auto max-w-3xl space-y-4">
@@ -60,11 +54,9 @@ export function SettingsView() {
             <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">
               Notifications
             </h2>
-            {!prefs ? (
-              <p className="mt-3 text-sm text-muted">Loading…</p>
-            ) : (
-              <div className="mt-3 divide-y divide-border">
-                {(Object.keys(LABELS) as Array<keyof NotifPrefs>).map((key) => (
+            <div className="mt-3 divide-y divide-border">
+              {(Object.keys(LABELS) as Array<keyof NotificationPrefs>).map(
+                (key) => (
                   <div
                     key={key}
                     className="flex items-start justify-between gap-4 py-4 first:pt-0 last:pb-0"
@@ -81,14 +73,19 @@ export function SettingsView() {
                       checked={prefs[key]}
                       onCheckedChange={(checked) => {
                         setPrefs({ ...prefs, [key]: checked });
-                        setSaved(false);
+                        setSaved(true);
                       }}
                       label={LABELS[key].title}
                     />
                   </div>
-                ))}
-              </div>
-            )}
+                ),
+              )}
+            </div>
+            {saved ? (
+              <p className="mt-3 text-sm text-success-foreground">
+                Saved on this device.
+              </p>
+            ) : null}
           </CardBody>
         </Card>
 
@@ -108,23 +105,12 @@ export function SettingsView() {
               </div>
               <Switch
                 checked={compactList}
-                onCheckedChange={(v) => {
-                  setCompactList(v);
-                  setSaved(false);
-                }}
+                onCheckedChange={setCompactList}
                 label="Compact task list"
               />
             </div>
           </CardBody>
         </Card>
-
-        <button
-          type="button"
-          className="text-sm font-semibold text-accent hover:text-accent-hover"
-          onClick={() => setSaved(true)}
-        >
-          {saved ? "Preferences saved (local mock)" : "Save preferences"}
-        </button>
       </div>
     </PageShell>
   );

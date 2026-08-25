@@ -3,13 +3,32 @@
 import { io, type Socket } from "socket.io-client";
 
 export type AgentSocketEvents = {
+  "task.offered": (payload: unknown) => void;
   "task.assigned": (payload: unknown) => void;
   "task.message": (payload: unknown) => void;
   "task.cancelled": (payload: unknown) => void;
+  "payment.approved": (payload: unknown) => void;
+  "payment.declined": (payload: unknown) => void;
+  "payment.expired": (payload: unknown) => void;
+  "task.status_changed": (payload: unknown) => void;
+  "task.missed": (payload: unknown) => void;
+  "task.confirmation_confirmed": (payload: unknown) => void;
+  "task.confirmation_declined": (payload: unknown) => void;
 };
 
+let current: Socket | null = null;
+let currentKey = "";
+
 export function connectAgentSocket(origin: string, token: string): Socket {
-  return io(origin, {
+  const key = `${origin}::${token}`;
+  if (current && currentKey === key) {
+    return current;
+  }
+  if (current) {
+    current.removeAllListeners();
+    current.disconnect();
+  }
+  current = io(origin, {
     auth: { token },
     query: { token },
     extraHeaders: {
@@ -20,10 +39,14 @@ export function connectAgentSocket(origin: string, token: string): Socket {
     },
     transports: ["polling", "websocket"],
     reconnection: true,
-    reconnectionDelay: 2000,
-    reconnectionDelayMax: 20000,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 8000,
+    timeout: 20000,
     autoConnect: true,
   });
+  currentKey = key;
+  return current;
 }
 
 export function joinTaskRoom(socket: Socket, taskId: string) {

@@ -58,6 +58,8 @@ export const wsTaskQueueEventTypeSchema = z.enum([
   /** Offer / SLA expired or reassigned away — informational toast */
   "task.missed",
   "queue.updated",
+  "task.confirmation_confirmed",
+  "task.confirmation_declined",
 ]);
 
 /**

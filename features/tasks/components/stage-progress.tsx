@@ -8,7 +8,7 @@ export const TASK_STAGES: Array<{
   label: string;
   color: string;
 }> = [
-  { status: "queued", label: "Queued", color: "#9ca3af" },
+  { status: "queued", label: "Offered", color: "#9ca3af" },
   { status: "assigned", label: "Assigned", color: "#60a5fa" },
   { status: "in_progress", label: "In progress", color: "#4f7cff" },
   { status: "waiting_for_customer", label: "Waiting customer", color: "#f59e0b" },
@@ -149,7 +149,7 @@ export function MiniRing({
   className,
   animate = false,
 }: MiniRingProps) {
-  const stroke = 5;
+  const stroke = Math.max(3, size * 0.09);
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
   const offset =
@@ -185,5 +185,31 @@ export function MiniRing({
         className={animate ? "task-ring-draw" : undefined}
       />
     </svg>
+  );
+}
+
+export function MiniRingLabel({
+  percent,
+  color,
+  size = 44,
+  animate = false,
+}: MiniRingProps) {
+  const safe = Math.min(100, Math.max(0, Math.round(percent)));
+  return (
+    <div
+      className="relative inline-flex items-center justify-center"
+      style={{ width: size, height: size }}
+    >
+      <MiniRing percent={safe} color={color} size={size} animate={animate} />
+      <span className="absolute inset-0 flex items-center justify-center font-semibold tabular-nums leading-none text-foreground">
+        <span style={{ fontSize: Math.max(9, size * 0.26) }}>{safe}</span>
+        <span
+          className="ml-px text-muted"
+          style={{ fontSize: Math.max(7, size * 0.18) }}
+        >
+          %
+        </span>
+      </span>
+    </div>
   );
 }

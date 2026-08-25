@@ -39,7 +39,7 @@ export function DashboardHome({
   }, [ops, presence]);
 
   const stats = useMemo(() => {
-    const offered = roots.filter((t) => t.backendStatus === "ASSIGNED").length;
+    const offered = roots.filter((t) => t.backendStatus === "OFFERED").length;
     const inProgress = roots.filter(
       (t) => t.backendStatus === "IN_PROGRESS",
     ).length;
@@ -49,7 +49,12 @@ export function DashboardHome({
     const completed = roots.filter((t) => t.status === "completed").length;
     const inMotion = roots.filter((t) => hasStartedWork(t)).length;
     const total = Math.max(roots.length, 1);
-    const activeCount = roots.filter((t) => hasStartedWork(t) || t.backendStatus === "ASSIGNED").length;
+    const activeCount = roots.filter(
+      (t) =>
+        hasStartedWork(t) ||
+        t.backendStatus === "OFFERED" ||
+        t.backendStatus === "ASSIGNED",
+    ).length;
 
     return {
       offered,
@@ -96,7 +101,7 @@ export function DashboardHome({
             label="Needs attention"
             value={stats.offered}
             ringValue={stats.offered}
-            hint="Assigned offers waiting for Start."
+            hint="OFFERED — accept or reject in 30 seconds."
             color="#ef4444"
             className="dash-slide-in"
           />

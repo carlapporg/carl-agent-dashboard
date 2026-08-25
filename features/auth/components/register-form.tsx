@@ -12,6 +12,7 @@ import {
 } from "react";
 import { registerAction } from "@/features/auth/actions/auth";
 import { CheckIcon } from "@/features/auth/components/icons";
+import { PasswordChecks } from "@/features/auth/components/password-checks";
 import {
   isRegisterFormValid,
   validateRegisterConfirmPassword,
@@ -236,24 +237,31 @@ export function RegisterForm({ demoMode = false }: RegisterFormProps) {
         name="password"
         label="Password"
         autoComplete="new-password"
-        placeholder="At least 8 characters"
+        placeholder="Create a password"
         value={password}
         onChange={(event) => {
           const next = event.target.value;
           setPassword(next);
-          if (passwordError) setPasswordError(validateRegisterPassword(next));
+          if (passwordError) {
+            setPasswordError(next ? undefined : validateRegisterPassword(next));
+          }
           if (confirmPasswordError && confirmPassword) {
             setConfirmPasswordError(
               validateRegisterConfirmPassword(next, confirmPassword),
             );
           }
         }}
-        onBlur={() => setPasswordError(validateRegisterPassword(password))}
+        onBlur={() =>
+          setPasswordError(password ? undefined : validateRegisterPassword(password))
+        }
         hasError={Boolean(passwordError)}
         errorMessage={passwordError}
+        reserveErrorSpace={false}
         disabled={isBusy}
         required
       />
+
+      <PasswordChecks password={password} />
 
       <PasswordField
         id="confirmPassword"

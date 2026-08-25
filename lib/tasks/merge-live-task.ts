@@ -1,0 +1,156 @@
+import type { AgentTaskStatus } from "@/types/agent";
+import type { Task } from "@/types/task";
+
+const RANK: Record<string, number> = {
+  QUEUED: 1,
+  OFFERED: 1,
+  ASSIGNED: 2,
+  IN_PROGRESS: 3,
+  WAITING_FOR_USER: 3,
+  WAITING_FOR_AGENT: 3,
+  COMPLETED: 4,
+  FAILED: 4,
+  CANCELLED: 4,
+  REJECTED: 4,
+};
+
+function rank(task: Task): number {
+  const backend = task.backendStatus ?? "";
+  if (backend in RANK) return RANK[backend];
+  if (task.status === "in_progress" || task.status === "waiting_for_customer") {
+    return 3;
+  }
+  if (task.status === "assigned") return 2;
+  if (task.status === "queued") return 1;
+  return 0;
+}
+
+function isSparse(task: Task): boolean {
+  return (
+    task.number === 0 ||
+    task.title === "Task" ||
+    task.title === "New task offered" ||
+    (task.customerName === "Client" && !task.request)
+  );
+}
+
+function laterDeadline(left?: string, right?: string): string | undefined {
+  const leftMs = left ? new Date(left).getTime() : Number.NaN;
+  const rightMs = right ? new Date(right).getTime() : Number.NaN;
+  const now = Date.now();
+  const leftLive = Number.isFinite(leftMs) && leftMs > now;
+  const rightLive = Number.isFinite(rightMs) && rightMs > now;
+  if (leftLive && rightLive) return leftMs >= rightMs ? left : right;
+  if (rightLive) return right;
+  if (leftLive) return left;
+  if (Number.isFinite(leftMs) && Number.isFinite(rightMs)) {
+    return leftMs >= rightMs ? left : right;
+  }
+  return left ?? right;
+}
+
+function withFreshDeadline(merged: Task, base: Task, incoming: Task): Task {
+  if (rank(merged) >= 2) {
+    return { ...merged, expiresAt: undefined };
+  }
+  return {
+    ...merged,
+    expiresAt: laterDeadline(base.expiresAt, incoming.expiresAt),
+  };
+}
+
+/** Keep the more advanced status so a stale live overlay cannot hide IN_PROGRESS. */
+export function mergeByProgress(base: Task, incoming: Task): Task {
+  if (isSparse(incoming) && !isSparse(base)) {
+    const incomingRank = rank(incoming);
+    const baseRank = rank(base);
+    if (incomingRank <= baseRank) {
+      return withFreshDeadline(base, base, incoming);
+    }
+    return withFreshDeadline(
+      {
+        ...base,
+        backendStatus: incoming.backendStatus,
+        status: incoming.status,
+        updatedAt: incoming.updatedAt || base.updatedAt,
+      },
+      base,
+      incoming,
+    );
+  }
+
+  const incomingRank = rank(incoming);
+  const baseRank = rank(base);
+  if (incomingRank > baseRank) {
+    return withFreshDeadline(
+      {
+        ...incoming,
+        title: isSparse(incoming) ? base.title : incoming.title,
+        customerName: isSparse(incoming) ? base.customerName : incoming.customerName,
+        request: incoming.request || base.request,
+        number: incoming.number || base.number,
+      },
+      base,
+      incoming,
+    );
+  }
+  if (incomingRank < baseRank) {
+    return withFreshDeadline(
+      {
+        ...incoming,
+        ...base,
+        backendStatus: base.backendStatus,
+        status: base.status,
+      },
+      base,
+      incoming,
+    );
+  }
+  const incomingAt = new Date(incoming.updatedAt).getTime();
+  const baseAt = new Date(base.updatedAt).getTime();
+  if (incomingAt >= baseAt) {
+    if (isSparse(incoming)) return withFreshDeadline(base, base, incoming);
+    return withFreshDeadline({ ...base, ...incoming }, base, incoming);
+  }
+  return withFreshDeadline(base, base, incoming);
+}
+
+export function mergeTaskLists(
+  seed: Task[],
+  live: Task[],
+  offer?: Task | null,
+): Task[] {
+  const byId = new Map<string, Task>();
+  for (const task of seed) byId.set(task.id, task);
+  for (const task of live) {
+    const existing = byId.get(task.id);
+    byId.set(task.id, existing ? mergeByProgress(existing, task) : task);
+  }
+  if (offer) {
+    const existing = byId.get(offer.id);
+    byId.set(offer.id, existing ? mergeByProgress(existing, offer) : offer);
+  }
+  return [...byId.values()];
+}
+
+export function liveStatusPatch(
+  backendStatus: AgentTaskStatus,
+  uiStatus: Task["status"],
+): Partial<Task> {
+  const pastOffer = (RANK[backendStatus] ?? 0) >= 2;
+  return {
+    backendStatus,
+    status: uiStatus,
+    updatedAt: new Date().toISOString(),
+    ...(pastOffer ? { expiresAt: undefined } : {}),
+  };
+}
+
+export function isKeptAfterMiss(task: Task): boolean {
+  return (
+    task.backendStatus === "ASSIGNED" ||
+    task.backendStatus === "IN_PROGRESS" ||
+    task.backendStatus === "WAITING_FOR_USER" ||
+    task.backendStatus === "WAITING_FOR_AGENT"
+  );
+}

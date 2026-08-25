@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ConfirmDialog } from "@/components/ui/dialog";
 import { setAvailabilityAction } from "@/features/agents/actions";
 import { useOps } from "@/features/ops/ops-provider";
-import { presenceToUi, uiToPresence, writeToPresence } from "@/lib/agent/presence";
+import { presenceToUi, uiToPresence, writeChosenPresence, writeToPresence } from "@/lib/agent/presence";
 import { cn } from "@/lib/utils/cn";
 import type { AgentPresence } from "@/types/agent";
 import type { AgentAvailability } from "@/types/dashboard";
@@ -76,13 +76,16 @@ export function AvailabilityToggle({
     const previous = ops?.presence ?? presence ?? "ONLINE";
     const nextWrite = uiToPresence(next);
     ops?.setPresence(writeToPresence(nextWrite));
+    writeChosenPresence(writeToPresence(nextWrite));
 
     void setAvailabilityAction(nextWrite)
       .then((result) => {
         ops?.setPresence(result.status);
+        writeChosenPresence(result.status);
       })
       .catch(() => {
         ops?.setPresence(previous);
+        writeChosenPresence(previous);
       })
       .finally(() => {
         inFlight.current = false;

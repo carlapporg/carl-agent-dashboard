@@ -11,11 +11,57 @@ const emailSchema = z
       .email(USER_MESSAGES.emailInvalid),
   );
 
+export const PASSWORD_CHECKS = [
+  {
+    id: "lower",
+    label: "At least one lowercase letter",
+    test: (value: string) => /[a-z]/.test(value),
+  },
+  {
+    id: "upper",
+    label: "At least one uppercase letter",
+    test: (value: string) => /[A-Z]/.test(value),
+  },
+  {
+    id: "number",
+    label: "At least one number",
+    test: (value: string) => /\d/.test(value),
+  },
+  {
+    id: "length",
+    label: "Minimum 8 characters",
+    test: (value: string) => value.length >= 8,
+  },
+] as const;
+
+export function passwordCheckResults(password: string) {
+  return PASSWORD_CHECKS.map((rule) => ({
+    id: rule.id,
+    label: rule.label,
+    met: rule.test(password),
+  }));
+}
+
+export function validateRegisterPassword(value: string): string | undefined {
+  if (!value) return USER_MESSAGES.passwordRequired;
+  const failed = PASSWORD_CHECKS.find((rule) => !rule.test(value));
+  if (!failed) return undefined;
+  if (failed.id === "length") return USER_MESSAGES.passwordMinLength;
+  return failed.label;
+}
+
+const passwordSchema = z.string().superRefine((value, ctx) => {
+  const error = validateRegisterPassword(value);
+  if (error) {
+    ctx.addIssue({ code: "custom", message: error });
+  }
+});
+
 export const registerFormSchema = z
   .object({
     email: emailSchema,
-    password: z.string().min(8, USER_MESSAGES.passwordMinLength),
-    confirmPassword: z.string().min(8, USER_MESSAGES.passwordMinLength),
+    password: passwordSchema,
+    confirmPassword: z.string().min(1, USER_MESSAGES.passwordRequired),
     firstName: z.string().trim().min(1, USER_MESSAGES.firstNameRequired).max(100),
     lastName: z
       .string()
@@ -45,12 +91,6 @@ export function validateRegisterEmail(value: string): string | undefined {
   const result = emailSchema.safeParse(value);
   if (result.success) return undefined;
   return result.error.issues[0]?.message ?? USER_MESSAGES.emailInvalid;
-}
-
-export function validateRegisterPassword(value: string): string | undefined {
-  if (!value) return USER_MESSAGES.passwordRequired;
-  if (value.length < 8) return USER_MESSAGES.passwordMinLength;
-  return undefined;
 }
 
 export function validateRegisterConfirmPassword(

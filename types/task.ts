@@ -29,6 +29,7 @@ export const taskNoteSchema = z.object({
 export const taskSchema = z.object({
   id: z.string(),
   number: z.number().int(),
+  code: z.string().optional(),
   title: z.string(),
   request: z.string(),
   status: taskStatusSchema,
@@ -53,6 +54,8 @@ export const taskSchema = z.object({
   /** Nest task.status when loaded from API */
   backendStatus: z
     .enum([
+      "QUEUED",
+      "OFFERED",
       "ASSIGNED",
       "IN_PROGRESS",
       "WAITING_FOR_USER",
@@ -65,6 +68,8 @@ export const taskSchema = z.object({
     .optional(),
   clientAlias: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).nullable().optional(),
+  canReject: z.boolean().optional(),
+  rejectUntil: z.string().nullable().optional(),
 });
 
 export type TaskStatus = z.infer<typeof taskStatusSchema>;

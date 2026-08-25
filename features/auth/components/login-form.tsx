@@ -197,16 +197,6 @@ export function LoginForm({ demoMode = false }: LoginFormProps) {
         required
       />
 
-      <label className="flex min-h-10 cursor-pointer items-center gap-2.5 text-sm text-muted">
-        <input
-          type="checkbox"
-          name="rememberMe"
-          disabled={isBusy}
-          className="size-4 shrink-0 rounded border-border accent-[var(--accent)]"
-        />
-        <span>Remember me</span>
-      </label>
-
       <Button
         type="submit"
         fullWidth

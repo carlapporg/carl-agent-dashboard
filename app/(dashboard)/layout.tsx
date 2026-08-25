@@ -4,6 +4,7 @@ import { DashboardSidebar } from "@/features/shell/components/sidebar";
 import { MobileNav } from "@/features/shell/components/mobile-nav";
 import { DashboardWebSocketBridge } from "@/features/shell/components/dashboard-websocket-bridge";
 import { AgentSocketProvider } from "@/features/shell/components/agent-socket-provider";
+import { NotificationProvider } from "@/features/notifications/notification-provider";
 import { logAuthEvent } from "@/lib/auth/audit-log";
 import { agentsApi } from "@/lib/api/agents";
 import { getSession } from "@/lib/auth/session";
@@ -30,6 +31,7 @@ export default async function DashboardLayout({
 
   return (
     <DashboardWebSocketBridge>
+      <NotificationProvider>
       <AgentSocketProvider
         socketUrl={env.socketUrl}
         accessToken={session.accessToken}
@@ -44,6 +46,7 @@ export default async function DashboardLayout({
         </div>
       </div>
       </AgentSocketProvider>
+      </NotificationProvider>
     </DashboardWebSocketBridge>
   );
 }

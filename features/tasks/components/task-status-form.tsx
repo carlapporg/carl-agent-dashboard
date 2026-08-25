@@ -1,11 +1,11 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { updateTaskAgentStatusAction } from "@/features/tasks/actions/task-actions";
+import { ConfirmDialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/providers/toast-provider";
+import { isClosedTask } from "@/features/tasks/lib/workflow";
 import type { Task } from "@/types/task";
 
 const STATUS_OPTIONS = [
@@ -34,30 +34,57 @@ const STATUS_OPTIONS = [
 type TaskStatusFormProps = {
   task: Task;
   disabled?: boolean;
+  blockComplete?: boolean;
+  onUpdated?: (
+    status: "WAITING_FOR_USER" | "COMPLETED" | "FAILED" | "CANCELLED",
+  ) => void;
 };
 
-export function TaskStatusForm({ task, disabled }: TaskStatusFormProps) {
-  const router = useRouter();
+export function TaskStatusForm({
+  task,
+  disabled,
+  blockComplete = false,
+  onUpdated,
+}: TaskStatusFormProps) {
   const { toast } = useToast();
   const [status, setStatus] = useState<
     "WAITING_FOR_USER" | "COMPLETED" | "FAILED" | "CANCELLED"
   >("WAITING_FOR_USER");
-  const [note, setNote] = useState("");
   const [pending, startTransition] = useTransition();
+  const [confirmComplete, setConfirmComplete] = useState(false);
 
-  const locked =
-    disabled ||
-    task.status === "completed" ||
-    task.status === "cancelled" ||
-    task.status === "failed" ||
-    task.backendStatus === "ASSIGNED";
+  useEffect(() => {
+    if (blockComplete && status === "COMPLETED") {
+      setStatus("WAITING_FOR_USER");
+    }
+  }, [blockComplete, status]);
+
+  const closed = isClosedTask(task);
+  const locked = disabled || closed;
 
   function submit() {
+    if (status === "COMPLETED") {
+      if (blockComplete) {
+        toast("Wait for the client to confirm before completing.", "error");
+        return;
+      }
+      setConfirmComplete(true);
+      return;
+    }
+    apply();
+  }
+
+  function apply() {
     startTransition(async () => {
       try {
-        await updateTaskAgentStatusAction(task.id, status, note.trim() || undefined);
+        const result = await updateTaskAgentStatusAction(task.id, status);
+        if (!result.ok) {
+          toast(result.message, "error");
+          return;
+        }
+        onUpdated?.(status);
         toast("Status updated. The client will be notified.", "success");
-        router.refresh();
+        setConfirmComplete(false);
       } catch (error) {
         toast(
           error instanceof Error ? error.message : "Could not update status.",
@@ -71,10 +98,17 @@ export function TaskStatusForm({ task, disabled }: TaskStatusFormProps) {
     <section className="rounded-[var(--radius-card)] border border-border bg-surface p-4 shadow-[var(--shadow-card)]">
       <h2 className="text-sm font-semibold text-foreground">Update status</h2>
       <p className="mt-1 text-sm text-muted">
-        Nest sends the client notification. Start must be used before this.
+        {closed
+          ? "This task is closed. Status cannot be changed."
+          : locked
+            ? "Start the task before you can update status."
+            : "Nest updates the task and messages the client."}
       </p>
 
-      <fieldset className="mt-3 space-y-2" disabled={locked || pending}>
+      <fieldset
+        className="mt-3 space-y-2 disabled:pointer-events-none disabled:opacity-60"
+        disabled={locked || pending}
+      >
         {STATUS_OPTIONS.map((option) => (
           <label
             key={option.value}
@@ -85,29 +119,22 @@ export function TaskStatusForm({ task, disabled }: TaskStatusFormProps) {
               name="task-status"
               className="mt-1"
               checked={status === option.value}
+              disabled={option.value === "COMPLETED" && blockComplete}
               onChange={() => setStatus(option.value)}
             />
             <span>
               <span className="block text-sm font-semibold text-foreground">
                 {option.label}
               </span>
-              <span className="text-xs text-muted">{option.hint}</span>
+              <span className="text-xs text-muted">
+                {option.value === "COMPLETED" && blockComplete
+                  ? "Locked until the client confirms the details."
+                  : option.hint}
+              </span>
             </span>
           </label>
         ))}
       </fieldset>
-
-      <label className="mt-3 block">
-        <span className="text-sm font-medium text-foreground">Note (optional)</span>
-        <Textarea
-          className="mt-1.5 min-h-20"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder="Shown to the client in the push body"
-          maxLength={1000}
-          disabled={locked || pending}
-        />
-      </label>
 
       <div className="mt-3">
         <Button
@@ -119,6 +146,16 @@ export function TaskStatusForm({ task, disabled }: TaskStatusFormProps) {
           Update status
         </Button>
       </div>
+
+      <ConfirmDialog
+        open={confirmComplete}
+        onClose={() => setConfirmComplete(false)}
+        onConfirm={apply}
+        title="Mark this task completed?"
+        description="Nest will notify the client."
+        confirmLabel="Complete task"
+        loading={pending}
+      />
     </section>
   );
 }

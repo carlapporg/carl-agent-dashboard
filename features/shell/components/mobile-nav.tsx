@@ -4,11 +4,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { DASHBOARD_NAV } from "@/features/shell/nav-items";
+import { useNotifications } from "@/features/notifications/notification-provider";
+import { ROUTES } from "@/lib/constants/routes";
 import { cn } from "@/lib/utils/cn";
 
 export function MobileNav() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const { unreadCount } = useNotifications();
 
   return (
     <div className="border-b border-border bg-surface lg:hidden">
@@ -41,19 +44,26 @@ export function MobileNav() {
                 ? pathname === item.href
                 : pathname === item.href ||
                   pathname.startsWith(`${item.href}/`);
+            const showUnread =
+              item.href === ROUTES.notifications && unreadCount > 0;
             return (
               <Link
                 key={item.label}
                 href={item.href}
                 onClick={() => setOpen(false)}
                 className={cn(
-                  "block rounded-xl px-3.5 py-2.5 text-base font-medium",
+                  "flex items-center justify-between gap-2 rounded-xl px-3.5 py-2.5 text-base font-medium",
                   active
                     ? "bg-accent/10 text-accent"
                     : "text-foreground-soft hover:bg-surface-hover hover:text-foreground",
                 )}
               >
-                {item.label}
+                <span>{item.label}</span>
+                {showUnread ? (
+                  <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-danger px-1.5 text-[10px] font-bold text-white">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                ) : null}
               </Link>
             );
           })}

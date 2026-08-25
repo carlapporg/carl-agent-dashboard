@@ -24,12 +24,12 @@ export default async function TasksPage() {
       <PageShell wide>
         <PageHeader
           title="Tasks"
-          description="Assigned work appears here automatically. Open a task to start — no accept needed."
+          description="Accept a first offer, or open an assigned task and Start."
           className="mb-5 sm:mb-6"
         />
         <EmptyState
-          title="Can't reach the server"
-          description="Your login is still saved. The API tunnel may be down. Wait a moment and refresh."
+          title="Can't load tasks"
+          description="Your login is still saved. Refresh the page. If this keeps happening, sign out and sign in again."
         />
       </PageShell>
     );
@@ -41,7 +41,7 @@ export default async function TasksPage() {
     <PageShell wide>
       <PageHeader
         title="Tasks"
-        description="Assigned work appears here automatically. Open a task to start — no accept needed."
+        description="Accept a first offer, or open an assigned task and Start."
         className="mb-5 sm:mb-6"
       />
       <Suspense fallback={<PageSkeleton />}>
