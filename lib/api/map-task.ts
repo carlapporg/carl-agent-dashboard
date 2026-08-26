@@ -144,7 +144,10 @@ export function mapAgentTaskToUi(task: AgentTask): Task {
         ? (task.metadata as Record<string, unknown>)
         : null,
     canReject: task.canReject,
-    rejectUntil: task.rejectUntil,
+    rejectUntil:
+      backendStatus === "OFFERED" || backendStatus === "QUEUED"
+        ? task.rejectUntil
+        : null,
   };
 }
 

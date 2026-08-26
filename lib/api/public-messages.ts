@@ -10,6 +10,8 @@ export const USER_MESSAGES = {
   invalidCredentials: "Invalid email or password",
   unauthorizedApp: "You are not authorized to access this application",
   offerGone: "This offer expired or went to another agent.",
+  offerAlreadyAccepted: "This task was already accepted.",
+  rejectWindowEnded: "The reject window ended. This task will be accepted.",
   taskGone: "This task isn't yours anymore. Refresh to see your current list.",
   accountDisabled: "Your account has been disabled. Please contact support.",
   network:

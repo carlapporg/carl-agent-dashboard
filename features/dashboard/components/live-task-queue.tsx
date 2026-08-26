@@ -10,9 +10,11 @@ import { Card } from "@/components/ui/card";
 import { ROUTES } from "@/lib/constants/routes";
 import { cn } from "@/lib/utils/cn";
 import {
+  isPendingReject,
   useRejectedOfferTick,
   withoutRejectedOffers,
 } from "@/features/ops/rejected-offers";
+import { isRejectingOrRejected } from "@/features/ops/auto-accept-offer";
 import { mergeTaskLists } from "@/lib/tasks/merge-live-task";
 import { offerWindowEnd } from "@/types/agent";
 import type { Task } from "@/types/task";
@@ -28,6 +30,7 @@ function receivedLabel(iso: string): string {
 }
 
 function statusBadgeLabel(task: Task): string {
+  if (isRejectingOrRejected(task.id) || isPendingReject(task.id)) return "Rejecting";
   if (task.backendStatus === "OFFERED") return "Offered";
   if (task.backendStatus === "ASSIGNED") return "Assigned";
   if (task.backendStatus === "WAITING_FOR_USER") return "Waiting";
@@ -200,7 +203,10 @@ export function LiveTaskQueue({ seedTasks }: LiveTaskQueueProps) {
                           expiresAt={offerWindowEnd(item)}
                           taskId={item.id}
                           autoAccept
-                          onExpire={() => ops?.refresh()}
+                          onExpire={() => {
+                            if (isRejectingOrRejected(item.id)) return;
+                            ops?.refresh();
+                          }}
                         />
                       ) : (
                         <StatusBadge status={item.status} />

@@ -185,15 +185,17 @@ function throwIfListUnreachable(fetch: ListFetch) {
 export const tasksApi = {
   async listByInbox(status: InboxFilter): Promise<Task[]> {
     if (status === "HISTORY") {
-      const [primary, extra] = await Promise.all([
-        fetchTaskList("HISTORY"),
-        fetchMerged(INBOX_FALLBACK.HISTORY),
-      ]);
-      const tasks = mergeById([
-        primary.ok ? primary.tasks : [],
-        extra.tasks,
-      ]).filter((task) => isHistoryTask(task) && !isRejectedOffer(task));
-      if (primary.ok || extra.ok) return tasks;
+      const primary = await fetchTaskList("HISTORY");
+      if (primary.ok) {
+        return primary.tasks.filter(
+          (task) => isHistoryTask(task) && !isRejectedOffer(task),
+        );
+      }
+      const extra = await fetchMerged(INBOX_FALLBACK.HISTORY);
+      const tasks = extra.tasks.filter(
+        (task) => isHistoryTask(task) && !isRejectedOffer(task),
+      );
+      if (extra.ok) return tasks;
       throwIfListUnreachable({
         ok: false,
         network: primary.network || extra.network,

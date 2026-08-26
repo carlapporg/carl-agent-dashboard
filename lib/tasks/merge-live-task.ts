@@ -39,6 +39,40 @@ function isSparse(task: Task): boolean {
   );
 }
 
+function isTerminalStatus(task: Task): boolean {
+  const backend = task.backendStatus ?? "";
+  return (
+    backend === "FAILED" ||
+    backend === "CANCELLED" ||
+    backend === "REJECTED" ||
+    backend === "COMPLETED" ||
+    task.status === "failed" ||
+    task.status === "cancelled" ||
+    task.status === "completed"
+  );
+}
+
+export function isKeptAfterMiss(task: Task): boolean {
+  return (
+    task.backendStatus === "ASSIGNED" ||
+    task.backendStatus === "IN_PROGRESS" ||
+    task.backendStatus === "WAITING_FOR_USER" ||
+    task.backendStatus === "WAITING_FOR_AGENT"
+  );
+}
+
+/** Offer-miss FAIL payloads are thin. Do not close accepted/started work. */
+export function shouldIgnoreClosedSocketUpdate(
+  current: Task | undefined,
+  incoming: Task | null | undefined,
+  incomingStatus?: AgentTaskStatus,
+): boolean {
+  if (!current || !isKeptAfterMiss(current)) return false;
+  if (incoming && isKeptAfterMiss(incoming) && !isSparse(incoming)) return false;
+  const status = incoming?.backendStatus ?? incomingStatus;
+  return status === "FAILED" || status === "REJECTED";
+}
+
 function laterDeadline(left?: string, right?: string): string | undefined {
   const leftMs = left ? new Date(left).getTime() : Number.NaN;
   const rightMs = right ? new Date(right).getTime() : Number.NaN;
@@ -66,6 +100,16 @@ function withFreshDeadline(merged: Task, base: Task, incoming: Task): Task {
 
 /** Keep the more advanced status so a stale live overlay cannot hide IN_PROGRESS. */
 export function mergeByProgress(base: Task, incoming: Task): Task {
+  // A thin socket payload (offer missed, status-only) must not close real work.
+  if (
+    isSparse(incoming) &&
+    !isSparse(base) &&
+    isKeptAfterMiss(base) &&
+    isTerminalStatus(incoming)
+  ) {
+    return withFreshDeadline(base, base, incoming);
+  }
+
   if (isSparse(incoming) && !isSparse(base)) {
     const incomingRank = rank(incoming);
     const baseRank = rank(base);
@@ -120,7 +164,7 @@ export function mergeByProgress(base: Task, incoming: Task): Task {
   return withFreshDeadline(base, base, incoming);
 }
 
-function pinWhileRejecting(task: Task): Task {
+export function pinWhileRejecting(task: Task): Task {
   if (!isRejectingOrRejected(task.id) && !isPendingReject(task.id)) return task;
   if (task.backendStatus === "OFFERED" || task.status === "queued") return task;
   return {
@@ -168,13 +212,4 @@ export function liveStatusPatch(
     updatedAt: new Date().toISOString(),
     ...(pastOffer ? { expiresAt: undefined } : {}),
   };
-}
-
-export function isKeptAfterMiss(task: Task): boolean {
-  return (
-    task.backendStatus === "ASSIGNED" ||
-    task.backendStatus === "IN_PROGRESS" ||
-    task.backendStatus === "WAITING_FOR_USER" ||
-    task.backendStatus === "WAITING_FOR_AGENT"
-  );
 }

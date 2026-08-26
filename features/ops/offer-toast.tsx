@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { OfferCountdown } from "@/features/ops/offer-countdown";
+import { isRejectingOrRejected } from "@/features/ops/auto-accept-offer";
 import { useOps } from "@/features/ops/ops-provider";
 import { ROUTES } from "@/lib/constants/routes";
 import { offerWindowEnd } from "@/types/agent";
@@ -51,7 +52,10 @@ export function OfferToast() {
                   expiresAt={offerWindowEnd(offer)}
                   taskId={offer.id}
                   autoAccept
-                  onExpire={() => ops.refresh()}
+                  onExpire={() => {
+                    if (isRejectingOrRejected(offer.id)) return;
+                    ops.refresh();
+                  }}
                 />
               </div>
             ) : null}

@@ -5,6 +5,8 @@ import {
   EARLY_ACCEPT_MS,
   autoAcceptExpiredOffer,
   canAutoAcceptOffer,
+  expireRejectWindow,
+  isRejectingOrRejected,
   useOfferDecision,
 } from "@/features/ops/auto-accept-offer";
 import { REJECT_WINDOW_MS } from "@/types/agent";
@@ -21,7 +23,6 @@ type OfferCountdownProps = {
 function statusLabel(args: {
   remainingSec: number;
   expired: boolean;
-  blocked: boolean;
   flight: string;
   settled: string;
 }): string {
@@ -32,7 +33,6 @@ function statusLabel(args: {
     return "Accepting offer…";
   }
   if (args.expired) return "Offer ended";
-  if (args.blocked) return "Waiting for your decision";
   return `Accept within ${args.remainingSec}s`;
 }
 
@@ -47,17 +47,15 @@ export function OfferCountdown({
   const seenOpen = useRef(false);
   const [now, setNow] = useState(() => Date.now());
   const decision = useOfferDecision(taskId);
-  const blocked =
-    decision.autoAcceptBlocked ||
-    decision.flight !== "none" ||
-    decision.settled !== "none";
+  const settled = decision.settled !== "none";
+  const inFlight = decision.flight !== "none";
   const deadline = new Date(expiresAt).getTime();
   const remainingMs = Number.isFinite(deadline)
     ? Math.max(0, deadline - now)
     : 0;
   const remainingSec = Math.ceil(remainingMs / 1000);
   const expired = remainingMs <= 0;
-  const urgent = remainingSec <= 10 && !expired && !blocked;
+  const urgent = remainingSec <= 10 && !expired && !settled;
   const pct = Math.min(100, (remainingMs / REJECT_WINDOW_MS) * 100);
 
   useEffect(() => {
@@ -70,33 +68,51 @@ export function OfferCountdown({
   }, [remainingMs]);
 
   useEffect(() => {
-    if (blocked) return;
+    if (settled) return;
     const id = window.setInterval(() => setNow(Date.now()), 250);
     return () => window.clearInterval(id);
-  }, [blocked]);
+  }, [settled]);
 
   useEffect(() => {
     if (fired.current) return;
     if (remainingMs > EARLY_ACCEPT_MS) return;
-    if (taskId && !canAutoAcceptOffer(taskId)) {
+    if (taskId && (decision.flight === "reject" || isRejectingOrRejected(taskId))) {
+      return;
+    }
+    if (taskId && decision.settled === "rejected") {
       fired.current = true;
       return;
     }
+    if (taskId && !canAutoAcceptOffer(taskId) && decision.settled !== "accepted") {
+      return;
+    }
     fired.current = true;
+    if (taskId) expireRejectWindow(taskId);
     void (async () => {
       if (autoAccept && taskId && seenOpen.current) {
-        await autoAcceptExpiredOffer(taskId);
+        const accepted = await autoAcceptExpiredOffer(taskId);
+        if (!accepted && taskId && isRejectingOrRejected(taskId)) {
+          fired.current = false;
+          return;
+        }
       }
       onExpire?.();
     })();
-  }, [autoAccept, blocked, onExpire, remainingMs, taskId]);
+  }, [
+    autoAccept,
+    decision.flight,
+    decision.settled,
+    onExpire,
+    remainingMs,
+    taskId,
+  ]);
 
   const ring = size === "lg" ? 72 : 40;
   const stroke = size === "lg" ? 7 : 4;
   const radius = (ring - stroke) / 2;
   const circ = 2 * Math.PI * radius;
   const dash = (pct / 100) * circ;
-  const color = expired || blocked
+  const color = expired || inFlight || settled
     ? "#9ca3af"
     : urgent
       ? "#dc2626"
@@ -136,7 +152,7 @@ export function OfferCountdown({
           className={cn(
             "absolute inset-0 flex items-center justify-center font-bold tabular-nums",
             size === "lg" ? "text-lg" : "text-xs",
-            expired || blocked
+            expired || inFlight || settled
               ? "text-muted"
               : urgent
                 ? "text-red-600"
@@ -151,7 +167,6 @@ export function OfferCountdown({
           {statusLabel({
             remainingSec,
             expired,
-            blocked,
             flight: decision.flight,
             settled: decision.settled,
           })}

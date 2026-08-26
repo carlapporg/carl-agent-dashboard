@@ -10,6 +10,10 @@ import {
 } from "@/features/tasks/actions/task-actions";
 import { OfferActions } from "@/features/dashboard/components/offer-actions";
 import { OfferCountdown } from "@/features/ops/offer-countdown";
+import {
+  isRejectingOrRejected,
+  useOfferDecision,
+} from "@/features/ops/auto-accept-offer";
 import { markOfferRejected } from "@/features/ops/rejected-offers";
 import { ItineraryPanel } from "@/features/itinerary/components/itinerary-panel";
 import { TaskActionLog } from "@/features/tasks/components/task-action-log";
@@ -43,7 +47,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/providers/toast-provider";
 import { useOps } from "@/features/ops/ops-provider";
 import { uiStatusFromAgent } from "@/lib/api/map-task";
-import { liveStatusPatch } from "@/lib/tasks/merge-live-task";
+import { liveStatusPatch, pinWhileRejecting } from "@/lib/tasks/merge-live-task";
 import type { AgentTaskStatus } from "@/types/agent";
 import { ROUTES } from "@/lib/constants/routes";
 import { cn } from "@/lib/utils/cn";
@@ -69,7 +73,8 @@ type TaskWorkspaceProps = {
 
 type ExtraTab = "customer" | "itinerary" | "log";
 
-function phaseLabel(task: Task): string {
+function phaseLabel(task: Task, rejecting = false): string {
+  if (rejecting) return "Rejecting";
   const status = task.backendStatus;
   if (status === "OFFERED") return "Offered";
   if (status === "QUEUED") return "Offered";
@@ -120,16 +125,23 @@ export function TaskWorkspace({
   const [completeOpen, setCompleteOpen] = useState(false);
   const [extraTab, setExtraTab] = useState<ExtraTab | null>(null);
   const chatRef = useRef<TaskChatThreadHandle>(null);
-  const [task, setTask] = useState(taskProp);
+  const [taskState, setTask] = useState(taskProp);
   const [confirmation, setConfirmation] = useState(confirmationProp);
+  const decision = useOfferDecision(taskProp.id);
+  const rejecting =
+    decision.flight === "reject" || decision.settled === "rejected";
 
   useEffect(() => {
+    if (isRejectingOrRejected(taskProp.id)) {
+      setTask(pinWhileRejecting(taskProp));
+      return;
+    }
     setTask(taskProp);
-  }, [taskProp]);
+  }, [taskProp, rejecting]);
 
   useEffect(() => {
     const live =
-      ops?.liveConfirmation?.taskId === task.id ? ops.liveConfirmation : null;
+      ops?.liveConfirmation?.taskId === taskState.id ? ops.liveConfirmation : null;
     if (!live) {
       setConfirmation(confirmationProp);
       return;
@@ -143,8 +155,9 @@ export function TaskWorkspace({
       confirmationProp.updatedAt || confirmationProp.decidedAt || 0,
     ).getTime();
     setConfirmation(liveAt >= propAt ? live : confirmationProp);
-  }, [confirmationProp, ops?.liveConfirmation, task.id]);
+  }, [confirmationProp, ops?.liveConfirmation, taskState.id]);
 
+  const task = rejecting ? pinWhileRejecting(taskState) : taskState;
   const closed = isClosedTask(task);
   const lockedReadOnly = readOnly || closed;
   const clientConfirmed = isConfirmationConfirmed(confirmation);
@@ -265,7 +278,7 @@ export function TaskWorkspace({
                 {taskDisplayCode(task)}
               </span>
               <span className="rounded-md border border-border px-2.5 py-0.5 font-medium text-foreground-soft">
-                {phaseLabel(task)}
+                {phaseLabel(task, rejecting)}
               </span>
               {task.tier === "vip" || task.tier === "family" ? (
                 <span className="rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-semibold text-accent">
@@ -302,6 +315,9 @@ export function TaskWorkspace({
                     autoAccept
                     size="lg"
                     onExpire={() => {
+                      if (decision.flight === "reject" || decision.settled === "rejected") {
+                        return;
+                      }
                       router.refresh();
                     }}
                   />

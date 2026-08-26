@@ -112,18 +112,24 @@ export const agentTaskSchema = z
     (value) => {
       const row = unwrapTaskRow(value);
       if (!row) return value;
+      const status =
+        normalizeStatus(row.status) ??
+        normalizeStatus(row.taskStatus) ??
+        normalizeStatus(row.state);
+      const offered =
+        status === "OFFERED" ||
+        status === "QUEUED" ||
+        row.canReject === true;
       return {
         ...row,
         id: row.id ?? row.taskId ?? row._id,
-        status:
-          normalizeStatus(row.status) ??
-          normalizeStatus(row.taskStatus) ??
-          normalizeStatus(row.state),
-        rejectUntil:
-          coerceIso(row.rejectUntil) ??
-          coerceIso(row.offerExpiresAt) ??
-          coerceIso(row.expiresAt) ??
-          row.rejectUntil,
+        status,
+        rejectUntil: offered
+          ? coerceIso(row.rejectUntil) ??
+            coerceIso(row.offerExpiresAt) ??
+            coerceIso(row.expiresAt) ??
+            row.rejectUntil
+          : coerceIso(row.rejectUntil) ?? row.rejectUntil ?? null,
         createdAt: coerceIso(row.createdAt) ?? row.createdAt ?? "",
         updatedAt:
           coerceIso(row.updatedAt) ??
@@ -236,4 +242,20 @@ export function isAssignedPendingStart(task: {
 /** First offer only. Nest status OFFERED — do not infer from a local timer. */
 export function canRejectOffer(task: { backendStatus?: string }): boolean {
   return task.backendStatus === "OFFERED";
+}
+
+/** Nest rejectUntil/expiresAt is the source of truth. Local clock only mirrors it. */
+export function isOfferRejectWindowOpen(
+  task: {
+    backendStatus?: string;
+    expiresAt?: string;
+    rejectUntil?: string | null;
+    updatedAt?: string;
+    createdAt?: string;
+  },
+  now = Date.now(),
+): boolean {
+  if (!canRejectOffer(task)) return false;
+  const end = new Date(offerWindowEnd(task)).getTime();
+  return Number.isFinite(end) && now < end;
 }

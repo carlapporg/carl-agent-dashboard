@@ -11,9 +11,16 @@ import { tasksApi } from "@/lib/api/tasks";
 import { ROUTES } from "@/lib/constants/routes";
 import type { SendTaskConfirmationBody, TaskConfirmation } from "@/types/confirmation";
 
+export type OfferLiveState = "offered" | "accepted" | "rejected" | "gone";
+
 export type TaskActionResult =
   | { ok: true }
-  | { ok: false; message: string; gone?: boolean };
+  | {
+      ok: false;
+      message: string;
+      gone?: boolean;
+      reason?: "already_accepted" | "already_rejected" | "expired" | "gone";
+    };
 
 function revalidateWorkQueues() {
   revalidatePath(ROUTES.tasks);
@@ -34,7 +41,47 @@ function isGoneStatus(status: number): boolean {
 
 function failOffer(error: unknown): TaskActionResult {
   if (isApiError(error) && isGoneStatus(error.status)) {
-    return { ok: false, message: USER_MESSAGES.offerGone, gone: true };
+    const text = `${error.code} ${error.message}`.toUpperCase();
+    const expired =
+      error.status === 400 ||
+      text.includes("EXPIRE") ||
+      text.includes("WINDOW") ||
+      text.includes("TOO_LATE") ||
+      text.includes("REJECT_UNTIL");
+    const alreadyAccepted =
+      error.status === 409 ||
+      text.includes("ASSIGNED") ||
+      text.includes("ALREADY_ACCEPT") ||
+      text.includes("ACCEPTED");
+    return {
+      ok: false,
+      message: expired
+        ? USER_MESSAGES.rejectWindowEnded
+        : alreadyAccepted
+          ? USER_MESSAGES.offerAlreadyAccepted
+          : USER_MESSAGES.offerGone,
+      gone: true,
+      reason: expired
+        ? "expired"
+        : alreadyAccepted
+          ? "already_accepted"
+          : "gone",
+    };
+  }
+  if (isApiError(error) && error.status === 400) {
+    const text = `${error.code} ${error.message}`.toUpperCase();
+    if (
+      text.includes("EXPIRE") ||
+      text.includes("WINDOW") ||
+      text.includes("TOO_LATE") ||
+      text.includes("REJECT_UNTIL")
+    ) {
+      return {
+        ok: false,
+        message: USER_MESSAGES.rejectWindowEnded,
+        reason: "expired",
+      };
+    }
   }
   return fail(error);
 }
@@ -70,15 +117,34 @@ export async function startTaskAction(taskId: string): Promise<TaskActionResult>
 export async function rejectTaskAction(
   taskId: string,
   reason: string,
+  options?: { revalidate?: boolean },
 ): Promise<TaskActionResult> {
   try {
     await tasksApi.reject(taskId, reason);
-    revalidateWorkQueues();
-    revalidatePath(ROUTES.history);
-    revalidatePath(ROUTES.messages);
+    if (options?.revalidate !== false) {
+      revalidateWorkQueues();
+      revalidatePath(ROUTES.history);
+      revalidatePath(ROUTES.messages);
+    }
     return { ok: true };
   } catch (error) {
     return failOffer(error);
+  }
+}
+
+export async function getOfferLiveStateAction(
+  taskId: string,
+): Promise<OfferLiveState> {
+  try {
+    const task = await tasksApi.get(taskId);
+    if (task.backendStatus === "REJECTED") return "rejected";
+    if (task.backendStatus === "OFFERED" || task.backendStatus === "QUEUED") {
+      return "offered";
+    }
+    return "accepted";
+  } catch (error) {
+    if (isApiError(error) && isGoneStatus(error.status)) return "gone";
+    throw error;
   }
 }
 

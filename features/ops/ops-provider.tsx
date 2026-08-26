@@ -31,6 +31,7 @@ import {
   isKeptAfterMiss,
   liveStatusPatch,
   mergeByProgress,
+  shouldIgnoreClosedSocketUpdate,
 } from "@/lib/tasks/merge-live-task";
 import { playNotificationChime } from "@/lib/notifications/sound";
 import { agentTaskStatusSchema, type AgentPresence, type AgentTaskStatus } from "@/types/agent";
@@ -81,7 +82,7 @@ function extractStatus(payload: unknown): AgentTaskStatus | undefined {
     data.task && typeof data.task === "object"
       ? (data.task as Record<string, unknown>)
       : null;
-  const raw = data.status ?? nested?.status ?? root.status;
+  const raw = nested?.status ?? data.status ?? root.status;
   const parsed = agentTaskStatusSchema.safeParse(
     typeof raw === "string" ? raw.trim().toUpperCase().replace(/[\s-]+/g, "_") : raw,
   );
@@ -517,11 +518,33 @@ export function AgentOpsProvider({
       const mapped = mapSocketAssignedPayload(payload);
       const id = mapped?.id ?? extractTaskId(payload);
       if (forgetIfRejecting(id)) return;
+      const live = id
+        ? liveTasksRef.current.find((row) => row.id === id)
+        : undefined;
+      const status = mapped?.backendStatus ?? extractStatus(payload);
+      if (
+        shouldIgnoreClosedSocketUpdate(live, mapped, status) ||
+        (id &&
+          offerWasAccepted(id) &&
+          (status === "FAILED" || status === "REJECTED") &&
+          (!mapped || mapped.title === "Task" || mapped.title === "New task offered"))
+      ) {
+        pulseQueue();
+        refreshListsRef.current();
+        return;
+      }
       if (mapped) {
         upsertLiveTaskRef.current(mapped);
       } else {
-        const status = extractStatus(payload);
         if (id && status) {
+          const current = liveTasksRef.current.find((row) => row.id === id);
+          if (
+            shouldIgnoreClosedSocketUpdate(current, null, status)
+          ) {
+            pulseQueue();
+            refreshListsRef.current();
+            return;
+          }
           patchLiveTaskRef.current(id, {
             backendStatus: status,
             status: uiStatusFromAgent(status),
@@ -565,7 +588,16 @@ export function AgentOpsProvider({
 
     function onTaskUpdated(payload: unknown) {
       const mapped = mapSocketAssignedPayload(payload);
-      if (forgetIfRejecting(mapped?.id ?? extractTaskId(payload))) return;
+      const id = mapped?.id ?? extractTaskId(payload);
+      if (forgetIfRejecting(id)) return;
+      const live = id
+        ? liveTasksRef.current.find((row) => row.id === id)
+        : undefined;
+      if (shouldIgnoreClosedSocketUpdate(live, mapped, mapped?.backendStatus)) {
+        pulseQueue();
+        refreshListsRef.current();
+        return;
+      }
       if (mapped) upsertLiveTaskRef.current(mapped);
       pulseQueue();
       refreshListsRef.current();

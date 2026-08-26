@@ -1,14 +1,17 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import {
   acceptTaskAction,
   startTaskAction,
 } from "@/features/tasks/actions/task-actions";
 import {
+  autoAcceptExpiredOffer,
   beginAcceptOffer,
+  canShowRejectUi,
+  isOfferAcceptLocked,
   isRejectingOrRejected,
   markOfferAccepted,
   releaseOfferFlight,
@@ -26,6 +29,7 @@ import {
   canRejectOffer,
   isAssignedPendingStart,
   isOfferedTask,
+  isOfferRejectWindowOpen,
   offerWindowEnd,
 } from "@/types/agent";
 import { isClosedTask } from "@/features/tasks/lib/workflow";
@@ -41,20 +45,22 @@ export function OfferActions({ task }: OfferActionsProps) {
   const ops = useOps();
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
-  const [rejectOpen, setRejectOpen] = useState(false);
   const decision = useOfferDecision(task.id);
+  const rejecting = isRejectingOrRejected(task.id);
   const offered = isOfferedTask(task) && !isClosedTask(task);
   const assigned = isAssignedPendingStart(task) && !isClosedTask(task);
-  const canReject = canRejectOffer(task);
-  const rejectLocked =
-    decision.flight === "reject" || decision.settled !== "none";
-  const acceptLocked =
-    pending ||
-    decision.flight !== "none" ||
-    decision.settled !== "none" ||
-    decision.rejectUiOpen;
+  const windowOpen = isOfferRejectWindowOpen(task) && !decision.windowExpired;
+  const showReject =
+    canRejectOffer(task) &&
+    canShowRejectUi(task.id) &&
+    (windowOpen || decision.flight === "reject");
+  const acceptLocked = pending || isOfferAcceptLocked(task.id);
+  const dialogOpen =
+    decision.rejectUiOpen &&
+    decision.settled !== "rejected" &&
+    (showReject || decision.flight === "reject");
 
-  if (!offered && !assigned) {
+  if (!offered && !assigned && !rejecting) {
     return null;
   }
 
@@ -81,13 +87,12 @@ export function OfferActions({ task }: OfferActionsProps) {
   }
 
   function openReject() {
-    if (decision.settled !== "none" || decision.flight === "reject") return;
+    if (decision.settled !== "none" || decision.windowExpired) return;
+    if (!isOfferRejectWindowOpen(task)) return;
     openRejectOfferUi(task.id);
-    setRejectOpen(true);
   }
 
   function closeReject() {
-    setRejectOpen(false);
     closeRejectOfferUi(task.id, offerWindowEnd(task));
   }
 
@@ -140,20 +145,31 @@ export function OfferActions({ task }: OfferActionsProps) {
   return (
     <>
       <div className="flex flex-wrap gap-2">
-        {offered ? (
-          <Button type="button" loading={pending && decision.flight === "accept"} disabled={acceptLocked} onClick={accept}>
-            Accept
+        {decision.flight === "reject" ? (
+          <Button type="button" disabled>
+            Rejecting…
+          </Button>
+        ) : offered ? (
+          <Button
+            type="button"
+            loading={pending && decision.flight === "accept"}
+            disabled={acceptLocked}
+            onClick={accept}
+          >
+            {decision.flight === "accept" || decision.settled === "accepted"
+              ? "Accepting…"
+              : "Accept"}
           </Button>
         ) : (
           <Button type="button" loading={pending} disabled={pending} onClick={start}>
             Start
           </Button>
         )}
-        {canReject ? (
+        {showReject ? (
           <Button
             type="button"
             variant="secondary"
-            disabled={rejectLocked}
+            disabled={decision.flight === "reject" || decision.settled !== "none"}
             onClick={openReject}
           >
             Reject
@@ -161,17 +177,31 @@ export function OfferActions({ task }: OfferActionsProps) {
         ) : null}
       </div>
       <RejectDialog
-        taskId={rejectOpen ? task.id : null}
-        open={rejectOpen}
+        taskId={task.id}
+        expiresAt={offerWindowEnd(task)}
+        open={dialogOpen}
         onClose={closeReject}
-        onBegin={() => {
-          ops?.silenceOffer(task.id);
+        onRejected={rejected}
+        onAlreadyAccepted={() => {
+          markOfferAccepted(task.id);
+          toast("Task accepted.", "success");
+          done(liveStatusPatch("ASSIGNED", "assigned"));
+        }}
+        onExpired={() => {
+          void autoAcceptExpiredOffer(task.id).then((ok) => {
+            if (ok) {
+              toast("Task accepted.", "success");
+              done(liveStatusPatch("ASSIGNED", "assigned"));
+              return;
+            }
+            ops?.refresh();
+            router.refresh();
+          });
         }}
         onFail={() => {
           ops?.refresh();
           router.refresh();
         }}
-        onDone={rejected}
       />
     </>
   );
