@@ -7,6 +7,5 @@ export const DASHBOARD_NAV = [
   { href: ROUTES.payments, label: "Payments" },
   { href: ROUTES.history, label: "History" },
   { href: ROUTES.notifications, label: "Notifications" },
-  { href: ROUTES.profile, label: "Profile" },
   { href: ROUTES.settings, label: "Settings" },
 ] as const;

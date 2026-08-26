@@ -28,6 +28,10 @@ import {
   type TasksViewMode,
 } from "@/features/tasks/components/task-view-toggle";
 import { useOps } from "@/features/ops/ops-provider";
+import {
+  useRejectedOfferTick,
+  withoutRejectedOffers,
+} from "@/features/ops/rejected-offers";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -132,9 +136,13 @@ export function TaskList({ tasks }: TaskListProps) {
   const [view, setView] = useState<TasksViewMode>("list");
   const [viewReady, setViewReady] = useState(false);
 
+  const rejectedTick = useRejectedOfferTick();
   const allTasks = useMemo(
-    () => mergeTaskLists(tasks, ops?.liveTasks ?? [], ops?.offer),
-    [ops?.liveTasks, ops?.offer, tasks],
+    () =>
+      withoutRejectedOffers(
+        mergeTaskLists(tasks, ops?.liveTasks ?? [], ops?.offer),
+      ),
+    [ops?.liveTasks, ops?.offer, rejectedTick, tasks],
   );
 
   useEffect(() => {

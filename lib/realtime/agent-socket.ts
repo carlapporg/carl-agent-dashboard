@@ -52,3 +52,7 @@ export function connectAgentSocket(origin: string, token: string): Socket {
 export function joinTaskRoom(socket: Socket, taskId: string) {
   socket.emit("joinTask", { taskId });
 }
+
+export function leaveTaskRoom(socket: Socket, taskId: string) {
+  socket.emit("leaveTask", { taskId });
+}

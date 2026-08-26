@@ -1,13 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, type CSSProperties } from "react";
+import { useMemo, type CSSProperties } from "react";
 import { AvailabilityToggle } from "@/features/dashboard/components/availability-toggle";
 import { LiveTaskQueue } from "@/features/dashboard/components/live-task-queue";
 import { MetricStatCard } from "@/features/dashboard/components/metric-stat-card";
 import { ShiftProgress } from "@/features/dashboard/components/shift-progress";
 import { WsConnectionBanner } from "@/features/dashboard/components/ws-connection-banner";
-import { useOps } from "@/features/ops/ops-provider";
+import {
+  useRejectedOfferTick,
+  withoutRejectedOffers,
+} from "@/features/ops/rejected-offers";
 import { hasStartedWork } from "@/features/tasks/lib/workflow";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
@@ -27,16 +30,13 @@ export function DashboardHome({
   tasks,
   presence,
 }: DashboardHomeProps) {
-  const ops = useOps();
   const firstName = welcomeName.split(" ")[0] || welcomeName;
+  const rejectedTick = useRejectedOfferTick();
 
-  const roots = useMemo(() => tasks.filter((t) => !t.parentId), [tasks]);
-
-  useEffect(() => {
-    if (presence) {
-      ops?.setPresence(presence);
-    }
-  }, [ops, presence]);
+  const roots = useMemo(
+    () => withoutRejectedOffers(tasks.filter((t) => !t.parentId)),
+    [rejectedTick, tasks],
+  );
 
   const stats = useMemo(() => {
     const offered = roots.filter((t) => t.backendStatus === "OFFERED").length;

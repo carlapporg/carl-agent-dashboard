@@ -9,7 +9,7 @@ export function AvailabilityStub() {
       <div>
         <p className="text-sm font-semibold text-foreground">Availability</p>
         <div className="mt-1.5 flex flex-wrap items-center gap-2">
-          <Badge variant="success">Online</Badge>
+          <Badge variant="success">Available</Badge>
           <span className="text-sm text-muted">
             Display only — controls are coming soon.
           </span>

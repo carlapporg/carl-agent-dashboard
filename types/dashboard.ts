@@ -1,4 +1,4 @@
-export type AgentAvailability = "available" | "online" | "busy" | "offline";
+export type AgentAvailability = "available" | "busy" | "offline";
 
 export type QueuePreviewItem = {
   id: string;

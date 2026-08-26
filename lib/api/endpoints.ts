@@ -22,7 +22,7 @@ export const API_ENDPOINTS = {
     meUpdate: "/agents/me",
     /** POST { currentPassword, newPassword } — revokes refresh tokens */
     changePassword: "/agents/me/change-password",
-    /** GET | PATCH { status: AVAILABLE|ONLINE|BUSY|OFFLINE } */
+    /** GET | PATCH { status: AVAILABLE|BUSY|OFFLINE } */
     availability: "/agents/me/availability",
     /** GET | PATCH { skills, isGeneralist? } */
     skills: "/agents/me/skills",
@@ -60,9 +60,15 @@ export const API_ENDPOINTS = {
     /** POST multipart { file, durationMs? } */
     taskMessageVoice: (taskId: string) =>
       `/agents/me/tasks/${taskId}/messages/voice` as const,
+    /** POST multipart { file, caption? } */
+    taskMessageImage: (taskId: string) =>
+      `/agents/me/tasks/${taskId}/messages/image` as const,
     /** GET raw audio */
     taskMessageAudio: (taskId: string, messageId: string) =>
       `/agents/me/tasks/${taskId}/messages/${messageId}/audio` as const,
+    /** GET raw image */
+    taskMessageImageFile: (taskId: string, messageId: string) =>
+      `/agents/me/tasks/${taskId}/messages/${messageId}/image` as const,
   },
 
   notifications: {

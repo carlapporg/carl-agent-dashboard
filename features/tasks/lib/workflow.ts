@@ -150,6 +150,7 @@ export function canUpdateAgentStatus(task: Task): boolean {
 }
 
 export function isFailedOrCancelled(task: Task): boolean {
+  if (task.backendStatus === "REJECTED") return false;
   return (
     task.backendStatus === "FAILED" ||
     task.backendStatus === "CANCELLED" ||

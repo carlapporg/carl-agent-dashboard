@@ -7,6 +7,10 @@ import { StatusBadge } from "@/features/tasks/components/status-badge";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { Card } from "@/components/ui/card";
 import {
+  shouldHideRejectedOffer,
+  useRejectedOfferTick,
+} from "@/features/ops/rejected-offers";
+import {
   canMessageClient,
   isFailedOrCancelled,
   messageClientHint,
@@ -40,17 +44,27 @@ export function MessagesView({
   timelines,
   tasks,
 }: MessagesViewProps) {
+  const rejectedTick = useRejectedOfferTick();
+  const visibleConversations = useMemo(
+    () =>
+      conversations.filter((c) => {
+        const row = tasks[c.taskId];
+        return !row || !shouldHideRejectedOffer(row);
+      }),
+    [conversations, rejectedTick, tasks],
+  );
+
   const [selectedId, setSelectedId] = useState(
-    conversations[0]?.taskId ?? null,
+    visibleConversations[0]?.taskId ?? null,
   );
   const selected = useMemo(
-    () => conversations.find((c) => c.taskId === selectedId) ?? null,
-    [conversations, selectedId],
+    () => visibleConversations.find((c) => c.taskId === selectedId) ?? null,
+    [visibleConversations, selectedId],
   );
   const task = selectedId ? tasks[selectedId] : null;
   const timeline = selectedId ? (timelines[selectedId] ?? []) : [];
 
-  if (conversations.length === 0) {
+  if (visibleConversations.length === 0) {
     return (
       <EmptyState
         title="No conversations yet"
@@ -65,12 +79,12 @@ export function MessagesView({
         <div className="shrink-0 border-b border-border px-3 py-2">
           <p className="text-sm font-semibold text-foreground">Inbox</p>
           <p className="text-[11px] text-muted">
-            {conversations.length} conversation
-            {conversations.length === 1 ? "" : "s"}
+            {visibleConversations.length} conversation
+            {visibleConversations.length === 1 ? "" : "s"}
           </p>
         </div>
         <ul className="min-h-0 flex-1 overflow-y-auto">
-          {conversations.map((c) => {
+          {visibleConversations.map((c) => {
             const active = c.taskId === selectedId;
             const rowTask = tasks[c.taskId];
             return (

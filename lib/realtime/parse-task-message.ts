@@ -1,4 +1,6 @@
+import { mediaKindFromMessage } from "@/lib/api/map-task";
 import { agentTaskMessageSchema } from "@/types/agent";
+import type { ChatMediaKind } from "@/types/message";
 
 export type IncomingTaskMessage = {
   taskId: string;
@@ -6,6 +8,9 @@ export type IncomingTaskMessage = {
   content: string;
   clientLabel: string;
   taskTitle?: string;
+  messageId?: string;
+  mediaKind: ChatMediaKind;
+  durationMs?: number | null;
 };
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -29,6 +34,14 @@ function labelFromClient(value: unknown): string | undefined {
   return undefined;
 }
 
+export function previewForIncomingMessage(message: IncomingTaskMessage): string {
+  if (message.mediaKind === "voice") return "Voice message";
+  if (message.mediaKind === "image") {
+    return message.content.trim() || "Photo";
+  }
+  return message.content;
+}
+
 export function parseIncomingTaskMessage(
   payload: unknown,
 ): IncomingTaskMessage | null {
@@ -44,8 +57,13 @@ export function parseIncomingTaskMessage(
   const content =
     (parsed.success ? parsed.data.content : null) ??
     (typeof message.content === "string" ? message.content : null) ??
-    (typeof data.content === "string" ? data.content : null);
-  if (!taskId || !content) return null;
+    (typeof data.content === "string" ? data.content : null) ??
+    "";
+  const mediaKind = parsed.success
+    ? mediaKindFromMessage(parsed.data)
+    : "text";
+  if (!taskId) return null;
+  if (!content && mediaKind === "text") return null;
 
   const sender =
     (parsed.success ? parsed.data.sender : null) ??
@@ -66,5 +84,8 @@ export function parseIncomingTaskMessage(
       labelFromClient(task?.client) ??
       "Client",
     taskTitle,
+    messageId: parsed.success ? parsed.data.id : undefined,
+    mediaKind,
+    durationMs: parsed.success ? parsed.data.durationMs : null,
   };
 }

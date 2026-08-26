@@ -2,7 +2,6 @@ import { z } from "zod";
 
 export const agentPresenceSchema = z.enum([
   "AVAILABLE",
-  "ONLINE",
   "BUSY",
   "OFFLINE",
 ]);
@@ -16,7 +15,10 @@ export type AgentPresenceWrite = AgentPresence;
 export const agentPresenceStateSchema = z
   .object({
     userId: z.string().optional(),
-    status: agentPresenceSchema,
+    status: z.preprocess(
+      (value) => (value === "ONLINE" ? "AVAILABLE" : value),
+      agentPresenceSchema,
+    ),
     isGeneralist: z.boolean().optional(),
     currentTaskId: z.string().nullable().optional(),
     socketId: z.string().nullable().optional(),
@@ -168,9 +170,18 @@ export const agentTaskMessageSchema = z
     senderId: z.string().nullable().optional(),
     content: z.string().optional().default(""),
     messageType: z.string().optional(),
-    durationMs: z.number().nullable().optional(),
+    durationMs: z
+      .union([z.number(), z.string(), z.null()])
+      .optional()
+      .transform((value) => {
+        if (value == null || value === "") return null;
+        const parsed = typeof value === "number" ? value : Number(value);
+        return Number.isFinite(parsed) ? parsed : null;
+      }),
     mimeType: z.string().nullable().optional(),
     audioUrl: z.string().nullable().optional(),
+    imageUrl: z.string().nullable().optional(),
+    caption: z.string().nullable().optional(),
     metadata: z.unknown().nullable().optional(),
     readAt: z.string().nullable().optional(),
     createdAt: z.string().optional().default(""),

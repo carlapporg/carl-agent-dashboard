@@ -6,6 +6,10 @@ import { StatusBadge } from "@/features/tasks/components/status-badge";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  useRejectedOfferTick,
+  withoutRejectedOffers,
+} from "@/features/ops/rejected-offers";
 import { ROUTES } from "@/lib/constants/routes";
 import { cn } from "@/lib/utils/cn";
 import type { Task, TaskStatus } from "@/types/task";
@@ -26,25 +30,30 @@ type HistoryViewProps = {
 export function HistoryView({ tasks }: HistoryViewProps) {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<HistoryFilter>("all");
+  const rejectedTick = useRejectedOfferTick();
+  const visibleTasks = useMemo(
+    () => withoutRejectedOffers(tasks),
+    [rejectedTick, tasks],
+  );
 
   const counts = useMemo(() => {
     const next: Record<HistoryFilter, number> = {
-      all: tasks.length,
+      all: visibleTasks.length,
       completed: 0,
       failed: 0,
       cancelled: 0,
     };
-    for (const task of tasks) {
+    for (const task of visibleTasks) {
       if (task.status === "completed") next.completed += 1;
       if (task.status === "failed") next.failed += 1;
       if (task.status === "cancelled") next.cancelled += 1;
     }
     return next;
-  }, [tasks]);
+  }, [visibleTasks]);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return tasks.filter((t) => {
+    return visibleTasks.filter((t) => {
       if (status !== "all" && t.status !== status) return false;
       if (!needle) return true;
       return (
@@ -54,7 +63,7 @@ export function HistoryView({ tasks }: HistoryViewProps) {
         String(t.number).includes(needle)
       );
     });
-  }, [tasks, q, status]);
+  }, [visibleTasks, q, status]);
 
   return (
     <div className="space-y-4">
@@ -98,9 +107,13 @@ export function HistoryView({ tasks }: HistoryViewProps) {
 
       {filtered.length === 0 ? (
         <EmptyState
-          title={tasks.length === 0 ? "No finished tasks" : "No tasks match these filters"}
+          title={
+            visibleTasks.length === 0
+              ? "No finished tasks"
+              : "No tasks match these filters"
+          }
           description={
-            tasks.length === 0
+            visibleTasks.length === 0
               ? "Completed, failed, and cancelled work will show up here."
               : "Try another status or clear your search."
           }

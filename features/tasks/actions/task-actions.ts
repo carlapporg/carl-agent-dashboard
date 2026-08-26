@@ -11,7 +11,9 @@ import { tasksApi } from "@/lib/api/tasks";
 import { ROUTES } from "@/lib/constants/routes";
 import type { SendTaskConfirmationBody, TaskConfirmation } from "@/types/confirmation";
 
-export type TaskActionResult = { ok: true } | { ok: false; message: string };
+export type TaskActionResult =
+  | { ok: true }
+  | { ok: false; message: string; gone?: boolean };
 
 function revalidateWorkQueues() {
   revalidatePath(ROUTES.tasks);
@@ -32,7 +34,7 @@ function isGoneStatus(status: number): boolean {
 
 function failOffer(error: unknown): TaskActionResult {
   if (isApiError(error) && isGoneStatus(error.status)) {
-    return { ok: false, message: USER_MESSAGES.offerGone };
+    return { ok: false, message: USER_MESSAGES.offerGone, gone: true };
   }
   return fail(error);
 }
@@ -72,6 +74,8 @@ export async function rejectTaskAction(
   try {
     await tasksApi.reject(taskId, reason);
     revalidateWorkQueues();
+    revalidatePath(ROUTES.history);
+    revalidatePath(ROUTES.messages);
     return { ok: true };
   } catch (error) {
     return failOffer(error);

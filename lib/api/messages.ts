@@ -67,6 +67,59 @@ export const messagesApi = {
         body: text,
         createdAt: new Date().toISOString(),
         visibleToCustomer: true,
+        mediaKind: "text",
+      }
+    );
+  },
+
+  async sendVoice(taskId: string, form: FormData): Promise<TimelineEvent> {
+    const row = await apiRequest(API_ENDPOINTS.agents.taskMessageVoice(taskId), {
+      method: "POST",
+      body: form,
+      schema: sendResultSchema,
+      looseEnvelope: true,
+      dedupe: false,
+      timeoutMs: 90_000,
+    });
+    const event = toTimeline(row, taskId);
+    const durationRaw = form.get("durationMs");
+    const durationMs =
+      typeof durationRaw === "string" ? Number(durationRaw) : undefined;
+    return (
+      event ?? {
+        id: `local-${Date.now()}`,
+        taskId,
+        kind: "agent_message",
+        body: "",
+        createdAt: new Date().toISOString(),
+        visibleToCustomer: true,
+        mediaKind: "voice",
+        durationMs: Number.isFinite(durationMs) ? durationMs : null,
+      }
+    );
+  },
+
+  async sendImage(taskId: string, form: FormData): Promise<TimelineEvent> {
+    const row = await apiRequest(API_ENDPOINTS.agents.taskMessageImage(taskId), {
+      method: "POST",
+      body: form,
+      schema: sendResultSchema,
+      looseEnvelope: true,
+      dedupe: false,
+      timeoutMs: 90_000,
+    });
+    const event = toTimeline(row, taskId);
+    const captionRaw = form.get("caption");
+    const caption = typeof captionRaw === "string" ? captionRaw : "";
+    return (
+      event ?? {
+        id: `local-${Date.now()}`,
+        taskId,
+        kind: "agent_message",
+        body: caption,
+        createdAt: new Date().toISOString(),
+        visibleToCustomer: true,
+        mediaKind: "image",
       }
     );
   },

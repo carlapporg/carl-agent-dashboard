@@ -12,7 +12,7 @@ import {
   type ReactNode,
 } from "react";
 import { setAvailabilityAction } from "@/features/agents/actions";
-import { offerWasAccepted } from "@/features/ops/auto-accept-offer";
+import { offerWasAccepted, isRejectingOrRejected } from "@/features/ops/auto-accept-offer";
 import { useNotifications } from "@/features/notifications/notification-provider";
 import { useToast } from "@/components/providers/toast-provider";
 import { mapSocketAssignedPayload, uiStatusFromAgent } from "@/lib/api/map-task";
@@ -23,6 +23,7 @@ import {
 } from "@/lib/auth/access-token-bus";
 import { readJwtExpiryMs } from "@/lib/auth/access-jwt";
 import {
+  normalizePresence,
   readChosenPresence,
   writeChosenPresence,
 } from "@/lib/agent/presence";
@@ -42,8 +43,8 @@ import {
   parsePaymentNotification,
   parseWaitingForAgent,
 } from "@/lib/notifications/from-events";
-import { parseIncomingTaskMessage } from "@/lib/realtime/parse-task-message";
-import { connectAgentSocket, joinTaskRoom } from "@/lib/realtime/agent-socket";
+import { parseIncomingTaskMessage, previewForIncomingMessage } from "@/lib/realtime/parse-task-message";
+import { connectAgentSocket, joinTaskRoom, leaveTaskRoom } from "@/lib/realtime/agent-socket";
 import { ROUTES } from "@/lib/constants/routes";
 import { parseTaskConfirmationPayload, type TaskConfirmation } from "@/types/confirmation";
 import type { Task } from "@/types/task";
@@ -123,6 +124,9 @@ type LiveChatEvent = {
   taskId: string;
   sender: string;
   content: string;
+  messageId?: string;
+  mediaKind?: "text" | "voice" | "image";
+  durationMs?: number | null;
 };
 
 type OpsContextValue = {
@@ -133,6 +137,8 @@ type OpsContextValue = {
   liveTasks: Task[];
   dismissOffer: () => void;
   patchLiveTask: (taskId: string, patch: Partial<Task>, fallback?: Task) => void;
+  dropLiveTask: (taskId: string) => void;
+  silenceOffer: (taskId: string) => void;
   queuePulse: number;
   livePulse: boolean;
   liveChat: LiveChatEvent | null;
@@ -185,7 +191,7 @@ export function AgentOpsProvider({
   const [socketToken, setSocketToken] = useState(accessToken);
   const [connected, setConnected] = useState(false);
   const [presence, setPresenceState] = useState<AgentPresence>(
-    initialPresence ?? "ONLINE",
+    normalizePresence(initialPresence ?? "AVAILABLE"),
   );
   const [offer, setOffer] = useState<Task | null>(null);
   const [liveTasks, setLiveTasks] = useState<Task[]>([]);
@@ -199,7 +205,7 @@ export function AgentOpsProvider({
   presenceRef.current = presence;
 
   const setPresence = useCallback((status: AgentPresence) => {
-    setPresenceState(status);
+    setPresenceState(normalizePresence(status));
   }, []);
 
   const refresh = useCallback(() => {
@@ -210,12 +216,26 @@ export function AgentOpsProvider({
   }, [router]);
 
   const refreshLists = useCallback(() => {
+    const viewingId = taskIdFromPath(pathnameRef.current);
+    if (viewingId && isRejectingOrRejected(viewingId)) return;
     refresh();
   }, [refresh]);
 
   const dismissOffer = useCallback(() => setOffer(null), []);
 
+  const silenceOffer = useCallback((taskId: string) => {
+    if (socketRef.current) leaveTaskRoom(socketRef.current, taskId);
+    notificationsRef.current.dismiss(`offer:${taskId}`);
+    setOffer((current) => (current?.id === taskId ? null : current));
+  }, []);
+
+  const dropLiveTask = useCallback((taskId: string) => {
+    silenceOffer(taskId);
+    setLiveTasks((prev) => prev.filter((row) => row.id !== taskId));
+  }, [silenceOffer]);
+
   const upsertLiveTask = useCallback((task: Task) => {
+    if (isRejectingOrRejected(task.id)) return;
     setLiveTasks((prev) => {
       const index = prev.findIndex((row) => row.id === task.id);
       if (index === -1) return [task, ...prev];
@@ -226,6 +246,7 @@ export function AgentOpsProvider({
   }, []);
 
   const patchLiveTask = useCallback((taskId: string, patch: Partial<Task>, fallback?: Task) => {
+    if (isRejectingOrRejected(taskId)) return;
     const extras = {
       ...patch,
       updatedAt: patch.updatedAt ?? new Date().toISOString(),
@@ -262,6 +283,8 @@ export function AgentOpsProvider({
   upsertLiveTaskRef.current = upsertLiveTask;
   const patchLiveTaskRef = useRef(patchLiveTask);
   patchLiveTaskRef.current = patchLiveTask;
+  const silenceOfferRef = useRef(silenceOffer);
+  silenceOfferRef.current = silenceOffer;
   const setLiveConfirmationRef = useRef(setLiveConfirmation);
   setLiveConfirmationRef.current = setLiveConfirmation;
   const liveTasksRef = useRef(liveTasks);
@@ -269,19 +292,15 @@ export function AgentOpsProvider({
 
   useEffect(() => {
     const chosen = readChosenPresence();
-    if (initialPresence && initialPresence !== "OFFLINE") {
-      setPresenceState(initialPresence);
-      if (!chosen) writeChosenPresence(initialPresence);
-      return;
-    }
-    if (chosen && chosen !== "OFFLINE") {
+    if (chosen) {
       setPresenceState(chosen);
-      void setAvailabilityAction(chosen)
-        .then((row) => setPresenceState(row.status))
-        .catch(() => undefined);
       return;
     }
-    if (initialPresence) setPresenceState(initialPresence);
+    if (initialPresence) {
+      const next = normalizePresence(initialPresence);
+      setPresenceState(next);
+      writeChosenPresence(next);
+    }
   }, [initialPresence]);
 
   useEffect(() => {
@@ -325,25 +344,30 @@ export function AgentOpsProvider({
 
     function reassertPresence() {
       const chosen = readChosenPresence();
-      if (chosen === "OFFLINE") return;
-      const restore =
-        chosen ??
-        (presenceRef.current !== "OFFLINE" ? presenceRef.current : "AVAILABLE");
+      if (!chosen || chosen === "OFFLINE") return;
+      const restore = normalizePresence(chosen);
       writeChosenPresence(restore);
-      void setAvailabilityAction(restore)
-        .then((row) => setPresenceState(row.status))
-        .catch(() => undefined);
+      setPresenceState(restore);
+      void setAvailabilityAction(restore).catch(() => undefined);
     }
 
     function onConnect() {
       setConnected(true);
       const viewingId = taskIdFromPath(pathnameRef.current);
-      if (viewingId) joinTaskRoom(socket, viewingId);
+      if (viewingId && !isRejectingOrRejected(viewingId)) {
+        joinTaskRoom(socket, viewingId);
+      }
       reassertPresence();
     }
 
     function onDisconnect() {
       setConnected(false);
+    }
+
+    function forgetIfRejecting(taskId: string | undefined): boolean {
+      if (!taskId || !isRejectingOrRejected(taskId)) return false;
+      silenceOfferRef.current(taskId);
+      return true;
     }
 
     function onIncomingTask(payload: unknown) {
@@ -354,13 +378,26 @@ export function AgentOpsProvider({
           const id = extractTaskId(payload);
           return id ? stubOffer(id, payload) : null;
         })();
-      if (task) {
-        setOffer(task);
-        upsertLiveTaskRef.current(task);
-        joinTaskRoom(socket, task.id);
-        notificationsRef.current.push(notificationFromOffer(task));
-        playNotificationChime();
+      if (!task) {
+        pulseQueue();
+        refreshListsRef.current();
+        return;
       }
+      if (forgetIfRejecting(task.id)) return;
+      const alreadyKnown = liveTasksRef.current.some((row) => row.id === task.id);
+      if (alreadyKnown) {
+        if (!isRejectingOrRejected(task.id)) {
+          upsertLiveTaskRef.current(task);
+          refreshListsRef.current();
+        }
+        pulseQueue();
+        return;
+      }
+      setOffer(task);
+      upsertLiveTaskRef.current(task);
+      joinTaskRoom(socket, task.id);
+      notificationsRef.current.push(notificationFromOffer(task));
+      playNotificationChime();
       pulseQueue();
       refreshListsRef.current();
     }
@@ -368,6 +405,7 @@ export function AgentOpsProvider({
     function onMessage(payload: unknown) {
       const incoming = parseIncomingTaskMessage(payload);
       if (!incoming) return;
+      if (isRejectingOrRejected(incoming.taskId)) return;
       joinTaskRoom(socket, incoming.taskId);
       if (incoming.sender === "USER") {
         setLiveChat({
@@ -375,23 +413,24 @@ export function AgentOpsProvider({
           taskId: incoming.taskId,
           sender: incoming.sender,
           content: incoming.content,
+          messageId: incoming.messageId,
+          mediaKind: incoming.mediaKind,
+          durationMs: incoming.durationMs,
         });
       }
       if (incoming.sender !== "USER") return;
       if (notificationsRef.current.isViewingTaskInbox(incoming.taskId)) return;
+      const preview = previewForIncomingMessage(incoming);
       notificationsRef.current.push(
         notificationFromClientMessage({
           taskId: incoming.taskId,
-          content: incoming.content,
+          content: preview,
           clientLabel: incoming.clientLabel,
           taskTitle: incoming.taskTitle,
+          messageId: incoming.messageId,
         }),
       );
       playNotificationChime();
-      const preview =
-        incoming.content.length > 90
-          ? `${incoming.content.slice(0, 87)}…`
-          : incoming.content;
       const lines = [
         incoming.clientLabel,
         preview,
@@ -476,10 +515,11 @@ export function AgentOpsProvider({
 
     function onStatusChanged(payload: unknown) {
       const mapped = mapSocketAssignedPayload(payload);
+      const id = mapped?.id ?? extractTaskId(payload);
+      if (forgetIfRejecting(id)) return;
       if (mapped) {
         upsertLiveTaskRef.current(mapped);
       } else {
-        const id = extractTaskId(payload);
         const status = extractStatus(payload);
         if (id && status) {
           patchLiveTaskRef.current(id, {
@@ -500,6 +540,7 @@ export function AgentOpsProvider({
     function onMissed(payload: unknown) {
       const item = parseMissedTask(payload);
       const id = item?.taskId ?? extractTaskId(payload);
+      if (forgetIfRejecting(id)) return;
       const live = id
         ? liveTasksRef.current.find((row) => row.id === id)
         : undefined;
@@ -524,6 +565,7 @@ export function AgentOpsProvider({
 
     function onTaskUpdated(payload: unknown) {
       const mapped = mapSocketAssignedPayload(payload);
+      if (forgetIfRejecting(mapped?.id ?? extractTaskId(payload))) return;
       if (mapped) upsertLiveTaskRef.current(mapped);
       pulseQueue();
       refreshListsRef.current();
@@ -620,6 +662,7 @@ export function AgentOpsProvider({
   useEffect(() => {
     const viewingId = openTaskId ?? taskIdFromPath(pathname);
     if (!viewingId || !socketRef.current?.connected) return;
+    if (isRejectingOrRejected(viewingId)) return;
     joinTaskRoom(socketRef.current, viewingId);
   }, [openTaskId, pathname]);
 
@@ -632,6 +675,8 @@ export function AgentOpsProvider({
       liveTasks,
       dismissOffer,
       patchLiveTask,
+      dropLiveTask,
+      silenceOffer,
       queuePulse,
       livePulse,
       liveChat,
@@ -642,6 +687,7 @@ export function AgentOpsProvider({
     [
       connected,
       dismissOffer,
+      dropLiveTask,
       liveChat,
       liveConfirmation,
       livePulse,
@@ -653,6 +699,7 @@ export function AgentOpsProvider({
       refresh,
       setLiveConfirmation,
       setPresence,
+      silenceOffer,
     ],
   );
 

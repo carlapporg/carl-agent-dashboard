@@ -7,7 +7,7 @@ import {
   type AgentTaskMessage,
   type AgentTaskStatus,
 } from "@/types/agent";
-import type { TimelineEvent } from "@/types/message";
+import type { ChatMediaKind, TimelineEvent } from "@/types/message";
 import type { Task, TaskStatus } from "@/types/task";
 
 export function uiStatusFromAgent(status: AgentTaskStatus): TaskStatus {
@@ -159,6 +159,37 @@ export function mapSocketAssignedPayload(payload: unknown): Task | null {
   return retry.success ? mapAgentTaskToUi(retry.data) : null;
 }
 
+function captionFromMetadata(metadata: unknown): string {
+  if (!metadata || typeof metadata !== "object") return "";
+  const record = metadata as Record<string, unknown>;
+  return typeof record.caption === "string" ? record.caption : "";
+}
+
+export function mediaKindFromMessage(message: AgentTaskMessage): ChatMediaKind {
+  const type = (message.messageType ?? "").toUpperCase();
+  if (type.includes("VOICE") || type === "AUDIO") return "voice";
+  if (type.includes("IMAGE") || type === "PHOTO" || type === "PICTURE") {
+    return "image";
+  }
+  if (message.mimeType?.startsWith("audio/")) return "voice";
+  if (message.mimeType?.startsWith("image/")) return "image";
+  if (message.audioUrl) return "voice";
+  if (message.imageUrl) return "image";
+  const meta = message.metadata;
+  if (meta && typeof meta === "object") {
+    const record = meta as Record<string, unknown>;
+    const metaType = String(record.messageType ?? record.type ?? "").toUpperCase();
+    if (metaType.includes("VOICE") || metaType === "AUDIO") return "voice";
+    if (metaType.includes("IMAGE")) return "image";
+    if (typeof record.audioUrl === "string" && record.audioUrl) return "voice";
+    if (typeof record.imageUrl === "string" && record.imageUrl) return "image";
+  }
+  if (typeof message.durationMs === "number" && message.durationMs > 0) {
+    return "voice";
+  }
+  return "text";
+}
+
 export function mapAgentMessageToTimeline(
   message: AgentTaskMessage,
 ): TimelineEvent {
@@ -168,13 +199,21 @@ export function mapAgentMessageToTimeline(
       : message.sender === "USER"
         ? "customer_message"
         : "system";
+  const mediaKind = mediaKindFromMessage(message);
 
   return {
     id: message.id,
     taskId: message.taskId,
     kind,
-    body: message.content,
+    body:
+      message.content ||
+      message.caption ||
+      captionFromMetadata(message.metadata) ||
+      "",
     createdAt: message.createdAt,
     visibleToCustomer: message.sender !== "SYSTEM",
+    mediaKind,
+    durationMs: message.durationMs,
+    mimeType: message.mimeType,
   };
 }

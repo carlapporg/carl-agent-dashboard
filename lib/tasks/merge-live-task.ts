@@ -1,4 +1,9 @@
 import type { AgentTaskStatus } from "@/types/agent";
+import {
+  isMarkedRejected,
+  isPendingReject,
+} from "@/features/ops/rejected-offers";
+import { isRejectingOrRejected } from "@/features/ops/auto-accept-offer";
 import type { Task } from "@/types/task";
 
 const RANK: Record<string, number> = {
@@ -115,22 +120,41 @@ export function mergeByProgress(base: Task, incoming: Task): Task {
   return withFreshDeadline(base, base, incoming);
 }
 
+function pinWhileRejecting(task: Task): Task {
+  if (!isRejectingOrRejected(task.id) && !isPendingReject(task.id)) return task;
+  if (task.backendStatus === "OFFERED" || task.status === "queued") return task;
+  return {
+    ...task,
+    backendStatus: "OFFERED",
+    status: "queued",
+  };
+}
+
 export function mergeTaskLists(
   seed: Task[],
   live: Task[],
   offer?: Task | null,
 ): Task[] {
   const byId = new Map<string, Task>();
-  for (const task of seed) byId.set(task.id, task);
+  for (const task of seed) {
+    if (isMarkedRejected(task.id) && !isPendingReject(task.id)) continue;
+    byId.set(task.id, pinWhileRejecting(task));
+  }
   for (const task of live) {
+    if (isMarkedRejected(task.id) && !isPendingReject(task.id)) {
+      byId.delete(task.id);
+      continue;
+    }
     const existing = byId.get(task.id);
-    byId.set(task.id, existing ? mergeByProgress(existing, task) : task);
+    const next = existing ? mergeByProgress(existing, task) : task;
+    byId.set(task.id, pinWhileRejecting(next));
   }
-  if (offer) {
+  if (offer && !(isMarkedRejected(offer.id) && !isPendingReject(offer.id))) {
     const existing = byId.get(offer.id);
-    byId.set(offer.id, existing ? mergeByProgress(existing, offer) : offer);
+    const next = existing ? mergeByProgress(existing, offer) : offer;
+    byId.set(offer.id, pinWhileRejecting(next));
   }
-  return [...byId.values()];
+  return [...byId.values()].filter((task) => task.backendStatus !== "REJECTED");
 }
 
 export function liveStatusPatch(

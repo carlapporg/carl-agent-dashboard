@@ -10,6 +10,7 @@ import {
 } from "@/features/tasks/actions/task-actions";
 import { OfferActions } from "@/features/dashboard/components/offer-actions";
 import { OfferCountdown } from "@/features/ops/offer-countdown";
+import { markOfferRejected } from "@/features/ops/rejected-offers";
 import { ItineraryPanel } from "@/features/itinerary/components/itinerary-panel";
 import { TaskActionLog } from "@/features/tasks/components/task-action-log";
 import { TaskAgentNotes } from "@/features/tasks/components/task-agent-notes";
@@ -228,8 +229,11 @@ export function TaskWorkspace({
         toast(result.message, "error");
         return;
       }
-      setTask(withBackendStatus(task, "REJECTED"));
-      ops?.patchLiveTask(task.id, liveStatusPatch("REJECTED", "cancelled"));
+      markOfferRejected(task.id);
+      ops?.dropLiveTask(task.id);
+      ops?.dismissOffer();
+      toast("Task rejected. It will be offered to another agent.", "success");
+      router.replace(ROUTES.tasks);
     });
   }
 

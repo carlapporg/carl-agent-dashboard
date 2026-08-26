@@ -104,12 +104,18 @@ export const dashboardApi = {
     for (const task of tasks) {
       const timeline = await messagesApi.list(task.id).catch(() => []);
       const last = timeline[timeline.length - 1];
+      const lastMessage =
+        last?.mediaKind === "voice"
+          ? "Voice message"
+          : last?.mediaKind === "image"
+            ? last.body.trim() || "Photo"
+            : last?.body ?? "No messages yet";
       conversations.push({
         taskId: task.id,
         taskNumber: task.number,
         taskTitle: task.title,
         taskStatus: task.status,
-        lastMessage: last?.body ?? "No messages yet",
+        lastMessage,
         lastActivityAt: last?.createdAt ?? task.updatedAt,
         unreadCount: 0,
       });

@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { TaskWorkspace } from "@/features/tasks/components/task-workspace";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { PageShell } from "@/components/ui/page-shell";
 import { isApiError } from "@/lib/api/errors";
 import { isClosedTask } from "@/features/tasks/lib/workflow";
+import { ROUTES } from "@/lib/constants/routes";
 import {
   getTaskCached,
   getTaskConfirmationCached,
@@ -44,7 +45,14 @@ export default async function TaskWorkspacePage({ params }: TaskPageProps) {
         </PageShell>
       );
     }
+    if (isApiError(error) && (error.status === 403 || error.status === 404)) {
+      redirect(ROUTES.tasks);
+    }
     notFound();
+  }
+
+  if (task.backendStatus === "REJECTED") {
+    redirect(ROUTES.tasks);
   }
 
   const timeline = await listTaskMessagesCached(task.id).catch(() => []);

@@ -9,6 +9,10 @@ import { useOps } from "@/features/ops/ops-provider";
 import { Card } from "@/components/ui/card";
 import { ROUTES } from "@/lib/constants/routes";
 import { cn } from "@/lib/utils/cn";
+import {
+  useRejectedOfferTick,
+  withoutRejectedOffers,
+} from "@/features/ops/rejected-offers";
 import { mergeTaskLists } from "@/lib/tasks/merge-live-task";
 import { offerWindowEnd } from "@/types/agent";
 import type { Task } from "@/types/task";
@@ -38,8 +42,12 @@ export function LiveTaskQueue({ seedTasks }: LiveTaskQueueProps) {
   const prevIds = useRef<Set<string>>(new Set(seedTasks.map((t) => t.id)));
   const [newIds, setNewIds] = useState<Set<string>>(new Set());
 
+  const rejectedTick = useRejectedOfferTick();
+
   const items = useMemo(() => {
-    return mergeTaskLists(seedTasks, ops?.liveTasks ?? [], ops?.offer)
+    return withoutRejectedOffers(
+      mergeTaskLists(seedTasks, ops?.liveTasks ?? [], ops?.offer),
+    )
       .filter((t) => !t.parentId)
       .filter(
         (t) =>
@@ -57,7 +65,7 @@ export function LiveTaskQueue({ seedTasks }: LiveTaskQueueProps) {
         (a, b) =>
           new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
       );
-  }, [ops?.liveTasks, ops?.offer, seedTasks]);
+  }, [ops?.liveTasks, ops?.offer, rejectedTick, seedTasks]);
 
   useEffect(() => {
     const next = new Set(items.map((t) => t.id));

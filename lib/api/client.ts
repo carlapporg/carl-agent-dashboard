@@ -33,9 +33,12 @@ export type ApiRequestOptions<TSchema extends z.ZodTypeAny> = {
   authContext?: "login" | "api" | "password";
   /** Accept `{ data }` or a raw array/object body (list endpoints). */
   looseEnvelope?: boolean;
+  /** Override the default request timeout. */
+  timeoutMs?: number;
 };
 
 const REQUEST_TIMEOUT_MS = 20_000;
+const UPLOAD_TIMEOUT_MS = 90_000;
 const inFlight = new Map<string, Promise<unknown>>();
 
 function statusToCode(status: number, kind: string): ApiErrorBody["code"] {
@@ -60,12 +63,19 @@ function joinApiUrl(path: string): string {
   return `${base}${suffix}`;
 }
 
+function isFormDataBody(body: unknown): body is FormData {
+  return typeof FormData !== "undefined" && body instanceof FormData;
+}
+
 function dedupeKey(
   method: HttpMethod,
   url: string,
   body: unknown,
   token: string | null,
 ): string {
+  if (isFormDataBody(body)) {
+    return `${method}:${url}:${token ?? ""}:form`;
+  }
   return `${method}:${url}:${token ?? ""}:${body ? JSON.stringify(body) : ""}`;
 }
 
@@ -202,6 +212,32 @@ async function refreshAccessTokenOnce(): Promise<RefreshAttempt> {
   return { ok: true, token: result.accessToken };
 }
 
+function combineSignals(
+  extra: AbortSignal | undefined,
+  timeoutMs: number,
+): AbortSignal {
+  const timeout = AbortSignal.timeout(timeoutMs);
+  if (extra && typeof AbortSignal.any === "function") {
+    return AbortSignal.any([extra, timeout]);
+  }
+  return timeout;
+}
+
+function nestHeaders(
+  url: string,
+  token: string | null,
+  extra?: HeadersInit,
+  jsonBody = false,
+): HeadersInit {
+  return {
+    Accept: jsonBody ? "application/json" : "*/*",
+    ...(jsonBody ? { "Content-Type": "application/json" } : {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(/ngrok/i.test(url) ? { "ngrok-skip-browser-warning": "1" } : {}),
+    ...extra,
+  };
+}
+
 async function executeRequest<TSchema extends z.ZodTypeAny>(
   path: string,
   options: ApiRequestOptions<TSchema>,
@@ -211,28 +247,27 @@ async function executeRequest<TSchema extends z.ZodTypeAny>(
   const method = options.method ?? "GET";
   const url = joinApiUrl(path);
   const context = options.authContext ?? "api";
-
-  const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
-  const signal =
-    options.signal && typeof AbortSignal.any === "function"
-      ? AbortSignal.any([options.signal, timeout])
-      : timeout;
+  const form = isFormDataBody(options.body);
+  const timeoutMs =
+    options.timeoutMs ?? (form ? UPLOAD_TIMEOUT_MS : REQUEST_TIMEOUT_MS);
+  const signal = combineSignals(options.signal, timeoutMs);
 
   let response: Response;
   try {
     response = await fetch(url, {
       method,
       signal,
-      headers: {
-        Accept: "application/json",
-        ...(options.body ? { "Content-Type": "application/json" } : {}),
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(/ngrok/i.test(url)
-          ? { "ngrok-skip-browser-warning": "1" }
-          : {}),
-        ...options.headers,
-      },
-      body: options.body ? JSON.stringify(options.body) : undefined,
+      headers: nestHeaders(
+        url,
+        token,
+        options.headers,
+        Boolean(options.body) && !form,
+      ),
+      body: form
+        ? (options.body as FormData)
+        : options.body
+          ? JSON.stringify(options.body)
+          : undefined,
       cache: "no-store",
     });
   } catch {
@@ -299,7 +334,8 @@ export async function apiRequest<TSchema extends z.ZodTypeAny>(
   }
 
   const method = options.method ?? "GET";
-  const shouldDedupe = options.dedupe ?? method === "GET";
+  const shouldDedupe =
+    (options.dedupe ?? method === "GET") && !isFormDataBody(options.body);
   const token = options.skipAuth
     ? null
     : options.token ??
@@ -327,4 +363,87 @@ export async function apiRequest<TSchema extends z.ZodTypeAny>(
   }
 
   return requestPromise;
+}
+
+type NestFetchInit = {
+  method?: HttpMethod;
+  body?: BodyInit | null;
+  headers?: HeadersInit;
+  timeoutMs?: number;
+  skipAuth?: boolean;
+  skipRefresh?: boolean;
+  token?: string | null;
+};
+
+async function nestFetchOnce(
+  path: string,
+  init: NestFetchInit,
+  token: string | null,
+  hasRetried: boolean,
+): Promise<Response> {
+  const method = init.method ?? "GET";
+  const url = joinApiUrl(path);
+  const timeoutMs = init.timeoutMs ?? REQUEST_TIMEOUT_MS;
+  const signal = combineSignals(undefined, timeoutMs);
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method,
+      signal,
+      headers: nestHeaders(url, token, init.headers, false),
+      body: init.body ?? undefined,
+      cache: "no-store",
+    });
+  } catch {
+    throwMappedError(0, undefined, undefined, "api");
+  }
+
+  if (
+    response.status === 401 &&
+    !init.skipAuth &&
+    !init.skipRefresh &&
+    !hasRetried
+  ) {
+    const refreshed = await tryRefreshAccessToken();
+    if (refreshed.ok) {
+      rememberAccessToken(refreshed.token);
+      return nestFetchOnce(path, init, refreshed.token, true);
+    }
+    if (refreshed.reason === "network") {
+      throwMappedError(0, undefined, undefined, "api");
+    }
+    if (typeof window !== "undefined") {
+      window.location.assign("/session/clear?reason=expired");
+    }
+    throwMappedError(401, undefined, undefined, "api");
+  }
+
+  return response;
+}
+
+/** Raw Nest fetch for binary streams (audio / image). */
+export async function nestFetch(
+  path: string,
+  init: NestFetchInit = {},
+): Promise<Response> {
+  if (!env.isApiConfigured) {
+    throw new ApiError(
+      {
+        code: "NOT_CONFIGURED",
+        message: USER_MESSAGES.serverUnavailable,
+      },
+      503,
+      true,
+      "server",
+    );
+  }
+
+  const token = init.skipAuth
+    ? null
+    : init.token ??
+      memoryAccessToken ??
+      (await resolveAccessToken(init.token));
+
+  return nestFetchOnce(path, init, token, false);
 }

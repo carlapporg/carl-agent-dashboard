@@ -18,19 +18,23 @@ const mutationResultSchema = z.union([
 const INBOX_FALLBACK: Record<InboxFilter, readonly string[]> = {
   OFFERED: ["QUEUED"],
   ACTIVE: ["ASSIGNED", "IN_PROGRESS", "WAITING_FOR_USER", "WAITING_FOR_AGENT"],
-  HISTORY: ["COMPLETED", "FAILED", "CANCELLED", "REJECTED"],
+  HISTORY: ["COMPLETED", "FAILED", "CANCELLED"],
 };
 
 function isAgentTask(row: unknown): row is AgentTask {
   return agentTaskSchema.safeParse(row).success;
 }
 
+function isRejectedOffer(task: Task): boolean {
+  return task.backendStatus === "REJECTED";
+}
+
 function isHistoryTask(task: Task): boolean {
+  if (isRejectedOffer(task)) return false;
   return (
     task.backendStatus === "COMPLETED" ||
     task.backendStatus === "FAILED" ||
     task.backendStatus === "CANCELLED" ||
-    task.backendStatus === "REJECTED" ||
     task.status === "completed" ||
     task.status === "failed" ||
     task.status === "cancelled"
@@ -188,7 +192,7 @@ export const tasksApi = {
       const tasks = mergeById([
         primary.ok ? primary.tasks : [],
         extra.tasks,
-      ]).filter(isHistoryTask);
+      ]).filter((task) => isHistoryTask(task) && !isRejectedOffer(task));
       if (primary.ok || extra.ok) return tasks;
       throwIfListUnreachable({
         ok: false,
@@ -247,7 +251,7 @@ export const tasksApi = {
       });
     }
 
-    return tasks.filter((task) => !isHistoryTask(task));
+    return tasks.filter((task) => !isHistoryTask(task) && !isRejectedOffer(task));
   },
 
   async list(filters: TaskListFilters = {}): Promise<Task[]> {

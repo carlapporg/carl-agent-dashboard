@@ -11,11 +11,24 @@ import {
   useState,
 } from "react";
 import { sendUpdateAction } from "@/features/tasks/actions/task-actions";
+import { ChatAudioPlayer } from "@/features/tasks/components/chat-audio-player";
+import {
+  ChatImageBubble,
+  ChatImageLightbox,
+} from "@/features/tasks/components/chat-image-bubble";
 import { useOps } from "@/features/ops/ops-provider";
 import { CHAT_TEMPLATES } from "@/features/tasks/lib/workflow";
 import { useToast } from "@/components/providers/toast-provider";
+import {
+  formatClockMs,
+  isImageFile,
+  pickRecorderMime,
+  TASK_MEDIA,
+  uploadTaskMedia,
+  voiceFilename,
+} from "@/lib/api/task-media";
 import { cn } from "@/lib/utils/cn";
-import type { TimelineEvent, TimelineEventKind } from "@/types/message";
+import type { ChatMediaKind, TimelineEvent, TimelineEventKind } from "@/types/message";
 
 export type TaskChatThreadHandle = {
   prefills: (text: string) => void;
@@ -38,6 +51,16 @@ type TaskChatThreadProps = {
 
 type ChatItem = TimelineEvent & {
   delivery?: "sending" | "failed";
+  uploadProgress?: number;
+};
+
+type PendingMedia = {
+  kind: Exclude<ChatMediaKind, "text">;
+  blob: Blob;
+  filename: string;
+  durationMs?: number;
+  caption?: string;
+  previewUrl: string;
 };
 
 type MessageTone = "agent" | "client" | "system" | "important";
@@ -139,7 +162,12 @@ function importantTone(event: ChatItem): "ok" | "warn" | "bad" {
 
 function mergeThread(server: TimelineEvent[], extras: ChatItem[]): ChatItem[] {
   const ids = new Set(server.map((item) => item.id));
-  const extra = extras.filter((item) => !ids.has(item.id));
+  const extra: ChatItem[] = [];
+  for (const item of extras) {
+    if (ids.has(item.id)) continue;
+    ids.add(item.id);
+    extra.push(item);
+  }
   return [...server, ...extra].sort(
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
   );
@@ -190,6 +218,46 @@ function resizeComposer(el: HTMLTextAreaElement | null) {
   el.style.height = `${Math.min(el.scrollHeight, 112)}px`;
 }
 
+function MicIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden className={className}>
+      <path
+        d="M12 15.2a3.2 3.2 0 0 0 3.2-3.2V7A3.2 3.2 0 0 0 8.8 7v4.8A3.2 3.2 0 0 0 12 15.2Z"
+        stroke="currentColor"
+        strokeWidth="1.7"
+      />
+      <path
+        d="M6.8 12a5.2 5.2 0 0 0 10.4 0M12 17.2V20"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function AttachIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden className={className}>
+      <path
+        d="m8.4 13.2 5.3-5.3a2.6 2.6 0 1 1 3.7 3.7l-6.6 6.6a4 4 0 0 1-5.6-5.6l6.4-6.4"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function StopIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className={className}>
+      <rect x="7" y="7" width="10" height="10" rx="1.5" />
+    </svg>
+  );
+}
+
 function SendIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden className={className}>
@@ -208,13 +276,16 @@ const ChatBubble = memo(function ChatBubble({
   role,
   grouped,
   onRetry,
+  onOpenImage,
 }: {
   event: ChatItem;
   role: "agent" | "client";
   grouped: boolean;
   onRetry?: (event: ChatItem) => void;
+  onOpenImage: (src: string) => void;
 }) {
   const fromAgent = role === "agent";
+  const mediaKind = event.mediaKind ?? "text";
   return (
     <div
       style={{ contentVisibility: "auto", containIntrinsicSize: "0 40px" }}
@@ -231,19 +302,56 @@ const ChatBubble = memo(function ChatBubble({
             : "rounded-2xl rounded-bl-md bg-[#eef0f3] text-foreground",
           grouped && fromAgent && "rounded-tr-md",
           grouped && !fromAgent && "rounded-tl-md",
+          mediaKind === "image" && "overflow-hidden p-1.5",
+          mediaKind === "voice" && "min-w-52",
           event.delivery === "failed" && "bg-red-600",
         )}
       >
-        <p className="whitespace-pre-wrap wrap-break-word">{event.body}</p>
-        {event.delivery === "sending" || event.delivery === "failed" ? (
+        {mediaKind === "voice" ? (
+          <ChatAudioPlayer
+            key={`${event.id}-${event.previewUrl ?? "remote"}`}
+            taskId={event.taskId}
+            messageId={event.id}
+            durationMs={event.durationMs}
+            previewUrl={event.previewUrl}
+            fromAgent={fromAgent}
+          />
+        ) : null}
+        {mediaKind === "image" ? (
+          <ChatImageBubble
+            key={`${event.id}-${event.previewUrl ?? "remote"}`}
+            taskId={event.taskId}
+            messageId={event.id}
+            previewUrl={event.previewUrl}
+            caption={event.body}
+            fromAgent={fromAgent}
+            onOpen={onOpenImage}
+          />
+        ) : null}
+        {mediaKind === "text" ? (
+          <p className="whitespace-pre-wrap wrap-break-word">{event.body}</p>
+        ) : null}
+        {event.delivery === "sending" ? (
           <p
             className={cn(
               "mt-0.5 text-[10px]",
               fromAgent ? "text-white/75" : "text-muted",
             )}
           >
-            {event.delivery === "sending" ? "Sending…" : "Couldn’t send"}
-            {event.delivery === "failed" && onRetry ? (
+            {typeof event.uploadProgress === "number"
+              ? `Sending… ${event.uploadProgress}%`
+              : "Sending…"}
+          </p>
+        ) : null}
+        {event.delivery === "failed" ? (
+          <p
+            className={cn(
+              "mt-0.5 text-[10px]",
+              fromAgent ? "text-white/75" : "text-muted",
+            )}
+          >
+            Couldn’t send
+            {onRetry ? (
               <>
                 {" · "}
                 <button
@@ -326,7 +434,14 @@ const ImportantCard = memo(function ImportantCard({
 export const TaskChatThread = forwardRef<
   TaskChatThreadHandle,
   TaskChatThreadProps
->(function TaskChatThread(
+>(function TaskChatThread(props, ref) {
+  return <TaskChatThreadBody key={props.taskId} ref={ref} {...props} />;
+});
+
+const TaskChatThreadBody = forwardRef<
+  TaskChatThreadHandle,
+  TaskChatThreadProps
+>(function TaskChatThreadBody(
   {
     taskId,
     timeline,
@@ -338,7 +453,6 @@ export const TaskChatThread = forwardRef<
     title = "Conversation",
     subtitle,
     clientLabel = "Client",
-    fillHeight = true,
   },
   ref,
 ) {
@@ -351,10 +465,54 @@ export const TaskChatThread = forwardRef<
   const [newBanner, setNewBanner] = useState(false);
   const [unreadFromId, setUnreadFromId] = useState<string | null>(null);
   const [pinnedToBottom, setPinnedToBottom] = useState(true);
+  const [recording, setRecording] = useState(false);
+  const [recordMs, setRecordMs] = useState(0);
+  const [voicePreview, setVoicePreview] = useState<{
+    blob: Blob;
+    url: string;
+    durationMs: number;
+    mime: string;
+  } | null>(null);
+  const [imagePreview, setImagePreview] = useState<{
+    file: File;
+    url: string;
+  } | null>(null);
+  const [lightbox, setLightbox] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const pinnedRef = useRef(true);
+  const pendingMediaRef = useRef(new Map<string, PendingMedia>());
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
+  const recordStartedRef = useRef(0);
+  const recordTimerRef = useRef<number | null>(null);
+  const skipPreviewRef = useRef(false);
+  const recordingLockRef = useRef(false);
+
+  const stopStream = useCallback(() => {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+  }, []);
+
+  const clearRecordTimer = useCallback(() => {
+    if (recordTimerRef.current != null) {
+      window.clearInterval(recordTimerRef.current);
+      recordTimerRef.current = null;
+    }
+  }, []);
+
+  const discardVoicePreview = useCallback(() => {
+    if (voicePreview?.url) URL.revokeObjectURL(voicePreview.url);
+    setVoicePreview(null);
+  }, [voicePreview]);
+
+  const discardImagePreview = useCallback(() => {
+    if (imagePreview?.url) URL.revokeObjectURL(imagePreview.url);
+    setImagePreview(null);
+  }, [imagePreview]);
 
   const applyDraft = useCallback((text: string) => {
     setDraft(text);
@@ -371,43 +529,35 @@ export const TaskChatThread = forwardRef<
   }));
 
   useEffect(() => {
-    setExtras([]);
-    setUnreadFromId(null);
-    setNewBanner(false);
-    setPinnedToBottom(true);
-    pinnedRef.current = true;
-  }, [taskId]);
+    return () => {
+      stopStream();
+      clearRecordTimer();
+      recorderRef.current = null;
+    };
+  }, [clearRecordTimer, stopStream]);
 
   const liveChat = ops?.liveChat ?? null;
-  useEffect(() => {
-    if (!liveChat || liveChat.taskId !== taskId) return;
-    if (liveChat.sender !== "USER") return;
-    setExtras((prev) => {
-      if (
-        prev.some(
-          (item) =>
-            item.body === liveChat.content && item.kind === "customer_message",
-        )
-      ) {
-        return prev;
-      }
-      return [
-        ...prev,
-        {
-          id: `live-${liveChat.at}`,
-          taskId,
-          kind: "customer_message",
-          body: liveChat.content,
-          createdAt: new Date(liveChat.at).toISOString(),
-          visibleToCustomer: true,
-        },
-      ];
-    });
+  const liveItem = useMemo<ChatItem | null>(() => {
+    if (!liveChat || liveChat.taskId !== taskId) return null;
+    if (liveChat.sender !== "USER") return null;
+    return {
+      id: liveChat.messageId || `live-${liveChat.at}`,
+      taskId,
+      kind: "customer_message",
+      body: liveChat.content,
+      createdAt: new Date(liveChat.at).toISOString(),
+      visibleToCustomer: true,
+      mediaKind: liveChat.mediaKind ?? "text",
+      durationMs: liveChat.durationMs,
+    };
   }, [liveChat, taskId]);
 
   const thread = useMemo(
-    () => mergeThread(timeline, extras).filter(isVisibleInThread),
-    [extras, timeline],
+    () =>
+      mergeThread(timeline, liveItem ? [...extras, liveItem] : extras).filter(
+        isVisibleInThread,
+      ),
+    [extras, liveItem, timeline],
   );
   const blocks = useMemo(
     () => buildBlocks(thread, unreadFromId),
@@ -463,6 +613,7 @@ export const TaskChatThread = forwardRef<
             body: text,
             createdAt: new Date().toISOString(),
             visibleToCustomer: true,
+            mediaKind: "text",
             delivery: "sending",
           },
         ]);
@@ -498,12 +649,261 @@ export const TaskChatThread = forwardRef<
     [taskId, toast],
   );
 
+  const sendMediaNow = useCallback(
+    async (optimisticId: string, pending: PendingMedia) => {
+      pendingMediaRef.current.set(optimisticId, pending);
+      setExtras((prev) =>
+        prev.map((item) =>
+          item.id === optimisticId
+            ? { ...item, delivery: "sending", uploadProgress: 8 }
+            : item,
+        ),
+      );
+      setError(null);
+      try {
+        const event = await uploadTaskMedia({
+          taskId,
+          kind: pending.kind,
+          file: pending.blob,
+          filename: pending.filename,
+          durationMs: pending.durationMs,
+          caption: pending.caption,
+          onProgress: (percent) => {
+            setExtras((prev) =>
+              prev.map((item) =>
+                item.id === optimisticId
+                  ? { ...item, uploadProgress: percent }
+                  : item,
+              ),
+            );
+          },
+        });
+        pendingMediaRef.current.delete(optimisticId);
+        const keepPreview =
+          event.id.startsWith("local-") || event.id.startsWith("opt-");
+        if (!keepPreview && pending.previewUrl.startsWith("blob:")) {
+          URL.revokeObjectURL(pending.previewUrl);
+        }
+        setExtras((prev) =>
+          prev.map((item) =>
+            item.id === optimisticId
+              ? {
+                  ...event,
+                  previewUrl: keepPreview ? pending.previewUrl : undefined,
+                  delivery: undefined,
+                }
+              : item,
+          ),
+        );
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Couldn't send. Please try again.";
+        setExtras((prev) =>
+          prev.map((item) =>
+            item.id === optimisticId ? { ...item, delivery: "failed" } : item,
+          ),
+        );
+        setError(message);
+        toast(message, "error");
+      }
+    },
+    [taskId, toast],
+  );
+
+  const queueMedia = useCallback(
+    (pending: PendingMedia) => {
+      const optimisticId = `opt-${Date.now()}`;
+      pendingMediaRef.current.set(optimisticId, pending);
+      setExtras((prev) => [
+        ...prev,
+        {
+          id: optimisticId,
+          taskId,
+          kind: "agent_message",
+          body: pending.caption ?? "",
+          createdAt: new Date().toISOString(),
+          visibleToCustomer: true,
+          mediaKind: pending.kind,
+          durationMs: pending.durationMs,
+          mimeType: pending.blob.type || null,
+          previewUrl: pending.previewUrl,
+          delivery: "sending",
+          uploadProgress: 1,
+        },
+      ]);
+      pinnedRef.current = true;
+      setPinnedToBottom(true);
+      void sendMediaNow(optimisticId, pending);
+    },
+    [sendMediaNow, taskId],
+  );
+
+  const finishRecording = useCallback(
+    (chunks: Blob[], mime: string, durationMs: number) => {
+      const blob = new Blob(chunks, { type: mime || "audio/webm" });
+      if (blob.size < 64) {
+        toast("That recording was too short.", "error");
+        return;
+      }
+      if (blob.size > TASK_MEDIA.maxVoiceBytes) {
+        toast("That voice note is too large. Keep it under 2 minutes.", "error");
+        return;
+      }
+      setVoicePreview({
+        blob,
+        url: URL.createObjectURL(blob),
+        durationMs,
+        mime: blob.type || mime,
+      });
+    },
+    [toast],
+  );
+
+  const stopRecording = useCallback(() => {
+    const recorder = recorderRef.current;
+    clearRecordTimer();
+    setRecording(false);
+    if (recorder && recorder.state !== "inactive") {
+      recorder.stop();
+    } else {
+      recordingLockRef.current = false;
+      stopStream();
+    }
+  }, [clearRecordTimer, stopStream]);
+
+  const startRecording = useCallback(async () => {
+    if (disabled || recording || recordingLockRef.current) return;
+    if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      toast("Voice notes aren’t supported in this browser.", "error");
+      return;
+    }
+    discardImagePreview();
+    discardVoicePreview();
+    recordingLockRef.current = true;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const mime = pickRecorderMime();
+      const recorder = mime
+        ? new MediaRecorder(stream, { mimeType: mime })
+        : new MediaRecorder(stream);
+      recorderRef.current = recorder;
+      chunksRef.current = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) chunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        const skip = skipPreviewRef.current;
+        skipPreviewRef.current = false;
+        recordingLockRef.current = false;
+        stopStream();
+        recorderRef.current = null;
+        if (skip) return;
+        const durationMs = Math.max(400, Date.now() - recordStartedRef.current);
+        finishRecording(chunksRef.current, recorder.mimeType || mime, durationMs);
+      };
+      recorder.start(200);
+      recordStartedRef.current = Date.now();
+      setRecordMs(0);
+      setRecording(true);
+      setError(null);
+      recordTimerRef.current = window.setInterval(() => {
+        const elapsed = Date.now() - recordStartedRef.current;
+        setRecordMs(elapsed);
+        if (elapsed >= TASK_MEDIA.maxVoiceMs) stopRecording();
+      }, 200);
+    } catch {
+      recordingLockRef.current = false;
+      stopStream();
+      toast("Microphone access is needed to send a voice note.", "error");
+    }
+  }, [
+    disabled,
+    discardImagePreview,
+    discardVoicePreview,
+    finishRecording,
+    recording,
+    stopRecording,
+    stopStream,
+    toast,
+  ]);
+
+  const sendVoicePreview = useCallback(() => {
+    if (!voicePreview) return;
+    queueMedia({
+      kind: "voice",
+      blob: voicePreview.blob,
+      filename: voiceFilename(voicePreview.mime),
+      durationMs: voicePreview.durationMs,
+      previewUrl: voicePreview.url,
+    });
+    setVoicePreview(null);
+  }, [queueMedia, voicePreview]);
+
+  const pickImage = useCallback(
+    (file: File) => {
+      if (!isImageFile(file)) {
+        toast("Please choose a JPG, PNG, GIF, or WebP image.", "error");
+        return;
+      }
+      if (file.size > TASK_MEDIA.maxImageBytes) {
+        toast("That image is too large. Please pick one under 10 MB.", "error");
+        return;
+      }
+      discardVoicePreview();
+      setImagePreview((current) => {
+        if (current?.url) URL.revokeObjectURL(current.url);
+        return { file, url: URL.createObjectURL(file) };
+      });
+      setError(null);
+    },
+    [discardVoicePreview, toast],
+  );
+
+  const sendImagePreview = useCallback(() => {
+    if (!imagePreview) return;
+    const caption = draft.trim();
+    queueMedia({
+      kind: "image",
+      blob: imagePreview.file,
+      filename: imagePreview.file.name || "image.jpg",
+      caption,
+      previewUrl: imagePreview.url,
+    });
+    setDraft("");
+    setImagePreview(null);
+  }, [draft, imagePreview, queueMedia]);
+
   const onRetry = useCallback(
     (event: ChatItem) => {
+      const pending = pendingMediaRef.current.get(event.id);
+      if (pending) {
+        void sendMediaNow(event.id, pending);
+        return;
+      }
+      if (event.mediaKind === "voice" || event.mediaKind === "image") {
+        toast("Please attach that file again.", "error");
+        return;
+      }
       void sendNow(event.body, event.id);
     },
-    [sendNow],
+    [sendMediaNow, sendNow, toast],
   );
+
+  function submitComposer() {
+    if (disabled) return;
+    if (voicePreview) {
+      sendVoicePreview();
+      return;
+    }
+    if (imagePreview) {
+      sendImagePreview();
+      return;
+    }
+    const text = draft.trim();
+    if (!text) return;
+    void sendNow(text);
+  }
 
   function onScrollerScroll() {
     const scroller = scrollerRef.current;
@@ -619,6 +1019,7 @@ export const TaskChatThread = forwardRef<
                         role={block.role}
                         grouped={index > 0}
                         onRetry={event.delivery === "failed" ? onRetry : undefined}
+                        onOpenImage={setLightbox}
                       />
                     ))}
                   </div>
@@ -677,9 +1078,7 @@ export const TaskChatThread = forwardRef<
           ref={formRef}
           onSubmit={(event) => {
             event.preventDefault();
-            const text = draft.trim();
-            if (!text || disabled) return;
-            void sendNow(text);
+            submitComposer();
           }}
           className="px-3 pb-2.5 pt-1"
         >
@@ -689,44 +1088,163 @@ export const TaskChatThread = forwardRef<
           {error ? (
             <p className="mb-1.5 text-[11px] font-medium text-red-700">{error}</p>
           ) : null}
-          <div
-            className={cn(
-              "flex items-end gap-2 rounded-lg border bg-surface px-2.5 py-1.5",
-              flash ? "border-accent ring-2 ring-accent/20" : "border-border",
-              disabled && "bg-[#f8fafc]",
-            )}
-          >
-            <textarea
-              ref={inputRef}
-              name="body"
-              value={draft}
-              onChange={(e) => {
-                setDraft(e.target.value);
-                if (error) setError(null);
-              }}
-              onKeyDown={(e) => {
-                if (e.key !== "Enter" || e.shiftKey) return;
-                e.preventDefault();
-                const text = draft.trim();
-                if (!text || disabled) return;
-                void sendNow(text);
-              }}
-              placeholder={disabled ? "Messaging is paused" : "Write a message…"}
-              rows={1}
-              disabled={disabled}
-              className="max-h-28 min-h-8 flex-1 resize-none bg-transparent py-1.5 text-sm leading-snug text-foreground outline-none placeholder:text-muted-dim"
-            />
-            <button
-              type="submit"
-              disabled={disabled || !draft.trim()}
-              aria-label="Send"
-              className="mb-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground transition-opacity hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/jpeg,image/png,image/gif,image/webp"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (file) pickImage(file);
+            }}
+          />
+          {imagePreview ? (
+            <div className="mb-2 flex items-center gap-2 rounded-lg border border-border bg-[#f8fafc] p-1.5">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={imagePreview.url}
+                alt="Selected attachment"
+                className="size-12 rounded-md object-cover"
+              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[12px] font-medium text-foreground">
+                  {imagePreview.file.name}
+                </p>
+                <p className="text-[11px] text-muted">Ready to send</p>
+              </div>
+              <button
+                type="button"
+                onClick={discardImagePreview}
+                className="px-2 text-[11px] font-semibold text-muted hover:text-foreground"
+              >
+                Remove
+              </button>
+            </div>
+          ) : null}
+          {voicePreview ? (
+            <div className="mb-2 flex items-center gap-2 rounded-lg border border-border bg-[#f8fafc] px-2 py-1.5">
+              <ChatAudioPlayer
+                taskId={taskId}
+                messageId="preview"
+                durationMs={voicePreview.durationMs}
+                previewUrl={voicePreview.url}
+                fromAgent={false}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  discardVoicePreview();
+                  void startRecording();
+                }}
+                className="shrink-0 text-[11px] font-semibold text-muted hover:text-foreground"
+              >
+                Redo
+              </button>
+              <button
+                type="button"
+                onClick={discardVoicePreview}
+                className="shrink-0 text-[11px] font-semibold text-muted hover:text-foreground"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : null}
+          {recording ? (
+            <div className="flex items-center gap-2 rounded-lg border border-accent/30 bg-accent/5 px-2.5 py-1.5">
+              <span className="size-2 shrink-0 animate-pulse rounded-full bg-red-500" />
+              <p className="flex-1 text-sm font-medium text-foreground">
+                Recording {formatClockMs(recordMs)}
+              </p>
+              <button
+                type="button"
+                onClick={stopRecording}
+                className="inline-flex size-8 items-center justify-center rounded-full bg-red-600 text-white hover:bg-red-700"
+                aria-label="Stop recording"
+              >
+                <StopIcon className="size-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  skipPreviewRef.current = true;
+                  chunksRef.current = [];
+                  recorderRef.current?.stop();
+                  clearRecordTimer();
+                  setRecording(false);
+                  stopStream();
+                }}
+                className="text-[11px] font-semibold text-muted hover:text-foreground"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <div
+              className={cn(
+                "flex items-end gap-1.5 rounded-lg border bg-surface px-2 py-1.5",
+                flash ? "border-accent ring-2 ring-accent/20" : "border-border",
+                disabled && "bg-[#f8fafc]",
+              )}
             >
-              <SendIcon className="size-4" />
-            </button>
-          </div>
+              <button
+                type="button"
+                disabled={disabled}
+                aria-label="Attach image"
+                onClick={() => fileRef.current?.click()}
+                className="mb-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-full text-muted hover:bg-surface-hover hover:text-foreground disabled:opacity-40"
+              >
+                <AttachIcon className="size-4" />
+              </button>
+              <button
+                type="button"
+                disabled={disabled}
+                aria-label="Record voice message"
+                onClick={() => void startRecording()}
+                className="mb-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-full text-muted hover:bg-surface-hover hover:text-foreground disabled:opacity-40"
+              >
+                <MicIcon className="size-4" />
+              </button>
+              <textarea
+                ref={inputRef}
+                name="body"
+                value={draft}
+                onChange={(e) => {
+                  setDraft(e.target.value);
+                  if (error) setError(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter" || e.shiftKey) return;
+                  e.preventDefault();
+                  submitComposer();
+                }}
+                placeholder={
+                  disabled
+                    ? "Messaging is paused"
+                    : imagePreview
+                      ? "Add a caption…"
+                      : "Write a message…"
+                }
+                rows={1}
+                disabled={disabled}
+                className="max-h-28 min-h-8 flex-1 resize-none bg-transparent py-1.5 text-sm leading-snug text-foreground outline-none placeholder:text-muted-dim"
+              />
+              <button
+                type="submit"
+                disabled={
+                  disabled ||
+                  (!draft.trim() && !imagePreview && !voicePreview)
+                }
+                aria-label="Send"
+                className="mb-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground transition-opacity hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <SendIcon className="size-4" />
+              </button>
+            </div>
+          )}
         </form>
       </div>
+      <ChatImageLightbox src={lightbox} onClose={() => setLightbox(null)} />
     </section>
   );
 });

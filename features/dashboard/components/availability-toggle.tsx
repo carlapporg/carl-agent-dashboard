@@ -1,10 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { ConfirmDialog } from "@/components/ui/dialog";
 import { setAvailabilityAction } from "@/features/agents/actions";
 import { useOps } from "@/features/ops/ops-provider";
-import { presenceToUi, uiToPresence, writeChosenPresence, writeToPresence } from "@/lib/agent/presence";
+import {
+  normalizePresence,
+  presenceToUi,
+  uiToPresence,
+  writeChosenPresence,
+  writeToPresence,
+} from "@/lib/agent/presence";
 import { cn } from "@/lib/utils/cn";
 import type { AgentPresence } from "@/types/agent";
 import type { AgentAvailability } from "@/types/dashboard";
@@ -20,12 +26,6 @@ const OPTIONS: Array<{
     label: "Available",
     color: "bg-emerald-500",
     active: "bg-emerald-500 text-white",
-  },
-  {
-    value: "online",
-    label: "Online",
-    color: "bg-sky-500",
-    active: "bg-sky-500 text-white",
   },
   {
     value: "busy",
@@ -58,30 +58,25 @@ export function AvailabilityToggle({
   const inFlight = useRef(false);
   const count = activeTaskCount ?? 0;
 
-  useEffect(() => {
-    if (presence) {
-      ops?.setPresence(presence);
-    }
-  }, [ops, presence]);
-
   const current = ops
     ? presenceToUi(ops.presence)
-    : presenceToUi(presence ?? "ONLINE");
+    : presenceToUi(presence ?? "AVAILABLE");
 
   function apply(next: AgentAvailability) {
     if (inFlight.current) return;
     inFlight.current = true;
     setSaving(true);
 
-    const previous = ops?.presence ?? presence ?? "ONLINE";
+    const previous = normalizePresence(ops?.presence ?? presence ?? "AVAILABLE");
     const nextWrite = uiToPresence(next);
-    ops?.setPresence(writeToPresence(nextWrite));
-    writeChosenPresence(writeToPresence(nextWrite));
+    const kept = writeToPresence(nextWrite);
+    ops?.setPresence(kept);
+    writeChosenPresence(kept);
 
     void setAvailabilityAction(nextWrite)
-      .then((result) => {
-        ops?.setPresence(result.status);
-        writeChosenPresence(result.status);
+      .then(() => {
+        ops?.setPresence(kept);
+        writeChosenPresence(kept);
       })
       .catch(() => {
         ops?.setPresence(previous);
