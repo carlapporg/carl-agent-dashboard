@@ -44,8 +44,16 @@ import {
   parsePaymentNotification,
   parseWaitingForAgent,
 } from "@/lib/notifications/from-events";
+import { getOpenTasksAction } from "@/features/dashboard/actions";
 import { parseIncomingTaskMessage, previewForIncomingMessage } from "@/lib/realtime/parse-task-message";
-import { connectAgentSocket, joinTaskRoom, leaveTaskRoom } from "@/lib/realtime/agent-socket";
+import {
+  connectAgentSocket,
+  ensureAgentSocketConnected,
+  joinTaskRoom,
+  leaveTaskRoom,
+  releaseAgentSocket,
+  updateAgentSocketAuth,
+} from "@/lib/realtime/agent-socket";
 import { ROUTES } from "@/lib/constants/routes";
 import { parseTaskConfirmationPayload, type TaskConfirmation } from "@/types/confirmation";
 import type { Task } from "@/types/task";
@@ -162,6 +170,12 @@ type AgentOpsProviderProps = {
   initialPresence?: AgentPresence;
 };
 
+const CATCH_UP_MIN_MS = 12_000;
+const PRESENCE_MIN_MS = 60_000;
+let lastCatchUpAtMs = 0;
+let lastPresencePushAtMs = 0;
+let catchUpInFlightGlobal = false;
+
 const TASK_INCOMING_EVENTS = [
   "task.offered",
   "task_offered",
@@ -216,12 +230,6 @@ export function AgentOpsProvider({
     }, 350);
   }, [router]);
 
-  const refreshLists = useCallback(() => {
-    const viewingId = taskIdFromPath(pathnameRef.current);
-    if (viewingId && isRejectingOrRejected(viewingId)) return;
-    refresh();
-  }, [refresh]);
-
   const dismissOffer = useCallback(() => setOffer(null), []);
 
   const silenceOffer = useCallback((taskId: string) => {
@@ -240,8 +248,17 @@ export function AgentOpsProvider({
     setLiveTasks((prev) => {
       const index = prev.findIndex((row) => row.id === task.id);
       if (index === -1) return [task, ...prev];
+      const merged = mergeByProgress(prev[index], task);
+      if (
+        merged.backendStatus === prev[index].backendStatus &&
+        merged.status === prev[index].status &&
+        merged.updatedAt === prev[index].updatedAt &&
+        merged.title === prev[index].title
+      ) {
+        return prev;
+      }
       const next = [...prev];
-      next[index] = mergeByProgress(next[index], task);
+      next[index] = merged;
       return next;
     });
   }, []);
@@ -278,8 +295,6 @@ export function AgentOpsProvider({
     });
   }, []);
 
-  const refreshListsRef = useRef(refreshLists);
-  refreshListsRef.current = refreshLists;
   const upsertLiveTaskRef = useRef(upsertLiveTask);
   upsertLiveTaskRef.current = upsertLiveTask;
   const patchLiveTaskRef = useRef(patchLiveTask);
@@ -290,6 +305,10 @@ export function AgentOpsProvider({
   setLiveConfirmationRef.current = setLiveConfirmation;
   const liveTasksRef = useRef(liveTasks);
   liveTasksRef.current = liveTasks;
+  const offerRef = useRef(offer);
+  offerRef.current = offer;
+  const socketTokenRef = useRef(socketToken);
+  socketTokenRef.current = socketToken;
 
   useEffect(() => {
     const chosen = readChosenPresence();
@@ -312,6 +331,11 @@ export function AgentOpsProvider({
 
   useEffect(() => {
     if (!socketToken) return;
+    updateAgentSocketAuth(socketToken);
+  }, [socketToken]);
+
+  useEffect(() => {
+    if (!socketToken) return;
     const expMs = readJwtExpiryMs(socketToken);
     if (expMs == null) return;
     const wait = Math.max(5_000, expMs - Date.now() - 90_000);
@@ -330,12 +354,22 @@ export function AgentOpsProvider({
     return () => window.clearTimeout(id);
   }, [socketToken]);
 
-  useEffect(() => {
-    if (!socketUrl || !socketToken) return;
+  const socketReady = Boolean(socketUrl && socketToken);
 
-    const socket = connectAgentSocket(socketUrl, socketToken);
+  useEffect(() => {
+    if (!socketReady) return;
+
+    const socket = connectAgentSocket(socketUrl, socketTokenRef.current);
     socketRef.current = socket;
     let lastAuthRefresh = 0;
+    let catchUpInFlight = false;
+    let catchUpQueued = false;
+    let reconnectTimer = 0;
+    let cancelled = false;
+    let hydrated = false;
+    let sawDisconnect = false;
+    let didInitialCatchUp = false;
+    const seenIds = new Set<string>();
 
     function pulseQueue() {
       setQueuePulse((n) => n + 1);
@@ -346,23 +380,129 @@ export function AgentOpsProvider({
     function reassertPresence() {
       const chosen = readChosenPresence();
       if (!chosen || chosen === "OFFLINE") return;
+      const now = Date.now();
+      if (now - lastPresencePushAtMs < PRESENCE_MIN_MS) return;
+      lastPresencePushAtMs = now;
       const restore = normalizePresence(chosen);
       writeChosenPresence(restore);
       setPresenceState(restore);
       void setAvailabilityAction(restore).catch(() => undefined);
     }
 
-    function onConnect() {
-      setConnected(true);
+    function rejoinRooms() {
+      const ids = new Set<string>();
       const viewingId = taskIdFromPath(pathnameRef.current);
-      if (viewingId && !isRejectingOrRejected(viewingId)) {
-        joinTaskRoom(socket, viewingId);
+      if (viewingId) ids.add(viewingId);
+      if (offerRef.current?.id) ids.add(offerRef.current.id);
+      for (const row of liveTasksRef.current) ids.add(row.id);
+      for (const id of ids) {
+        if (!isRejectingOrRejected(id)) joinTaskRoom(socket, id);
       }
-      reassertPresence();
     }
 
-    function onDisconnect() {
+    async function refreshAuth(): Promise<string | null> {
+      const now = Date.now();
+      if (now - lastAuthRefresh < 4_000) return socketTokenRef.current || null;
+      lastAuthRefresh = now;
+      try {
+        const response = await fetch("/api/auth/refresh", {
+          method: "POST",
+          credentials: "same-origin",
+        });
+        if (!response.ok) return null;
+        const token = accessTokenFromUnknown(await response.json());
+        if (!token) return null;
+        publishAccessToken(token);
+        updateAgentSocketAuth(token);
+        return token;
+      } catch {
+        return null;
+      }
+    }
+
+    async function catchUpQueue(force = false) {
+      if (cancelled) return;
+      const now = Date.now();
+      if (!force && lastCatchUpAtMs !== 0 && now - lastCatchUpAtMs < CATCH_UP_MIN_MS) return;
+      if (catchUpInFlight || catchUpInFlightGlobal) {
+        catchUpQueued = true;
+        return;
+      }
+      catchUpInFlight = true;
+      catchUpInFlightGlobal = true;
+      lastCatchUpAtMs = now;
+      try {
+        const tasks = await getOpenTasksAction();
+        if (cancelled) return;
+        const known = new Set(seenIds);
+        for (const row of liveTasksRef.current) known.add(row.id);
+        const newOffers: Task[] = [];
+        for (const task of tasks) {
+          if (isRejectingOrRejected(task.id)) continue;
+          const unknown = !known.has(task.id);
+          known.add(task.id);
+          seenIds.add(task.id);
+          upsertLiveTaskRef.current(task);
+          joinTaskRoom(socket, task.id);
+          if (task.backendStatus === "OFFERED" && unknown) {
+            newOffers.push(task);
+          }
+        }
+        if (newOffers.length > 0 && hydrated) {
+          const next = newOffers[0];
+          if (next) {
+            setOffer((current) => current ?? next);
+            notificationsRef.current.push(notificationFromOffer(next));
+            playNotificationChime();
+            pulseQueue();
+          }
+        }
+        rejoinRooms();
+      } catch {
+        /* keep the live socket; next reconnect will try again */
+      } finally {
+        hydrated = true;
+        catchUpInFlight = false;
+        catchUpInFlightGlobal = false;
+        if (catchUpQueued) {
+          catchUpQueued = false;
+          void catchUpQueue();
+        }
+      }
+    }
+
+    function startReconnectWatch() {
+      window.clearInterval(reconnectTimer);
+      if (socket.connected) return;
+      reconnectTimer = window.setInterval(() => {
+        if (document.visibilityState === "hidden") return;
+        ensureAgentSocketConnected();
+      }, 4_000);
+    }
+
+    function onConnect() {
+      window.clearInterval(reconnectTimer);
+      setConnected(true);
+      rejoinRooms();
+      if (sawDisconnect) {
+        reassertPresence();
+        void catchUpQueue(true);
+      } else if (!didInitialCatchUp) {
+        didInitialCatchUp = true;
+        void catchUpQueue(true);
+      }
+      sawDisconnect = false;
+    }
+
+    function onDisconnect(reason: string) {
+      sawDisconnect = true;
       setConnected(false);
+      startReconnectWatch();
+      if (reason === "io server disconnect") {
+        void refreshAuth().finally(() => {
+          if (!cancelled) socket.connect();
+        });
+      }
     }
 
     function forgetIfRejecting(taskId: string | undefined): boolean {
@@ -381,7 +521,6 @@ export function AgentOpsProvider({
         })();
       if (!task) {
         pulseQueue();
-        refreshListsRef.current();
         return;
       }
       if (forgetIfRejecting(task.id)) return;
@@ -389,9 +528,7 @@ export function AgentOpsProvider({
       if (alreadyKnown) {
         if (!isRejectingOrRejected(task.id)) {
           upsertLiveTaskRef.current(task);
-          refreshListsRef.current();
         }
-        pulseQueue();
         return;
       }
       setOffer(task);
@@ -400,7 +537,6 @@ export function AgentOpsProvider({
       notificationsRef.current.push(notificationFromOffer(task));
       playNotificationChime();
       pulseQueue();
-      refreshListsRef.current();
     }
 
     function onMessage(payload: unknown) {
@@ -456,28 +592,24 @@ export function AgentOpsProvider({
       }
       toastRef.current("A task was cancelled.", "info", { title: "Task cancelled" });
       pulseQueue();
-      refreshListsRef.current();
     }
 
     function onPaymentApproved(payload: unknown) {
       const item = parsePaymentNotification(payload, "payment_approved");
       if (item) notificationsRef.current.push(item);
       pulseQueue();
-      refreshListsRef.current();
     }
 
     function onPaymentDeclined(payload: unknown) {
       const item = parsePaymentNotification(payload, "payment_declined");
       if (item) notificationsRef.current.push(item);
       pulseQueue();
-      refreshListsRef.current();
     }
 
     function onPaymentExpired(payload: unknown) {
       const item = parsePaymentNotification(payload, "payment_expired");
       if (item) notificationsRef.current.push(item);
       pulseQueue();
-      refreshListsRef.current();
     }
 
     function onConfirmationConfirmed(payload: unknown) {
@@ -494,7 +626,6 @@ export function AgentOpsProvider({
         playNotificationChime();
       }
       pulseQueue();
-      refreshListsRef.current();
     }
 
     function onConfirmationDeclined(payload: unknown) {
@@ -511,7 +642,6 @@ export function AgentOpsProvider({
         playNotificationChime();
       }
       pulseQueue();
-      refreshListsRef.current();
     }
 
     function onStatusChanged(payload: unknown) {
@@ -529,8 +659,6 @@ export function AgentOpsProvider({
           (status === "FAILED" || status === "REJECTED") &&
           (!mapped || mapped.title === "Task" || mapped.title === "New task offered"))
       ) {
-        pulseQueue();
-        refreshListsRef.current();
         return;
       }
       if (mapped) {
@@ -541,8 +669,6 @@ export function AgentOpsProvider({
           if (
             shouldIgnoreClosedSocketUpdate(current, null, status)
           ) {
-            pulseQueue();
-            refreshListsRef.current();
             return;
           }
           patchLiveTaskRef.current(id, {
@@ -556,8 +682,6 @@ export function AgentOpsProvider({
       if (item && !notificationsRef.current.isViewingTaskInbox(item.taskId ?? "")) {
         notificationsRef.current.push(item);
       }
-      pulseQueue();
-      refreshListsRef.current();
     }
 
     function onMissed(payload: unknown) {
@@ -568,8 +692,6 @@ export function AgentOpsProvider({
         ? liveTasksRef.current.find((row) => row.id === id)
         : undefined;
       if (id && (offerWasAccepted(id) || (live && isKeptAfterMiss(live)))) {
-        pulseQueue();
-        refreshListsRef.current();
         return;
       }
       if (item) notificationsRef.current.push(item);
@@ -578,12 +700,10 @@ export function AgentOpsProvider({
         setOffer((current) => (current?.id === id ? null : current));
       }
       pulseQueue();
-      refreshListsRef.current();
     }
 
     function onQueuePulse() {
       pulseQueue();
-      refreshListsRef.current();
     }
 
     function onTaskUpdated(payload: unknown) {
@@ -594,13 +714,9 @@ export function AgentOpsProvider({
         ? liveTasksRef.current.find((row) => row.id === id)
         : undefined;
       if (shouldIgnoreClosedSocketUpdate(live, mapped, mapped?.backendStatus)) {
-        pulseQueue();
-        refreshListsRef.current();
         return;
       }
       if (mapped) upsertLiveTaskRef.current(mapped);
-      pulseQueue();
-      refreshListsRef.current();
     }
 
     function onConnectError(error: unknown) {
@@ -609,25 +725,28 @@ export function AgentOpsProvider({
           ? String((error as { message: unknown }).message)
           : String(error ?? "");
       if (!/auth|unauthorized|jwt|token|forbidden/i.test(message)) return;
-      const now = Date.now();
-      if (now - lastAuthRefresh < 4_000) return;
-      lastAuthRefresh = now;
-      void fetch("/api/auth/refresh", {
-        method: "POST",
-        credentials: "same-origin",
-      })
-        .then(async (response) => {
-          if (!response.ok) return;
-          const token = accessTokenFromUnknown(await response.json());
-          if (token) publishAccessToken(token);
-        })
-        .catch(() => undefined);
+      void refreshAuth().then((token) => {
+        if (!token || cancelled) return;
+        ensureAgentSocketConnected();
+      });
+    }
+
+    function onVisibleOrOnline() {
+      if (document.visibilityState === "hidden") return;
+      ensureAgentSocketConnected();
+      if (!socket.connected) startReconnectWatch();
+      void catchUpQueue(false);
     }
 
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
     socket.on("connect_error", onConnectError);
     if (socket.connected) onConnect();
+    else startReconnectWatch();
+
+    document.addEventListener("visibilitychange", onVisibleOrOnline);
+    window.addEventListener("online", onVisibleOrOnline);
+    window.addEventListener("pageshow", onVisibleOrOnline);
 
     for (const eventName of TASK_INCOMING_EVENTS) {
       socket.on(eventName, onIncomingTask);
@@ -658,6 +777,11 @@ export function AgentOpsProvider({
     socket.on("queue_updated", onQueuePulse);
 
     return () => {
+      cancelled = true;
+      window.clearInterval(reconnectTimer);
+      document.removeEventListener("visibilitychange", onVisibleOrOnline);
+      window.removeEventListener("online", onVisibleOrOnline);
+      window.removeEventListener("pageshow", onVisibleOrOnline);
       socket.off("connect", onConnect);
       socket.off("disconnect", onDisconnect);
       socket.off("connect_error", onConnectError);
@@ -688,8 +812,9 @@ export function AgentOpsProvider({
       socket.off("task_updated", onTaskUpdated);
       socket.off("queue.updated", onQueuePulse);
       socket.off("queue_updated", onQueuePulse);
+      releaseAgentSocket();
     };
-  }, [socketToken, socketUrl]);
+  }, [socketUrl, socketReady]);
 
   useEffect(() => {
     const viewingId = openTaskId ?? taskIdFromPath(pathname);

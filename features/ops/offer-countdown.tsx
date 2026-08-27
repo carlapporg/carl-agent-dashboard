@@ -6,6 +6,7 @@ import {
   autoAcceptExpiredOffer,
   canAutoAcceptOffer,
   expireRejectWindow,
+  isOfferAcceptLocked,
   isRejectingOrRejected,
   useOfferDecision,
 } from "@/features/ops/auto-accept-offer";
@@ -45,6 +46,8 @@ export function OfferCountdown({
 }: OfferCountdownProps) {
   const fired = useRef(false);
   const seenOpen = useRef(false);
+  const onExpireRef = useRef(onExpire);
+  onExpireRef.current = onExpire;
   const [now, setNow] = useState(() => Date.now());
   const decision = useOfferDecision(taskId);
   const settled = decision.settled !== "none";
@@ -64,46 +67,63 @@ export function OfferCountdown({
   }, [taskId]);
 
   useEffect(() => {
-    if (remainingMs > 0) seenOpen.current = true;
-  }, [remainingMs]);
+    if (settled || inFlight) return;
 
-  useEffect(() => {
-    if (settled) return;
-    const id = window.setInterval(() => setNow(Date.now()), 250);
-    return () => window.clearInterval(id);
-  }, [settled]);
-
-  useEffect(() => {
-    if (fired.current) return;
-    if (remainingMs > EARLY_ACCEPT_MS) return;
-    if (taskId && (decision.flight === "reject" || isRejectingOrRejected(taskId))) {
-      return;
-    }
-    if (taskId && decision.settled === "rejected") {
-      fired.current = true;
-      return;
-    }
-    if (taskId && !canAutoAcceptOffer(taskId) && decision.settled !== "accepted") {
-      return;
-    }
-    fired.current = true;
-    if (taskId) expireRejectWindow(taskId);
-    void (async () => {
-      if (autoAccept && taskId && seenOpen.current) {
-        const accepted = await autoAcceptExpiredOffer(taskId);
-        if (!accepted && taskId && isRejectingOrRejected(taskId)) {
-          fired.current = false;
-          return;
-        }
+    function tick() {
+      const remaining = Number.isFinite(deadline)
+        ? Math.max(0, deadline - Date.now())
+        : 0;
+      if (remaining > 0) seenOpen.current = true;
+      setNow(Date.now());
+      if (fired.current) return;
+      if (remaining > EARLY_ACCEPT_MS) return;
+      if (
+        taskId &&
+        (decision.flight === "accept" ||
+          decision.flight === "reject" ||
+          isRejectingOrRejected(taskId))
+      ) {
+        return;
       }
-      onExpire?.();
-    })();
+      if (taskId && decision.settled === "rejected") {
+        fired.current = true;
+        return;
+      }
+      if (
+        taskId &&
+        !canAutoAcceptOffer(taskId) &&
+        decision.settled !== "accepted"
+      ) {
+        return;
+      }
+      fired.current = true;
+      if (taskId) expireRejectWindow(taskId);
+      void (async () => {
+        if (autoAccept && taskId && seenOpen.current) {
+          const accepted = await autoAcceptExpiredOffer(taskId);
+          if (
+            !accepted &&
+            taskId &&
+            (isRejectingOrRejected(taskId) || isOfferAcceptLocked(taskId))
+          ) {
+            fired.current = false;
+            return;
+          }
+        }
+        onExpireRef.current?.();
+      })();
+    }
+
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
   }, [
     autoAccept,
+    deadline,
     decision.flight,
     decision.settled,
-    onExpire,
-    remainingMs,
+    inFlight,
+    settled,
     taskId,
   ]);
 
@@ -112,13 +132,14 @@ export function OfferCountdown({
   const radius = (ring - stroke) / 2;
   const circ = 2 * Math.PI * radius;
   const dash = (pct / 100) * circ;
-  const color = expired || inFlight || settled
-    ? "#9ca3af"
-    : urgent
-      ? "#dc2626"
-      : remainingSec <= 20
-        ? "#d97706"
-        : "#4f7cff";
+  const color =
+    expired || inFlight || settled
+      ? "#9ca3af"
+      : urgent
+        ? "#dc2626"
+        : remainingSec <= 20
+          ? "#d97706"
+          : "#4f7cff";
 
   return (
     <div
@@ -163,7 +184,12 @@ export function OfferCountdown({
         </span>
       </div>
       {size === "lg" ? (
-        <p className={cn("text-sm font-semibold", urgent ? "text-red-600" : "text-foreground")}>
+        <p
+          className={cn(
+            "text-sm font-semibold",
+            urgent ? "text-red-600" : "text-foreground",
+          )}
+        >
           {statusLabel({
             remainingSec,
             expired,

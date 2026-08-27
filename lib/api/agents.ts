@@ -1,7 +1,9 @@
 import { cache } from "react";
+import { z } from "zod";
 import { apiRequest } from "@/lib/api/client";
 import { API_ENDPOINTS } from "@/lib/api/endpoints";
 import { env } from "@/lib/config/env";
+import { isApiError } from "@/lib/api/errors";
 import { mockAgentUser } from "@/mocks/auth";
 import { messageDataSchema } from "@/types/auth";
 import {
@@ -86,24 +88,47 @@ export const agentsApi = {
   },
 
   async getSkills(): Promise<AgentSkillsState> {
-    return apiRequest(API_ENDPOINTS.agents.skills, {
+    const raw = await apiRequest(API_ENDPOINTS.agents.skills, {
       method: "GET",
-      schema: agentSkillsStateSchema,
+      schema: z.unknown(),
+      looseEnvelope: true,
     });
+    return agentSkillsStateSchema.parse(raw);
   },
 
   async setSkills(input: {
     skills: string[];
     isGeneralist?: boolean;
   }): Promise<AgentSkillsState> {
-    return apiRequest(API_ENDPOINTS.agents.skills, {
-      method: "PATCH",
-      body: {
-        skills: input.skills,
-        isGeneralist: input.isGeneralist ?? false,
-      },
-      schema: agentSkillsStateSchema,
-      dedupe: false,
-    });
+    const body = {
+      skills: input.skills,
+      isGeneralist: input.isGeneralist ?? false,
+    };
+    const fallback: AgentSkillsState = {
+      skills: body.skills,
+      isGeneralist: body.isGeneralist,
+    };
+    async function write(method: "PATCH" | "PUT") {
+      const raw = await apiRequest(API_ENDPOINTS.agents.skills, {
+        method,
+        body,
+        schema: z.unknown(),
+        looseEnvelope: true,
+        dedupe: false,
+      });
+      const parsed = agentSkillsStateSchema.safeParse(raw);
+      if (parsed.success && (parsed.data.skills.length > 0 || body.skills.length === 0)) {
+        return parsed.data;
+      }
+      return fallback;
+    }
+    try {
+      return await write("PATCH");
+    } catch (error) {
+      if (isApiError(error) && (error.status === 404 || error.status === 405)) {
+        return await write("PUT");
+      }
+      throw error;
+    }
   },
 };

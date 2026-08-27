@@ -9,6 +9,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
 } from "react";
 import { sendUpdateAction } from "@/features/tasks/actions/task-actions";
 import { ChatAudioPlayer } from "@/features/tasks/components/chat-audio-player";
@@ -221,32 +222,87 @@ function resizeComposer(el: HTMLTextAreaElement | null) {
 function MicIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden className={className}>
-      <path
-        d="M12 15.2a3.2 3.2 0 0 0 3.2-3.2V7A3.2 3.2 0 0 0 8.8 7v4.8A3.2 3.2 0 0 0 12 15.2Z"
+      <rect
+        x="9"
+        y="3.5"
+        width="6"
+        height="11"
+        rx="3"
         stroke="currentColor"
-        strokeWidth="1.7"
+        strokeWidth="1.8"
       />
       <path
-        d="M6.8 12a5.2 5.2 0 0 0 10.4 0M12 17.2V20"
+        d="M6.5 11.5a5.5 5.5 0 0 0 11 0"
         stroke="currentColor"
-        strokeWidth="1.7"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <path
+        d="M12 17v3.2M9.5 20.5h5"
+        stroke="currentColor"
+        strokeWidth="1.8"
         strokeLinecap="round"
       />
     </svg>
   );
 }
 
-function AttachIcon({ className }: { className?: string }) {
+function ImageIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden className={className}>
-      <path
-        d="m8.4 13.2 5.3-5.3a2.6 2.6 0 1 1 3.7 3.7l-6.6 6.6a4 4 0 0 1-5.6-5.6l6.4-6.4"
+      <rect
+        x="3.5"
+        y="5"
+        width="17"
+        height="14"
+        rx="2.5"
         stroke="currentColor"
-        strokeWidth="1.7"
+        strokeWidth="1.8"
+      />
+      <circle cx="8.75" cy="10" r="1.45" fill="currentColor" />
+      <path
+        d="M3.8 16.4 8.2 12.5l3.4 3 3.1-2.6 5.5 5.1"
+        stroke="currentColor"
+        strokeWidth="1.8"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
     </svg>
+  );
+}
+
+function ComposerToolButton({
+  label,
+  active,
+  disabled,
+  onClick,
+  children,
+}: {
+  label: string;
+  active?: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      aria-label={label}
+      aria-pressed={active}
+      title={label}
+      onClick={onClick}
+      className={cn(
+        "mb-0.5 inline-flex size-9 shrink-0 items-center justify-center rounded-full transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/35",
+        active
+          ? "bg-accent text-accent-foreground shadow-sm"
+          : "bg-accent/8 text-accent hover:bg-accent/15 hover:text-accent-hover",
+        "disabled:cursor-not-allowed disabled:bg-surface-hover disabled:text-muted-dim disabled:opacity-60",
+      )}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -1187,24 +1243,27 @@ const TaskChatThreadBody = forwardRef<
                 disabled && "bg-[#f8fafc]",
               )}
             >
-              <button
-                type="button"
-                disabled={disabled}
-                aria-label="Attach image"
-                onClick={() => fileRef.current?.click()}
-                className="mb-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-full text-muted hover:bg-surface-hover hover:text-foreground disabled:opacity-40"
-              >
-                <AttachIcon className="size-4" />
-              </button>
-              <button
-                type="button"
-                disabled={disabled}
-                aria-label="Record voice message"
-                onClick={() => void startRecording()}
-                className="mb-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-full text-muted hover:bg-surface-hover hover:text-foreground disabled:opacity-40"
-              >
-                <MicIcon className="size-4" />
-              </button>
+              <div className="mb-0.5 flex shrink-0 items-center gap-0.5">
+                <ComposerToolButton
+                  label="Send a picture"
+                  active={Boolean(imagePreview)}
+                  disabled={disabled}
+                  onClick={() => fileRef.current?.click()}
+                >
+                  <ImageIcon className="size-4.5" />
+                </ComposerToolButton>
+                <ComposerToolButton
+                  label="Send a voice message"
+                  disabled={disabled}
+                  onClick={() => void startRecording()}
+                >
+                  <MicIcon className="size-4.5" />
+                </ComposerToolButton>
+              </div>
+              <span
+                className="mb-1.5 hidden h-6 w-px shrink-0 bg-border sm:block"
+                aria-hidden
+              />
               <textarea
                 ref={inputRef}
                 name="body"
@@ -1236,7 +1295,7 @@ const TaskChatThreadBody = forwardRef<
                   (!draft.trim() && !imagePreview && !voicePreview)
                 }
                 aria-label="Send"
-                className="mb-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground transition-opacity hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
+                className="mb-0.5 inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground transition-opacity hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <SendIcon className="size-4" />
               </button>

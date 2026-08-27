@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { TaskChatThread } from "@/features/tasks/components/task-chat-thread";
 import { StatusBadge } from "@/features/tasks/components/status-badge";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { Card } from "@/components/ui/card";
+import { listTaskMessagesAction } from "@/features/tasks/actions/task-actions";
 import {
   shouldHideRejectedOffer,
   useRejectedOfferTick,
@@ -23,7 +24,6 @@ import type { Task } from "@/types/task";
 
 type MessagesViewProps = {
   conversations: ConversationSummary[];
-  timelines: Record<string, TimelineEvent[]>;
   tasks: Record<string, Task>;
 };
 
@@ -41,7 +41,6 @@ function formatRel(value: string): string {
 
 export function MessagesView({
   conversations,
-  timelines,
   tasks,
 }: MessagesViewProps) {
   const rejectedTick = useRejectedOfferTick();
@@ -57,12 +56,33 @@ export function MessagesView({
   const [selectedId, setSelectedId] = useState(
     visibleConversations[0]?.taskId ?? null,
   );
+  const [timelines, setTimelines] = useState<Record<string, TimelineEvent[]>>(
+    {},
+  );
+  const loadedIds = useRef(new Set<string>());
+
   const selected = useMemo(
     () => visibleConversations.find((c) => c.taskId === selectedId) ?? null,
     [visibleConversations, selectedId],
   );
   const task = selectedId ? tasks[selectedId] : null;
   const timeline = selectedId ? (timelines[selectedId] ?? []) : [];
+  const chatReady = selectedId != null && Object.hasOwn(timelines, selectedId);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    if (loadedIds.current.has(selectedId)) return;
+    const taskId = selectedId;
+    let cancelled = false;
+    void listTaskMessagesAction(taskId).then((events) => {
+      if (cancelled) return;
+      loadedIds.current.add(taskId);
+      setTimelines((prev) => ({ ...prev, [taskId]: events }));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedId]);
 
   if (visibleConversations.length === 0) {
     return (
@@ -148,19 +168,27 @@ export function MessagesView({
               </div>
             </div>
             <div className="min-h-0 flex-1">
-              <TaskChatThread
-                taskId={selected.taskId}
-                timeline={timeline}
-                quickActions={task.aiBrief?.missingInfo ?? []}
-                title="Conversation"
-                subtitle={`With ${task.customerName}`}
-                clientLabel={task.customerName}
-                fillHeight={false}
-                className="h-full min-h-0"
-                showTemplates={canMessageClient(task) && !isFailedOrCancelled(task)}
-                disabled={!canMessageClient(task)}
-                disabledHint={messageClientHint(task)}
-              />
+              {!chatReady ? (
+                <div className="flex h-full min-h-64 items-center justify-center rounded-(--radius-card) border border-border bg-surface text-sm text-muted">
+                  Loading conversation…
+                </div>
+              ) : (
+                <TaskChatThread
+                  taskId={selected.taskId}
+                  timeline={timeline}
+                  quickActions={task.aiBrief?.missingInfo ?? []}
+                  title="Conversation"
+                  subtitle={`With ${task.customerName}`}
+                  clientLabel={task.customerName}
+                  fillHeight={false}
+                  className="h-full min-h-0"
+                  showTemplates={
+                    canMessageClient(task) && !isFailedOrCancelled(task)
+                  }
+                  disabled={!canMessageClient(task)}
+                  disabledHint={messageClientHint(task)}
+                />
+              )}
             </div>
           </>
         ) : (

@@ -45,62 +45,56 @@ const STATUS_FILTERS: Array<{
   value: TaskStatus | "all";
   label: string;
   match: TaskStatus[];
-  color: string;
 }> = [
-  { value: "all", label: "All", match: [], color: "#4f7cff" },
-  {
-    value: "queued",
-    label: "Offered",
-    match: ["queued"],
-    color: "#9ca3af",
-  },
+  { value: "all", label: "All", match: [] },
   {
     value: "assigned",
     label: "Assigned",
     match: ["assigned"],
-    color: "#60a5fa",
   },
   {
     value: "in_progress",
     label: "In progress",
     match: ["in_progress"],
-    color: "#4f7cff",
   },
   {
     value: "waiting_for_customer",
     label: "Waiting on customer",
     match: ["waiting_for_customer"],
-    color: "#f59e0b",
   },
   {
     value: "waiting_for_payment",
     label: "Waiting on payment",
     match: ["waiting_for_payment"],
-    color: "#f97316",
   },
   {
     value: "completed",
     label: "Completed",
     match: ["completed"],
-    color: "#10b981",
   },
   {
     value: "failed",
     label: "Failed",
     match: ["failed"],
-    color: "#dc2626",
   },
   {
     value: "cancelled",
     label: "Cancelled",
     match: ["cancelled"],
-    color: "#6b7280",
   },
 ];
 
 type TaskListProps = {
   tasks: Task[];
 };
+
+function parseStatusFilter(raw: string | null): TaskStatus | "all" {
+  const value = (raw as TaskStatus | "all") || "all";
+  if (value === "queued" || !STATUS_FILTERS.some((filter) => filter.value === value)) {
+    return "all";
+  }
+  return value;
+}
 
 function formatRelative(value: string): string {
   const date = new Date(value);
@@ -128,11 +122,12 @@ export function TaskList({ tasks }: TaskListProps) {
   const ops = useOps();
   const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
-  const status = (searchParams.get("status") as TaskStatus | "all") || "all";
+  const [status, setStatus] = useState(() =>
+    parseStatusFilter(searchParams.get("status")),
+  );
   const search = searchParams.get("q") ?? "";
   const hasFilters = status !== "all" || Boolean(search.trim());
   const [motionKey, setMotionKey] = useState(0);
-  const [bounceFilter, setBounceFilter] = useState<string | null>(null);
   const [view, setView] = useState<TasksViewMode>("list");
   const [viewReady, setViewReady] = useState(false);
 
@@ -188,14 +183,25 @@ export function TaskList({ tasks }: TaskListProps) {
   }, [status, search]);
 
   function updateParams(next: Record<string, string>) {
+    if (next.status !== undefined) setStatus(parseStatusFilter(next.status));
     const params = new URLSearchParams(searchParams.toString());
     for (const [key, value] of Object.entries(next)) {
       if (!value || value === "all") params.delete(key);
       else params.set(key, value);
     }
-    startTransition(() => {
-      router.push(`${ROUTES.tasks}?${params.toString()}`);
-    });
+    if (!("status" in next)) {
+      if (status === "all") params.delete("status");
+      else params.set("status", status);
+    }
+    const qs = params.toString();
+    const url = qs ? `${ROUTES.tasks}?${qs}` : ROUTES.tasks;
+    if (next.q !== undefined || next.status === undefined) {
+      startTransition(() => {
+        router.push(url);
+      });
+      return;
+    }
+    window.history.replaceState(window.history.state, "", url);
   }
 
   function changeView(mode: TasksViewMode) {
@@ -209,8 +215,29 @@ export function TaskList({ tasks }: TaskListProps) {
       <Card className="p-3 md:px-4 md:py-3">
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className={cn(!viewReady && "invisible")}>
+            <div className={cn("flex flex-wrap items-center gap-2", !viewReady && "invisible")}>
               <TaskViewToggle value={view} onChange={changeView} />
+              <select
+                id="task-status-filter"
+                value={status}
+                aria-label="Filter by status"
+                onChange={(event) => {
+                  updateParams({ status: event.target.value, type: "all" });
+                }}
+                className={cn(
+                  "h-[length:var(--control-height)] min-w-[11.5rem] rounded-[var(--radius-md)] border border-border bg-surface px-3 text-sm text-foreground outline-none",
+                  "focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/20",
+                )}
+              >
+                {STATUS_FILTERS.map((filter) => (
+                  <option key={filter.value} value={filter.value}>
+                    {filter.label}
+                    {filter.value === "all"
+                      ? ` (${statusCounts.all ?? 0})`
+                      : ` (${statusCounts[filter.value] ?? 0})`}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="relative w-full sm:max-w-xs">
               <span
@@ -251,55 +278,6 @@ export function TaskList({ tasks }: TaskListProps) {
                 }}
               />
             </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {STATUS_FILTERS.map((filter) => {
-              const active = status === filter.value;
-              const count = statusCounts[filter.value] ?? 0;
-              return (
-                <button
-                  key={filter.value}
-                  type="button"
-                  onClick={() => {
-                    setBounceFilter(filter.value);
-                    window.setTimeout(() => setBounceFilter(null), 400);
-                    updateParams({ status: filter.value, type: "all" });
-                  }}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors",
-                    active
-                      ? "border-accent bg-accent/10 text-accent"
-                      : "border-border bg-surface text-foreground hover:border-accent/30 hover:text-accent",
-                    bounceFilter === filter.value && "task-chip-bounce",
-                  )}
-                >
-                  <span
-                    className="size-1.5 shrink-0 rounded-full"
-                    style={{ backgroundColor: filter.color }}
-                    aria-hidden
-                  />
-                  {filter.label}
-                  <span
-                    className={cn(
-                      "tabular-nums",
-                      active ? "text-accent" : "text-muted",
-                    )}
-                  >
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-            {status !== "all" ? (
-              <button
-                type="button"
-                onClick={() => updateParams({ status: "all" })}
-                className="inline-flex items-center rounded-full px-2.5 py-1.5 text-sm font-medium text-muted hover:text-foreground"
-              >
-                Clear
-              </button>
-            ) : null}
           </div>
         </div>
       </Card>

@@ -314,12 +314,6 @@ export function TaskWorkspace({
                     taskId={task.id}
                     autoAccept
                     size="lg"
-                    onExpire={() => {
-                      if (decision.flight === "reject" || decision.settled === "rejected") {
-                        return;
-                      }
-                      router.refresh();
-                    }}
                   />
                 ) : null}
                 <OfferActions task={task} />

@@ -10,6 +10,7 @@ import { confirmationApi } from "@/lib/api/confirmation";
 import { tasksApi } from "@/lib/api/tasks";
 import { ROUTES } from "@/lib/constants/routes";
 import type { SendTaskConfirmationBody, TaskConfirmation } from "@/types/confirmation";
+import type { TimelineEvent } from "@/types/message";
 
 export type OfferLiveState = "offered" | "accepted" | "rejected" | "gone";
 
@@ -95,11 +96,45 @@ function failAssigned(error: unknown): TaskActionResult {
 
 export async function acceptTaskAction(taskId: string): Promise<TaskActionResult> {
   try {
+    const live = await getOfferLiveStateAction(taskId);
+    if (live === "accepted") {
+      revalidateWorkQueues();
+      revalidateTaskPage(taskId);
+      return { ok: true };
+    }
+    if (live === "rejected") {
+      return {
+        ok: false,
+        message: "This offer was already rejected.",
+        reason: "already_rejected",
+      };
+    }
+    if (live === "gone") {
+      return {
+        ok: false,
+        message: USER_MESSAGES.offerGone,
+        gone: true,
+        reason: "gone",
+      };
+    }
     await tasksApi.accept(taskId);
     revalidateWorkQueues();
     revalidateTaskPage(taskId);
     return { ok: true };
   } catch (error) {
+    const live = await getOfferLiveStateAction(taskId).catch(() => null);
+    if (live === "accepted") {
+      revalidateWorkQueues();
+      revalidateTaskPage(taskId);
+      return { ok: true };
+    }
+    if (live === "rejected") {
+      return {
+        ok: false,
+        message: "This offer was already rejected.",
+        reason: "already_rejected",
+      };
+    }
     return failOffer(error);
   }
 }
@@ -168,6 +203,16 @@ export async function updateTaskAgentStatusAction(
 export type SendMessageResult =
   | { ok: true; event: Awaited<ReturnType<typeof messagesApi.send>> }
   | { ok: false; message: string };
+
+export async function listTaskMessagesAction(
+  taskId: string,
+): Promise<TimelineEvent[]> {
+  try {
+    return await messagesApi.list(taskId);
+  } catch {
+    return [];
+  }
+}
 
 export async function sendTaskMessageAction(
   taskId: string,

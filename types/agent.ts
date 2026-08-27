@@ -31,12 +31,52 @@ export const agentPresenceStateSchema = z
 
 export type AgentPresenceState = z.infer<typeof agentPresenceStateSchema>;
 
-export const agentSkillsStateSchema = z.object({
+export type AgentSkillsState = {
+  isGeneralist: boolean;
+  skills: string[];
+};
+
+export const agentSkillsStateSchema = z.preprocess((raw) => {
+  const root =
+    raw && typeof raw === "object" && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : null;
+  const nested =
+    root && root.data && typeof root.data === "object" && !Array.isArray(root.data)
+      ? (root.data as Record<string, unknown>)
+      : root;
+  if (!nested) return { isGeneralist: false, skills: [] };
+  const list =
+    nested.skills ?? nested.skillTags ?? nested.tags ?? nested.skillList;
+  const skills = Array.isArray(list)
+    ? [
+        ...new Set(
+          list
+            .map((item) => {
+              if (typeof item === "string") return item.trim();
+              if (item && typeof item === "object") {
+                const row = item as Record<string, unknown>;
+                for (const key of ["name", "slug", "code", "skill", "tag", "label"]) {
+                  const text = row[key];
+                  if (typeof text === "string" && text.trim()) return text.trim();
+                }
+              }
+              return "";
+            })
+            .filter(Boolean),
+        ),
+      ]
+    : [];
+  const flag = nested.isGeneralist ?? nested.generalist;
+  return {
+    isGeneralist:
+      flag === true || flag === "true" || flag === 1 || flag === "1",
+    skills,
+  };
+}, z.object({
   isGeneralist: z.boolean(),
   skills: z.array(z.string()),
-});
-
-export type AgentSkillsState = z.infer<typeof agentSkillsStateSchema>;
+}));
 
 export const inboxFilterSchema = z.enum(["OFFERED", "ACTIVE", "HISTORY"]);
 export type InboxFilter = z.infer<typeof inboxFilterSchema>;

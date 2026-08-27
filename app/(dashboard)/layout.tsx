@@ -6,7 +6,6 @@ import { DashboardWebSocketBridge } from "@/features/shell/components/dashboard-
 import { AgentSocketProvider } from "@/features/shell/components/agent-socket-provider";
 import { NotificationProvider } from "@/features/notifications/notification-provider";
 import { logAuthEvent } from "@/lib/auth/audit-log";
-import { agentsApi } from "@/lib/api/agents";
 import { getSession } from "@/lib/auth/session";
 import { env } from "@/lib/config/env";
 import { ROUTES } from "@/lib/constants/routes";
@@ -27,15 +26,12 @@ export default async function DashboardLayout({
     redirect(`${ROUTES.sessionClear}?reason=wrong_role`);
   }
 
-  const availability = await agentsApi.getAvailability().catch(() => null);
-
   return (
     <DashboardWebSocketBridge>
       <NotificationProvider>
       <AgentSocketProvider
         socketUrl={env.socketUrl}
         accessToken={session.accessToken}
-        initialPresence={availability?.status}
       >
       <div className="app-shell flex min-h-dvh flex-1 flex-col bg-background lg:flex-row">
         <DashboardSidebar />

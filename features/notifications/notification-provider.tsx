@@ -12,7 +12,6 @@ import {
 } from "react";
 import { usePathname } from "next/navigation";
 import { hrefForNotification } from "@/lib/notifications/from-events";
-import { getAlertsAction } from "@/features/dashboard/actions";
 import {
   DEFAULT_NOTIFICATION_PREFS,
   NOTIFICATION_PREFS_KEY,
@@ -239,28 +238,6 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     () => items.filter((item) => !item.read).length,
     [items],
   );
-
-  useEffect(() => {
-    if (!hydrated) return;
-    void getAlertsAction()
-      .then((alerts) => {
-        for (const alert of alerts) {
-          push(
-            {
-              id: alert.taskId ? `offer:${alert.taskId}` : alert.id,
-              kind: "task_offered",
-              title: alert.title,
-              body: alert.body,
-              createdAt: alert.createdAt,
-              taskId: alert.taskId,
-              panel: alert.panel,
-            },
-            { silent: true },
-          );
-        }
-      })
-      .catch(() => undefined);
-  }, [hydrated, push]);
 
   const value = useMemo<NotificationContextValue>(
     () => ({

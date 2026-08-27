@@ -4,7 +4,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import {
-  acceptTaskAction,
   startTaskAction,
 } from "@/features/tasks/actions/task-actions";
 import {
@@ -14,7 +13,7 @@ import {
   isOfferAcceptLocked,
   isRejectingOrRejected,
   markOfferAccepted,
-  releaseOfferFlight,
+  submitAcceptOffer,
   useOfferDecision,
   openRejectOfferUi,
   closeRejectOfferUi,
@@ -97,29 +96,23 @@ export function OfferActions({ task }: OfferActionsProps) {
   }
 
   function accept() {
-    if (!beginAcceptOffer(task.id)) {
-      toast("This offer was already accepted or rejected.", "error");
-      return;
-    }
+    if (decision.flight !== "none" || decision.settled !== "none") return;
+    if (!beginAcceptOffer(task.id)) return;
     startTransition(async () => {
-      try {
-        const result = await acceptTaskAction(task.id);
-        if (isRejectingOrRejected(task.id)) return;
-        if (!result.ok) {
-          releaseOfferFlight(task.id);
-          toast(result.message, "error");
-          return;
-        }
-        markOfferAccepted(task.id);
+      const result = await submitAcceptOffer(task.id);
+      if (result.ok) {
         toast("Task accepted.", "success");
         done(liveStatusPatch("ASSIGNED", "assigned"));
-      } catch (error) {
-        releaseOfferFlight(task.id);
-        toast(
-          error instanceof Error ? error.message : "Could not accept this task.",
-          "error",
-        );
+        return;
       }
+      if (result.reason === "already_accepted") {
+        markOfferAccepted(task.id);
+        done(liveStatusPatch("ASSIGNED", "assigned"));
+        return;
+      }
+      toast(result.message, "error");
+      ops?.refresh();
+      router.refresh();
     });
   }
 
@@ -169,7 +162,12 @@ export function OfferActions({ task }: OfferActionsProps) {
           <Button
             type="button"
             variant="secondary"
-            disabled={decision.flight === "reject" || decision.settled !== "none"}
+            disabled={
+              acceptLocked ||
+              decision.flight !== "none" ||
+              decision.settled !== "none" ||
+              decision.windowExpired
+            }
             onClick={openReject}
           >
             Reject

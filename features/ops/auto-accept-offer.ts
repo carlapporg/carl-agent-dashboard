@@ -35,6 +35,8 @@ const EMPTY: OfferDecision = {
 
 const states = new Map<string, OfferDecision>();
 const claims = new Map<string, OfferClaim>();
+const acceptPosts = new Map<string, Promise<TaskActionResult>>();
+const rejectPosts = new Map<string, Promise<TaskActionResult>>();
 const autoAcceptGen = new Map<string, number>();
 const listeners = new Set<() => void>();
 
@@ -151,10 +153,12 @@ export function expireRejectWindow(taskId: string) {
 export function beginAcceptOffer(taskId: string): boolean {
   if (!taskId) return false;
   const state = read(taskId);
-  if (state.settled !== "none") return false;
+  if (state.settled === "accepted") return true;
+  if (state.settled === "rejected") return false;
   if (state.flight === "reject" || claimOf(taskId) === "reject") return false;
   if (state.flight === "accept" || claimOf(taskId) === "accept") return false;
   claims.set(taskId, "accept");
+  bumpAutoAcceptGen(taskId);
   write(taskId, {
     flight: "accept",
     rejectUiOpen: false,
@@ -171,6 +175,7 @@ export function beginRejectOffer(taskId: string): boolean {
   const state = read(taskId);
   if (state.settled === "rejected" || claimOf(taskId) === "reject") return true;
   if (state.settled === "accepted") return false;
+  if (state.flight === "accept" || claimOf(taskId) === "accept") return false;
   claims.set(taskId, "reject");
   bumpAutoAcceptGen(taskId);
   write(taskId, {
@@ -261,17 +266,27 @@ export async function submitRejectOffer(
       reason: "already_accepted",
     };
   }
-  const result = await rejectTaskAction(taskId, reason);
-  if (result.ok) {
-    claims.set(taskId, "none");
-    write(taskId, {
-      flight: "none",
-      settled: "rejected",
-      rejectUiOpen: false,
-    });
-    return result;
+  const existing = rejectPosts.get(taskId);
+  if (existing) return existing;
+  const promise = (async () => {
+    const result = await rejectTaskAction(taskId, reason);
+    if (result.ok) {
+      claims.set(taskId, "none");
+      write(taskId, {
+        flight: "none",
+        settled: "rejected",
+        rejectUiOpen: false,
+      });
+      return result;
+    }
+    return reconcileFromBackend(taskId, result);
+  })();
+  rejectPosts.set(taskId, promise);
+  try {
+    return await promise;
+  } finally {
+    rejectPosts.delete(taskId);
   }
-  return reconcileFromBackend(taskId, result);
 }
 
 export function markOfferAccepted(taskId: string) {
@@ -309,6 +324,78 @@ export function releaseOfferFlight(taskId: string) {
   });
 }
 
+export async function submitAcceptOffer(taskId: string): Promise<TaskActionResult> {
+  if (!taskId) return { ok: false, message: "Missing task." };
+  if (read(taskId).settled === "accepted") return { ok: true };
+  if (read(taskId).settled === "rejected") {
+    return {
+      ok: false,
+      message: "This offer was already rejected.",
+      reason: "already_rejected",
+    };
+  }
+  if (claimOf(taskId) === "reject" || read(taskId).flight === "reject") {
+    return {
+      ok: false,
+      message: "This offer is being rejected.",
+    };
+  }
+  beginAcceptOffer(taskId);
+  if (read(taskId).settled === "rejected" || claimOf(taskId) === "reject") {
+    return {
+      ok: false,
+      message: "This offer is being rejected.",
+    };
+  }
+  if (read(taskId).flight !== "accept" && claimOf(taskId) !== "accept") {
+    return {
+      ok: false,
+      message: USER_MESSAGES.offerAlreadyAccepted,
+      reason: "already_accepted",
+    };
+  }
+  const existing = acceptPosts.get(taskId);
+  if (existing) return existing;
+  const promise = (async () => {
+    const result = await acceptTaskAction(taskId).catch((): TaskActionResult => ({
+      ok: false,
+      message: USER_MESSAGES.unknown,
+    }));
+    if (claimOf(taskId) === "reject" || read(taskId).settled === "rejected") {
+      return {
+        ok: false as const,
+        message: "This offer was already rejected.",
+        reason: "already_rejected" as const,
+      };
+    }
+    if (result.ok) {
+      markOfferAccepted(taskId);
+      return result;
+    }
+    const live = await getOfferLiveStateAction(taskId).catch(() => null);
+    if (live === "accepted") {
+      markOfferAccepted(taskId);
+      return { ok: true as const };
+    }
+    if (live === "rejected") {
+      markOfferDecisionRejected(taskId);
+      return {
+        ok: false as const,
+        message: "This offer was already rejected.",
+        reason: "already_rejected" as const,
+      };
+    }
+    releaseOfferFlight(taskId);
+    return result;
+  })();
+  acceptPosts.set(taskId, promise);
+  try {
+    return await promise;
+  } finally {
+    acceptPosts.delete(taskId);
+  }
+}
+
 export async function autoAcceptExpiredOffer(taskId: string): Promise<boolean> {
   if (!taskId) return offerWasAccepted(taskId);
   expireRejectWindow(taskId);
@@ -316,37 +403,10 @@ export async function autoAcceptExpiredOffer(taskId: string): Promise<boolean> {
     return false;
   }
   if (read(taskId).settled === "rejected") return false;
-  if (!canAutoAcceptOffer(taskId)) {
-    return offerWasAccepted(taskId);
-  }
-  if (!beginAcceptOffer(taskId)) return offerWasAccepted(taskId);
-  if (claimOf(taskId) === "reject" || read(taskId).flight === "reject") {
+  if (read(taskId).settled === "accepted") return true;
+  if (read(taskId).flight === "accept" || claimOf(taskId) === "accept") {
     return false;
   }
-  const gen = autoAcceptGen.get(taskId) ?? 0;
-  const result = await acceptTaskAction(taskId).catch((): TaskActionResult => ({
-    ok: false,
-    message: USER_MESSAGES.unknown,
-  }));
-  if ((autoAcceptGen.get(taskId) ?? 0) !== gen) {
-    return false;
-  }
-  if (read(taskId).settled === "rejected" || claimOf(taskId) === "reject") {
-    return false;
-  }
-  if (result.ok) {
-    markOfferAccepted(taskId);
-    return true;
-  }
-  const live = await getOfferLiveStateAction(taskId).catch(() => null);
-  if (live === "accepted") {
-    markOfferAccepted(taskId);
-    return true;
-  }
-  if (live === "rejected") {
-    markOfferDecisionRejected(taskId);
-    return false;
-  }
-  releaseOfferFlight(taskId);
-  return false;
+  const result = await submitAcceptOffer(taskId);
+  return result.ok;
 }

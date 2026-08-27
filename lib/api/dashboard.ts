@@ -7,10 +7,8 @@ import type {
   QueuePreviewItem,
 } from "@/types/dashboard";
 import { presenceToUi, uiToPresence } from "@/lib/agent/presence";
-import { messagesApi } from "@/lib/api/messages";
 import { tasksApi } from "@/lib/api/tasks";
 import { agentsApi } from "@/lib/api/agents";
-import { isFailedOrCancelled } from "@/features/tasks/lib/workflow";
 import type { Task } from "@/types/task";
 
 export { presenceToUi, uiToPresence };
@@ -24,6 +22,26 @@ function toQueueItem(task: Task): QueuePreviewItem {
     taskType: task.taskType ?? "TASK",
     priority: task.priority,
     expiresAt: task.expiresAt ?? task.updatedAt,
+  };
+}
+
+function conversationPreview(task: Task): string {
+  const summary = task.aiBrief?.summary?.trim();
+  if (summary) return summary;
+  const request = task.request.trim();
+  if (request) return request;
+  return "No messages yet";
+}
+
+export function taskToConversation(task: Task): ConversationSummary {
+  return {
+    taskId: task.id,
+    taskNumber: task.number,
+    taskTitle: task.title,
+    taskStatus: task.status,
+    lastMessage: conversationPreview(task),
+    lastActivityAt: task.updatedAt,
+    unreadCount: 0,
   };
 }
 
@@ -84,47 +102,15 @@ export const dashboardApi = {
   },
 
   async getConversations(): Promise<ConversationSummary[]> {
-    const [offered, active, history] = await Promise.all([
-      tasksApi.listByInbox("OFFERED"),
-      tasksApi.listByInbox("ACTIVE"),
-      tasksApi.listByInbox("HISTORY").catch(() => [] as Task[]),
-    ]);
-    const seen = new Set<string>();
-    const tasks: Task[] = [];
-    for (const task of [
-      ...offered,
-      ...active,
-      ...history.filter(isFailedOrCancelled),
-    ]) {
-      if (seen.has(task.id)) continue;
-      seen.add(task.id);
-      tasks.push(task);
-    }
-    const conversations: ConversationSummary[] = [];
-    for (const task of tasks) {
-      const timeline = await messagesApi.list(task.id).catch(() => []);
-      const last = timeline[timeline.length - 1];
-      const lastMessage =
-        last?.mediaKind === "voice"
-          ? "Voice message"
-          : last?.mediaKind === "image"
-            ? last.body.trim() || "Photo"
-            : last?.body ?? "No messages yet";
-      conversations.push({
-        taskId: task.id,
-        taskNumber: task.number,
-        taskTitle: task.title,
-        taskStatus: task.status,
-        lastMessage,
-        lastActivityAt: last?.createdAt ?? task.updatedAt,
-        unreadCount: 0,
-      });
-    }
-    return conversations.sort(
-      (a, b) =>
-        new Date(b.lastActivityAt).getTime() -
-        new Date(a.lastActivityAt).getTime(),
-    );
+    const tasks = await tasksApi.listOpen();
+    return tasks
+      .filter((task) => !task.parentId)
+      .map(taskToConversation)
+      .sort(
+        (a, b) =>
+          new Date(b.lastActivityAt).getTime() -
+          new Date(a.lastActivityAt).getTime(),
+      );
   },
 
   async getNotifications(): Promise<NotificationItem[]> {

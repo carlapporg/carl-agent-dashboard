@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils/cn";
 
@@ -30,21 +31,24 @@ export function Dialog({
   useEffect(() => {
     if (!open) return;
     const previous = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
     panelRef.current?.focus();
+    document.body.style.overflow = "hidden";
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") onCloseRef.current();
     }
     document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = previousOverflow;
       previous?.focus();
     };
   }, [open]);
 
-  if (!open) return null;
+  if (!open || typeof document === "undefined") return null;
 
-  return (
-    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+  return createPortal(
+    <div className="fixed inset-0 z-[130] flex items-center justify-center p-4">
       <button
         type="button"
         className="absolute inset-0 bg-foreground/30"
@@ -73,7 +77,8 @@ export function Dialog({
         ) : null}
         {children ? <div className="mt-6">{children}</div> : null}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

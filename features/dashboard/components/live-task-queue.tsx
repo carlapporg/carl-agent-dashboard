@@ -203,10 +203,6 @@ export function LiveTaskQueue({ seedTasks }: LiveTaskQueueProps) {
                           expiresAt={offerWindowEnd(item)}
                           taskId={item.id}
                           autoAccept
-                          onExpire={() => {
-                            if (isRejectingOrRejected(item.id)) return;
-                            ops?.refresh();
-                          }}
                         />
                       ) : (
                         <StatusBadge status={item.status} />

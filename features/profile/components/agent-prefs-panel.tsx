@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import {
   getAgentMetricsAction,
   getAgentPreferencesAction,
@@ -9,28 +9,56 @@ import { saveSkillsAction } from "@/features/agents/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useToast } from "@/components/providers/toast-provider";
 
 type Prefs = Awaited<ReturnType<typeof getAgentPreferencesAction>>;
 type Metrics = Awaited<ReturnType<typeof getAgentMetricsAction>>;
 
 export function AgentPrefsPanel() {
+  const { toast } = useToast();
   const [prefs, setPrefs] = useState<Prefs | null>(null);
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [skillDraft, setSkillDraft] = useState("");
   const [saved, setSaved] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
 
   useEffect(() => {
     void Promise.all([
       getAgentPreferencesAction(),
       getAgentMetricsAction(),
-    ]).then(([p, m]) => {
-      setPrefs(p);
-      setMetrics(m);
-    });
+    ])
+      .then(([p, m]) => {
+        setPrefs(p);
+        setMetrics(m);
+      })
+      .catch((error) => {
+        setLoadError(
+          error instanceof Error ? error.message : "Could not load preferences.",
+        );
+      });
   }, []);
+
+  if (loadError) {
+    return <p className="text-sm text-red-600">{loadError}</p>;
+  }
 
   if (!prefs || !metrics) {
     return <p className="text-sm text-muted">Loading preferences…</p>;
+  }
+
+  function save() {
+    if (!prefs || pending) return;
+    startTransition(async () => {
+      const result = await saveSkillsAction(prefs.skills, prefs.isGeneralist);
+      if (!result.ok) {
+        setSaved(false);
+        toast(result.message, "error");
+        return;
+      }
+      setSaved(true);
+      toast("Preferences saved.", "success");
+    });
   }
 
   return (
@@ -103,7 +131,11 @@ export function AgentPrefsPanel() {
         <p className="text-sm font-semibold text-foreground">
           Weekly availability
         </p>
-        <ul className="mt-2 space-y-2">
+        <p className="mt-1 text-sm text-muted">
+          Nest only stores skill tags. Weekly hours are not in the agent API yet.
+        </p>
+        {prefs.schedule.length > 0 ? (
+          <ul className="mt-2 space-y-2">
           {prefs.schedule.map((row, i) => (
             <li
               key={row.day}
@@ -150,16 +182,10 @@ export function AgentPrefsPanel() {
             </li>
           ))}
         </ul>
+        ) : null}
       </div>
 
-      <Button
-        type="button"
-        onClick={() => {
-          void saveSkillsAction(prefs.skills, prefs.isGeneralist).then(() => {
-            setSaved(true);
-          });
-        }}
-      >
+      <Button type="button" loading={pending} disabled={pending} onClick={save}>
         {saved ? "Saved" : "Save preferences"}
       </Button>
     </div>

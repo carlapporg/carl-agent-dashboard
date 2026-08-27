@@ -42,6 +42,9 @@ export function RejectDialog({
   const [pending, startTransition] = useTransition();
   const trimmed = reason.trim();
   const processing = pending || decision.flight === "reject";
+  const expired =
+    decision.windowExpired && decision.flight !== "reject";
+  const canSubmit = !processing && !expired && trimmed.length > 0;
 
   function handleClose() {
     if (processing) return;
@@ -49,7 +52,7 @@ export function RejectDialog({
   }
 
   function submit() {
-    if (!taskId || trimmed.length < 1 || processing) return;
+    if (!taskId || trimmed.length < 1 || processing || expired) return;
     if (!beginRejectOffer(taskId)) {
       toast("This task was already accepted.", "info");
       onAlreadyAccepted?.();
@@ -96,7 +99,11 @@ export function RejectDialog({
       open={open}
       onClose={handleClose}
       title="Reject this task?"
-      description="The 30-second timer keeps running. Submit before it hits 0 or this task is accepted for you."
+      description={
+        expired
+          ? "The 30-second window ended. This task is being accepted."
+          : "The 30-second timer keeps running. Submit before it hits 0 or this task is accepted for you."
+      }
     >
       {taskId && expiresAt ? (
         <div className="mb-3">
@@ -112,22 +119,24 @@ export function RejectDialog({
           placeholder="Already at capacity this hour"
           maxLength={500}
           required
-          disabled={processing}
+          disabled={processing || expired}
         />
       </label>
       <div className="mt-4 flex justify-end gap-2">
         <Button type="button" variant="ghost" onClick={handleClose} disabled={processing}>
           Cancel
         </Button>
-        <Button
-          type="button"
-          variant="danger"
-          loading={processing}
-          disabled={!trimmed || processing}
-          onClick={submit}
-        >
-          {processing ? "Rejecting…" : "Reject task"}
-        </Button>
+        {expired && !processing ? null : (
+          <Button
+            type="button"
+            variant="danger"
+            loading={processing}
+            disabled={!canSubmit}
+            onClick={submit}
+          >
+            {processing ? "Rejecting…" : "Reject task"}
+          </Button>
+        )}
       </div>
     </Dialog>
   );

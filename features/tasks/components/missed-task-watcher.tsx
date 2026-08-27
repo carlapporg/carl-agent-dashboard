@@ -8,11 +8,15 @@ import type { Task } from "@/types/task";
 export function MissedTaskWatcher({ tasks }: { tasks: Task[] }) {
   const { toast } = useToast();
   const toasted = useRef<Set<string>>(new Set());
+  const tasksRef = useRef(tasks);
+  tasksRef.current = tasks;
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
 
   useEffect(() => {
     const id = window.setInterval(() => {
       const now = Date.now();
-      for (const task of tasks) {
+      for (const task of tasksRef.current) {
         if (task.backendStatus && task.backendStatus !== "OFFERED") continue;
         if (task.status !== "queued") continue;
         if (!task.expiresAt) continue;
@@ -20,11 +24,11 @@ export function MissedTaskWatcher({ tasks }: { tasks: Task[] }) {
         if (exp > now) continue;
         if (toasted.current.has(task.id)) continue;
         toasted.current.add(task.id);
-        toast(`You missed a task (#${task.number})`, "info");
+        toastRef.current(`You missed a task (#${task.number})`, "info");
       }
-    }, 2000);
+    }, 1000);
     return () => window.clearInterval(id);
-  }, [tasks, toast]);
+  }, []);
 
   return null;
 }

@@ -1,35 +1,34 @@
 "use client";
 
-import { useWebSocketOptional } from "@/components/providers/websocket-provider";
+import { useEffect, useState } from "react";
+import { useOps } from "@/features/ops/ops-provider";
 import { cn } from "@/lib/utils/cn";
 
 export function WsConnectionBanner() {
-  const ws = useWebSocketOptional();
-  if (!ws?.configured) return null;
+  const ops = useOps();
+  const connected = ops?.connected ?? true;
+  const [show, setShow] = useState(false);
 
-  const state = ws.connectionState;
-  if (state === "ready" || state === "open" || state === "idle") return null;
+  useEffect(() => {
+    if (connected) {
+      setShow(false);
+      return;
+    }
+    const id = window.setTimeout(() => setShow(true), 1500);
+    return () => window.clearTimeout(id);
+  }, [connected]);
 
-  const message =
-    state === "reconnecting" || state === "connecting"
-      ? "Reconnecting to live updates…"
-      : state === "authenticating"
-        ? "Securing live connection…"
-        : state === "error"
-          ? "Live connection issue — queue may be stale."
-          : "Live connection unavailable.";
+  if (!show || connected) return null;
 
   return (
     <div
       className={cn(
-        "mb-4 rounded-lg border px-3 py-2 text-sm",
-        state === "error"
-          ? "border-amber-200 bg-amber-50 text-amber-900"
-          : "border-border bg-surface-hover text-foreground-soft",
+        "mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900",
       )}
       role="status"
     >
-      {message}
+      Live connection dropped. Reconnecting and checking the task queue so you
+      do not miss an offer.
     </div>
   );
 }
