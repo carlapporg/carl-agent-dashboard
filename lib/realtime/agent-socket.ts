@@ -1,6 +1,6 @@
 "use client";
 
-import { io, type Socket } from "socket.io-client";
+import { io, type Socket, type SocketOptions } from "socket.io-client";
 
 export type AgentSocketEvents = {
   "task.offered": (payload: unknown) => void;
@@ -30,7 +30,7 @@ function applyAuth(token: string) {
   latestToken = token;
   if (!current) return;
   current.auth = { token };
-  const opts = current.io?.opts;
+  const opts = current.io?.opts as (typeof current.io.opts & SocketOptions) | undefined;
   if (!opts) return;
   opts.auth = handshakeAuth;
   const query = opts.query;
