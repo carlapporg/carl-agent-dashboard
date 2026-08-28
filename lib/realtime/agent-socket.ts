@@ -1,6 +1,6 @@
 "use client";
 
-import { io, type Socket, type SocketOptions } from "socket.io-client";
+import { io, type ManagerOptions, type Socket, type SocketOptions } from "socket.io-client";
 
 export type AgentSocketEvents = {
   "task.offered": (payload: unknown) => void;
@@ -16,6 +16,11 @@ export type AgentSocketEvents = {
   "task.confirmation_declined": (payload: unknown) => void;
 };
 
+type IoOpts = Partial<ManagerOptions> &
+  SocketOptions & {
+    extraHeaders?: Record<string, string>;
+  };
+
 let current: Socket | null = null;
 let currentOrigin = "";
 let latestToken = "";
@@ -26,13 +31,20 @@ function handshakeAuth(cb: (data: { token: string }) => void) {
   cb({ token: latestToken });
 }
 
+function extraHeadersFor(origin: string): Record<string, string> {
+  return /ngrok/i.test(origin)
+    ? { "ngrok-skip-browser-warning": "1" }
+    : {};
+}
+
 function applyAuth(token: string) {
   latestToken = token;
   if (!current) return;
-  current.auth = { token };
-  const opts = current.io?.opts as (typeof current.io.opts & SocketOptions) | undefined;
+  current.auth = handshakeAuth;
+  const opts = current.io?.opts as IoOpts | undefined;
   if (!opts) return;
   opts.auth = handshakeAuth;
+  opts.extraHeaders = extraHeadersFor(currentOrigin);
   const query = opts.query;
   if (query && typeof query === "object" && !Array.isArray(query)) {
     opts.query = { ...query, token };
@@ -72,18 +84,13 @@ export function connectAgentSocket(origin: string, token: string): Socket {
   current = io(origin, {
     auth: handshakeAuth,
     query: { token },
-    extraHeaders: {
-      Authorization: `Bearer ${token}`,
-      ...(/ngrok/i.test(origin)
-        ? { "ngrok-skip-browser-warning": "1" }
-        : {}),
-    },
+    extraHeaders: extraHeadersFor(origin),
     transports: ["websocket", "polling"],
     rememberUpgrade: true,
     reconnection: true,
     reconnectionAttempts: Infinity,
-    reconnectionDelay: 500,
-    reconnectionDelayMax: 5_000,
+    reconnectionDelay: 1_000,
+    reconnectionDelayMax: 8_000,
     randomizationFactor: 0.5,
     timeout: 20_000,
     autoConnect: true,
@@ -109,13 +116,15 @@ export function releaseAgentSocket() {
   releaseTimer = setTimeout(() => {
     releaseTimer = null;
     if (retainCount === 0) disconnectAgentSocket();
-  }, 300);
+  }, 2_000);
 }
 
 export function joinTaskRoom(socket: Socket, taskId: string) {
+  if (!taskId || !socket.connected) return;
   socket.emit("joinTask", { taskId });
 }
 
 export function leaveTaskRoom(socket: Socket, taskId: string) {
+  if (!taskId || !socket.connected) return;
   socket.emit("leaveTask", { taskId });
 }

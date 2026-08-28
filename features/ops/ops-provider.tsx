@@ -170,11 +170,13 @@ type AgentOpsProviderProps = {
   initialPresence?: AgentPresence;
 };
 
-const CATCH_UP_MIN_MS = 12_000;
+const CATCH_UP_MIN_MS = 15_000;
+const CATCH_UP_AFTER_GAP_MS = 2_000;
 const PRESENCE_MIN_MS = 60_000;
 let lastCatchUpAtMs = 0;
 let lastPresencePushAtMs = 0;
 let catchUpInFlightGlobal = false;
+let didInitialCatchUpGlobal = false;
 
 const TASK_INCOMING_EVENTS = [
   "task.offered",
@@ -362,13 +364,11 @@ export function AgentOpsProvider({
     const socket = connectAgentSocket(socketUrl, socketTokenRef.current);
     socketRef.current = socket;
     let lastAuthRefresh = 0;
-    let catchUpInFlight = false;
-    let catchUpQueued = false;
-    let reconnectTimer = 0;
     let cancelled = false;
-    let hydrated = false;
-    let sawDisconnect = false;
-    let didInitialCatchUp = false;
+    let hydrated = didInitialCatchUpGlobal;
+    let disconnectedAt = 0;
+    let dropBannerTimer = 0;
+    let catchUpTimer = 0;
     const seenIds = new Set<string>();
 
     function pulseQueue() {
@@ -420,20 +420,16 @@ export function AgentOpsProvider({
       }
     }
 
-    async function catchUpQueue(force = false) {
+    async function catchUpQueue() {
       if (cancelled) return;
       const now = Date.now();
-      if (!force && lastCatchUpAtMs !== 0 && now - lastCatchUpAtMs < CATCH_UP_MIN_MS) return;
-      if (catchUpInFlight || catchUpInFlightGlobal) {
-        catchUpQueued = true;
-        return;
-      }
-      catchUpInFlight = true;
+      if (lastCatchUpAtMs !== 0 && now - lastCatchUpAtMs < CATCH_UP_MIN_MS) return;
+      if (catchUpInFlightGlobal) return;
       catchUpInFlightGlobal = true;
-      lastCatchUpAtMs = now;
       try {
         const tasks = await getOpenTasksAction();
         if (cancelled) return;
+        lastCatchUpAtMs = Date.now();
         const known = new Set(seenIds);
         for (const row of liveTasksRef.current) known.add(row.id);
         const newOffers: Task[] = [];
@@ -457,50 +453,49 @@ export function AgentOpsProvider({
             pulseQueue();
           }
         }
+        hydrated = true;
+        didInitialCatchUpGlobal = true;
         rejoinRooms();
       } catch {
-        /* keep the live socket; next reconnect will try again */
+        lastCatchUpAtMs = 0;
       } finally {
-        hydrated = true;
-        catchUpInFlight = false;
         catchUpInFlightGlobal = false;
-        if (catchUpQueued) {
-          catchUpQueued = false;
-          void catchUpQueue();
-        }
       }
     }
 
-    function startReconnectWatch() {
-      window.clearInterval(reconnectTimer);
-      if (socket.connected) return;
-      reconnectTimer = window.setInterval(() => {
-        if (document.visibilityState === "hidden") return;
-        ensureAgentSocketConnected();
-      }, 4_000);
+    function requestCatchUp() {
+      window.clearTimeout(catchUpTimer);
+      catchUpTimer = window.setTimeout(() => {
+        if (!cancelled) void catchUpQueue();
+      }, 80);
     }
 
     function onConnect() {
-      window.clearInterval(reconnectTimer);
+      window.clearTimeout(dropBannerTimer);
       setConnected(true);
       rejoinRooms();
-      if (sawDisconnect) {
+      const gap = disconnectedAt ? Date.now() - disconnectedAt : 0;
+      disconnectedAt = 0;
+      if (gap >= CATCH_UP_AFTER_GAP_MS) {
         reassertPresence();
-        void catchUpQueue(true);
-      } else if (!didInitialCatchUp) {
-        didInitialCatchUp = true;
-        void catchUpQueue(true);
+        requestCatchUp();
+      } else if (!didInitialCatchUpGlobal) {
+        requestCatchUp();
       }
-      sawDisconnect = false;
     }
 
     function onDisconnect(reason: string) {
-      sawDisconnect = true;
-      setConnected(false);
-      startReconnectWatch();
+      if (!disconnectedAt) disconnectedAt = Date.now();
+      window.clearTimeout(dropBannerTimer);
+      dropBannerTimer = window.setTimeout(() => {
+        if (cancelled || socket.connected) return;
+        setConnected(false);
+      }, 1_500);
       if (reason === "io server disconnect") {
         void refreshAuth().finally(() => {
-          if (!cancelled) socket.connect();
+          if (!cancelled && !socket.connected && !socket.active) {
+            socket.connect();
+          }
         });
       }
     }
@@ -727,22 +722,19 @@ export function AgentOpsProvider({
       if (!/auth|unauthorized|jwt|token|forbidden/i.test(message)) return;
       void refreshAuth().then((token) => {
         if (!token || cancelled) return;
-        ensureAgentSocketConnected();
+        if (!socket.connected && !socket.active) socket.connect();
       });
     }
 
     function onVisibleOrOnline() {
       if (document.visibilityState === "hidden") return;
       ensureAgentSocketConnected();
-      if (!socket.connected) startReconnectWatch();
-      void catchUpQueue(false);
     }
 
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
     socket.on("connect_error", onConnectError);
     if (socket.connected) onConnect();
-    else startReconnectWatch();
 
     document.addEventListener("visibilitychange", onVisibleOrOnline);
     window.addEventListener("online", onVisibleOrOnline);
@@ -778,7 +770,8 @@ export function AgentOpsProvider({
 
     return () => {
       cancelled = true;
-      window.clearInterval(reconnectTimer);
+      window.clearTimeout(dropBannerTimer);
+      window.clearTimeout(catchUpTimer);
       document.removeEventListener("visibilitychange", onVisibleOrOnline);
       window.removeEventListener("online", onVisibleOrOnline);
       window.removeEventListener("pageshow", onVisibleOrOnline);
