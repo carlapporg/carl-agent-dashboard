@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { confirmationApi } from "@/lib/api/confirmation";
 import { messagesApi } from "@/lib/api/messages";
+import { receiptApi } from "@/lib/api/receipt";
 import { tasksApi } from "@/lib/api/tasks";
 
 /** One Nest GET per task per server request (metadata + page share this). */
@@ -12,4 +13,8 @@ export const listTaskMessagesCached = cache((taskId: string) =>
 
 export const getTaskConfirmationCached = cache((taskId: string) =>
   confirmationApi.get(taskId),
+);
+
+export const getTaskReceiptCached = cache((taskId: string) =>
+  receiptApi.get(taskId),
 );

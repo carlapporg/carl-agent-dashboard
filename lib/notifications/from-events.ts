@@ -1,5 +1,6 @@
 import { ROUTES } from "@/lib/constants/routes";
 import { parseTaskConfirmationPayload } from "@/types/confirmation";
+import { parseTaskReceiptPayload } from "@/types/receipt";
 import type { NotificationItem, NotificationKind } from "@/types/dashboard";
 import type { Task } from "@/types/task";
 
@@ -41,7 +42,7 @@ export function kindLabel(kind: NotificationKind): string {
     case "payment_expired":
       return "Payment expired";
     case "task_cancelled":
-      return "Cancelled";
+      return "Failed";
     case "waiting_for_agent":
       return "Needs you";
     case "missed_task":
@@ -50,6 +51,10 @@ export function kindLabel(kind: NotificationKind): string {
       return "Details confirmed";
     case "confirmation_declined":
       return "Details declined";
+    case "receipt_accepted":
+      return "Receipt accepted";
+    case "receipt_rejected":
+      return "Receipt rejected";
     default:
       return "Update";
   }
@@ -141,11 +146,11 @@ export function parseCancelledNotification(payload: unknown): NotificationDraft 
     str(data?.taskId) ?? str(nested(data, "task")?.id) ?? str(root?.taskId);
   if (!taskId) return null;
   const title =
-    str(data?.title) ?? str(nested(data, "task")?.title) ?? "A task was cancelled.";
+    str(data?.title) ?? str(nested(data, "task")?.title) ?? "A task failed.";
   return {
     id: `cancelled:${taskId}`,
     kind: "task_cancelled",
-    title: "Task cancelled",
+    title: "Task failed",
     body: title,
     createdAt: new Date().toISOString(),
     taskId,
@@ -199,6 +204,44 @@ export function parseConfirmationNotification(
     createdAt: parsed.decidedAt ?? parsed.updatedAt ?? new Date().toISOString(),
     taskId,
     panel: "brief",
+  };
+}
+
+export function parseReceiptNotification(
+  payload: unknown,
+  kind: Extract<NotificationKind, "receipt_accepted" | "receipt_rejected">,
+): NotificationDraft | null {
+  const parsed = parseTaskReceiptPayload(payload);
+  const root = asRecord(payload);
+  const data = asRecord(root?.data) ?? root;
+  const taskId =
+    parsed?.taskId ??
+    str(data?.taskId) ??
+    str(nested(data, "task")?.id) ??
+    str(root?.taskId);
+  if (!taskId) return null;
+  const receiptId =
+    parsed?.id ?? str(data?.receiptId) ?? str(data?.id) ?? kind;
+  const rejectReason = parsed?.rejectReason?.trim() || str(data?.rejectReason);
+  const truncatedReason =
+    rejectReason && rejectReason.length > 90
+      ? `${rejectReason.slice(0, 87)}…`
+      : rejectReason;
+  return {
+    id: `${kind}:${taskId}:${receiptId}`,
+    kind,
+    title:
+      kind === "receipt_accepted"
+        ? "User accepted the receipt"
+        : "User rejected the receipt",
+    body:
+      kind === "receipt_accepted"
+        ? "You can complete the task now."
+        : truncatedReason || "Upload a new receipt.",
+    createdAt:
+      parsed?.decidedAt ?? parsed?.updatedAt ?? new Date().toISOString(),
+    taskId,
+    panel: "receipt",
   };
 }
 

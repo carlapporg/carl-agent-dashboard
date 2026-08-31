@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, type CSSProperties } from "react";
+import { useEffect, useMemo, type CSSProperties } from "react";
 import { AvailabilityToggle } from "@/features/dashboard/components/availability-toggle";
 import { LiveTaskQueue } from "@/features/dashboard/components/live-task-queue";
 import { MetricStatCard } from "@/features/dashboard/components/metric-stat-card";
 import { ShiftProgress } from "@/features/dashboard/components/shift-progress";
 import { WsConnectionBanner } from "@/features/dashboard/components/ws-connection-banner";
+import { useOps } from "@/features/ops/ops-provider";
 import {
   useRejectedOfferTick,
   withoutRejectedOffers,
@@ -31,7 +32,13 @@ export function DashboardHome({
   presence,
 }: DashboardHomeProps) {
   const firstName = welcomeName.split(" ")[0] || welcomeName;
+  const ops = useOps();
+  const hydrateOpenTasks = ops?.hydrateOpenTasks;
   const rejectedTick = useRejectedOfferTick();
+
+  useEffect(() => {
+    hydrateOpenTasks?.(tasks);
+  }, [hydrateOpenTasks, tasks]);
 
   const roots = useMemo(
     () => withoutRejectedOffers(tasks.filter((t) => !t.parentId)),
@@ -41,10 +48,11 @@ export function DashboardHome({
   const stats = useMemo(() => {
     const offered = roots.filter((t) => t.backendStatus === "OFFERED").length;
     const inProgress = roots.filter(
-      (t) => t.backendStatus === "IN_PROGRESS",
+      (t) =>
+        t.status === "in_progress" || t.backendStatus === "WAITING_FOR_AGENT",
     ).length;
     const waitingCustomer = roots.filter(
-      (t) => t.backendStatus === "WAITING_FOR_USER",
+      (t) => t.status === "waiting_for_customer",
     ).length;
     const completed = roots.filter((t) => t.status === "completed").length;
     const inMotion = roots.filter((t) => hasStartedWork(t)).length;
@@ -106,7 +114,7 @@ export function DashboardHome({
             className="dash-slide-in"
           />
           <MetricStatCard
-            label="In progress"
+            label="In Progress"
             value={stats.inProgress}
             ringValue={stats.inProgress}
             hint="Started work in motion."
@@ -115,10 +123,10 @@ export function DashboardHome({
             style={{ animationDelay: "60ms" } as CSSProperties}
           />
           <MetricStatCard
-            label="Waiting on customer"
+            label="Waiting for Customer"
             value={stats.waitingCustomer}
             ringValue={stats.waitingCustomer}
-            hint="WAITING_FOR_USER from Nest."
+            hint="After the final confirmation is sent."
             color="#d97706"
             className="dash-slide-in"
             style={{ animationDelay: "120ms" } as CSSProperties}

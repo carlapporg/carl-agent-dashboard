@@ -15,6 +15,8 @@ const KINDS: NotificationKind[] = [
   "missed_task",
   "confirmation_confirmed",
   "confirmation_declined",
+  "receipt_accepted",
+  "receipt_rejected",
 ];
 
 let memoryItems: NotificationItem[] = [];
@@ -41,7 +43,8 @@ function parseItem(value: unknown): NotificationItem | null {
       row.panel === "payment" ||
       row.panel === "chat" ||
       row.panel === "brief" ||
-      row.panel === "log"
+      row.panel === "log" ||
+      row.panel === "receipt"
         ? row.panel
         : undefined,
   };

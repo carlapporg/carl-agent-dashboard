@@ -49,8 +49,8 @@ const BOARD_COLUMNS: Array<{
   },
   {
     id: "in_progress",
-    label: "In progress",
-    hint: "Being worked",
+    label: "In Progress",
+    hint: "Agent is working",
     color: "#4f7cff",
     statuses: ["in_progress"],
     dropStatus: "in_progress",
@@ -58,7 +58,7 @@ const BOARD_COLUMNS: Array<{
   {
     id: "waiting",
     label: "Waiting",
-    hint: "Customer or payment",
+    hint: "Waiting for Customer or Payment",
     color: "#d97706",
     statuses: ["waiting_for_customer", "waiting_for_payment"],
     dropStatus: "waiting_for_customer",
@@ -66,7 +66,7 @@ const BOARD_COLUMNS: Array<{
   {
     id: "done",
     label: "Done",
-    hint: "Completed, failed, or cancelled",
+    hint: "Completed or failed",
     color: "#059669",
     statuses: ["completed", "failed", "cancelled"],
     dropStatus: "completed",
@@ -335,6 +335,14 @@ export function TaskBoard({ tasks }: TaskBoardProps) {
       return;
     }
     if (previous.status === current.status) return;
+    if (dropStatus === "waiting_for_customer") {
+      setItems(tasks);
+      toast(
+        "Waiting for Customer is set when you send the final confirmation.",
+        "info",
+      );
+      return;
+    }
 
     const snapshot = previous;
     const result = await updateTaskStatusAction(taskId, dropStatus);

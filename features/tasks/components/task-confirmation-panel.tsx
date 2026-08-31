@@ -24,7 +24,7 @@ const CLOSED_STATUSES = new Set([
 ]);
 import { cn } from "@/lib/utils/cn";
 
-const CURRENCIES = ["PKR", "USD", "AED", "EUR", "GBP", "SAR", "INR"] as const;
+const DEFAULT_CURRENCY = "USD";
 
 type TaskConfirmationPanelProps = {
   taskId: string;
@@ -45,10 +45,10 @@ function statusVariant(
 
 function statusHelp(status: TaskConfirmation["status"]): string {
   if (status === "PENDING") {
-    return "Waiting for client confirmation. Do not book until they approve.";
+    return "Waiting for the customer to approve or reject the details.";
   }
   if (status === "CONFIRMED") {
-    return "The client approved. You can now complete the booking.";
+    return "The client approved the details. Send payment proof next.";
   }
   if (status === "DECLINED") {
     return "The client declined. Update the details and send a new confirmation.";
@@ -66,7 +66,6 @@ export function TaskConfirmationPanel({
   const { toast } = useToast();
   const [notes, setNotes] = useState(confirmation?.notes ?? "");
   const [cost, setCost] = useState(confirmation?.cost ?? "");
-  const [currency, setCurrency] = useState(confirmation?.currency || "PKR");
   const [showForm, setShowForm] = useState(!confirmation);
   const [pending, startTransition] = useTransition();
 
@@ -74,7 +73,6 @@ export function TaskConfirmationPanel({
     if (!confirmation) return;
     setNotes((current) => current.trim() || confirmation.notes || "");
     setCost((current) => current.trim() || confirmation.cost || "");
-    setCurrency(confirmation.currency || "PKR");
     if (confirmation.status === "DECLINED" || confirmation.status === "SUPERSEDED") {
       setShowForm(true);
       return;
@@ -107,7 +105,7 @@ export function TaskConfirmationPanel({
       const result = await sendTaskConfirmationAction(taskId, {
         notes: nextNotes,
         cost: nextCost,
-        currency: currency.trim() || "PKR",
+        currency: DEFAULT_CURRENCY,
       });
       if (!result.ok) {
         toast(result.message, "error");
@@ -127,11 +125,11 @@ export function TaskConfirmationPanel({
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h2 className="text-sm font-semibold text-foreground">
-            Client confirmation
+            Task Details Confirmation
           </h2>
           <p className="mt-1 text-sm text-muted">
-            Research the request, then send the final details and cost. Wait for
-            the client before you book.
+            Research the request, then send the final details and cost. The task
+            stays In Progress until you send this confirmation.
           </p>
         </div>
         {confirmation ? (
@@ -153,7 +151,7 @@ export function TaskConfirmationPanel({
         >
           <p className="text-sm font-semibold text-foreground">
             {waiting
-              ? "Waiting for client confirmation"
+              ? "Waiting for Customer"
               : confirmationStatusLabel(confirmation.status)}
           </p>
           <p className="mt-0.5 text-sm text-muted">
@@ -228,35 +226,17 @@ export function TaskConfirmationPanel({
               maxLength={5000}
             />
           </div>
-          <div className="grid gap-3 sm:grid-cols-[1fr_8rem]">
-            <div>
-              <Label htmlFor="confirmation-cost">Total cost</Label>
-              <Input
-                id="confirmation-cost"
-                value={cost}
-                onChange={(event) => setCost(event.target.value)}
-                disabled={pending}
-                placeholder="2500"
-                inputMode="decimal"
-                maxLength={40}
-              />
-            </div>
-            <div>
-              <Label htmlFor="confirmation-currency">Currency</Label>
-              <select
-                id="confirmation-currency"
-                value={currency}
-                onChange={(event) => setCurrency(event.target.value)}
-                disabled={pending}
-                className="h-[length:var(--control-height)] w-full rounded-[var(--radius-md)] border border-border bg-surface px-3 text-sm text-foreground outline-none focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/20"
-              >
-                {CURRENCIES.map((code) => (
-                  <option key={code} value={code}>
-                    {code}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div>
+            <Label htmlFor="confirmation-cost">Total cost (USD)</Label>
+            <Input
+              id="confirmation-cost"
+              value={cost}
+              onChange={(event) => setCost(event.target.value)}
+              disabled={pending}
+              placeholder="25.00"
+              inputMode="decimal"
+              maxLength={40}
+            />
           </div>
           <Button
             type="button"
@@ -264,14 +244,16 @@ export function TaskConfirmationPanel({
             disabled={pending}
             onClick={send}
           >
-            Send confirmation
+            Send task details confirmation
           </Button>
         </div>
       ) : null}
 
       {!canSend && !disabled && !closed ? (
         <p className="mt-3 text-sm text-muted">
-          Accept the offer first, then you can send a confirmation.
+          {taskStatus === "ASSIGNED"
+            ? "Start the task before you send the final confirmation."
+            : "Accept the offer first, then you can send a confirmation."}
         </p>
       ) : null}
       {closed ? (

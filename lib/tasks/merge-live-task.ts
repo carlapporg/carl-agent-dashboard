@@ -22,7 +22,7 @@ const RANK: Record<string, number> = {
 function rank(task: Task): number {
   const backend = task.backendStatus ?? "";
   if (backend in RANK) return RANK[backend];
-  if (task.status === "in_progress" || task.status === "waiting_for_customer") {
+  if (task.status === "in_progress" || task.status === "waiting_for_customer" || task.status === "waiting_for_payment") {
     return 3;
   }
   if (task.status === "assigned") return 2;
@@ -182,6 +182,33 @@ export function pinWhileRejecting(task: Task): Task {
   };
 }
 
+function keepConfirmationWait(base: Task, next: Task): Task {
+  if (
+    base.status === "waiting_for_customer" &&
+    next.backendStatus === "WAITING_FOR_USER" &&
+    next.status === "in_progress"
+  ) {
+    return { ...next, status: "waiting_for_customer" };
+  }
+  return next;
+}
+
+function keepPaymentWait(base: Task, next: Task): Task {
+  if (
+    base.status === "waiting_for_payment" &&
+    next.status === "waiting_for_customer" &&
+    (next.backendStatus === "WAITING_FOR_USER" ||
+      next.backendStatus === "IN_PROGRESS")
+  ) {
+    return { ...next, status: "waiting_for_payment" };
+  }
+  return next;
+}
+
+export function keepStatusOverlays(base: Task, next: Task): Task {
+  return keepPaymentWait(base, keepConfirmationWait(base, next));
+}
+
 export function mergeTaskLists(
   seed: Task[],
   live: Task[],
@@ -198,12 +225,16 @@ export function mergeTaskLists(
       continue;
     }
     const existing = byId.get(task.id);
-    const next = existing ? mergeByProgress(existing, task) : task;
+    const next = existing
+      ? keepStatusOverlays(existing, mergeByProgress(existing, task))
+      : task;
     byId.set(task.id, pinWhileRejecting(next));
   }
   if (offer && !(isMarkedRejected(offer.id) && !isPendingReject(offer.id))) {
     const existing = byId.get(offer.id);
-    const next = existing ? mergeByProgress(existing, offer) : offer;
+    const next = existing
+      ? keepStatusOverlays(existing, mergeByProgress(existing, offer))
+      : offer;
     byId.set(offer.id, pinWhileRejecting(next));
   }
   return [...byId.values()].filter((task) => task.backendStatus !== "REJECTED");

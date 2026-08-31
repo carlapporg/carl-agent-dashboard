@@ -39,8 +39,23 @@ export function priorityBadgeVariant(
 }
 
 export function formatStatus(status: TaskStatus): string {
-  if (status === "queued") return "offered";
-  return status.replaceAll("_", " ");
+  switch (status) {
+    case "queued":
+      return "Offered";
+    case "assigned":
+      return "Assigned";
+    case "in_progress":
+      return "In Progress";
+    case "waiting_for_customer":
+      return "Waiting for Customer";
+    case "waiting_for_payment":
+      return "Waiting for Payment";
+    case "completed":
+      return "Completed";
+    case "failed":
+    case "cancelled":
+      return "Failed";
+  }
 }
 
 const STATUS_DOT: Record<TaskStatus, string> = {

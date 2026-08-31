@@ -28,7 +28,7 @@ export const taskConfirmationSchema = z
     summary: z.string().nullable().optional(),
     rows: z.array(taskConfirmationRowSchema).default([]),
     cost: z.union([z.string(), z.number()]).transform(String),
-    currency: z.string().optional().default("PKR"),
+    currency: z.string().optional().default("USD"),
     costLabel: z.string().optional().default("Total"),
     costDisplay: z.string().optional().default(""),
     notes: z.string().optional().default(""),
@@ -51,7 +51,6 @@ export type SendTaskConfirmationBody = z.infer<
 >;
 
 const CONFIRM_SEND_STATUSES = new Set([
-  "ASSIGNED",
   "IN_PROGRESS",
   "WAITING_FOR_USER",
   "WAITING_FOR_AGENT",
@@ -97,7 +96,7 @@ export function isConfirmationConfirmed(
 export function confirmationStatusLabel(status: TaskConfirmationStatus): string {
   switch (status) {
     case "PENDING":
-      return "Waiting for client";
+      return "Waiting for Customer";
     case "CONFIRMED":
       return "Client approved";
     case "DECLINED":

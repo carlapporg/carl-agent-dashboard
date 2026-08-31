@@ -14,6 +14,8 @@ export type AgentSocketEvents = {
   "task.missed": (payload: unknown) => void;
   "task.confirmation_confirmed": (payload: unknown) => void;
   "task.confirmation_declined": (payload: unknown) => void;
+  "task.receipt_accepted": (payload: unknown) => void;
+  "task.receipt_rejected": (payload: unknown) => void;
 };
 
 type IoOpts = Partial<ManagerOptions> &

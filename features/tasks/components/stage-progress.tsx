@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils/cn";
+import { formatStatus } from "@/features/tasks/components/status-badge";
 import type { CSSProperties } from "react";
 import type { TaskStatus } from "@/types/task";
 
@@ -10,9 +11,9 @@ export const TASK_STAGES: Array<{
 }> = [
   { status: "queued", label: "Offered", color: "#9ca3af" },
   { status: "assigned", label: "Assigned", color: "#60a5fa" },
-  { status: "in_progress", label: "In progress", color: "#4f7cff" },
-  { status: "waiting_for_customer", label: "Waiting customer", color: "#f59e0b" },
-  { status: "waiting_for_payment", label: "Waiting payment", color: "#f97316" },
+  { status: "in_progress", label: "In Progress", color: "#4f7cff" },
+  { status: "waiting_for_customer", label: "Waiting for Customer", color: "#f59e0b" },
+  { status: "waiting_for_payment", label: "Waiting for Payment", color: "#f97316" },
   { status: "completed", label: "Completed", color: "#10b981" },
 ];
 
@@ -85,8 +86,8 @@ export function StageRing({
         <p className="text-2xl font-semibold tabular-nums text-foreground">
           {status === "cancelled" || status === "failed" ? "—" : `${pct}%`}
         </p>
-        <p className="mt-0.5 max-w-[5.5rem] text-center text-xs font-medium capitalize text-muted">
-          {label ?? status.replaceAll("_", " ")}
+        <p className="mt-0.5 max-w-[5.5rem] text-center text-xs font-medium text-muted">
+          {label ?? formatStatus(status)}
         </p>
       </div>
     </div>

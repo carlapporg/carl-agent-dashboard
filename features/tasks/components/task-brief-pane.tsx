@@ -25,10 +25,9 @@ const STATUS_OPTIONS: TaskStatus[] = [
   "queued",
   "assigned",
   "in_progress",
-  "waiting_for_customer",
   "waiting_for_payment",
   "completed",
-  "cancelled",
+  "failed",
 ];
 
 type TaskBriefPaneProps = {

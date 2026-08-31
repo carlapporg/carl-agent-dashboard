@@ -404,8 +404,13 @@ export async function autoAcceptExpiredOffer(taskId: string): Promise<boolean> {
   }
   if (read(taskId).settled === "rejected") return false;
   if (read(taskId).settled === "accepted") return true;
+  const pending = acceptPosts.get(taskId);
+  if (pending) {
+    const result = await pending;
+    return result.ok || offerWasAccepted(taskId);
+  }
   if (read(taskId).flight === "accept" || claimOf(taskId) === "accept") {
-    return false;
+    return offerWasAccepted(taskId);
   }
   const result = await submitAcceptOffer(taskId);
   return result.ok;

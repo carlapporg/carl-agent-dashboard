@@ -23,10 +23,12 @@ import {
   type TaskChatThreadHandle,
 } from "@/features/tasks/components/task-chat-thread";
 import { TaskConfirmationPanel } from "@/features/tasks/components/task-confirmation-panel";
+import { PaymentProofPanel } from "@/features/tasks/components/payment-proof-panel";
 import { TaskCustomerSnippet } from "@/features/tasks/components/task-customer-snippet";
 import { TaskFacts } from "@/features/tasks/components/task-facts";
 import { taskDisplayCode, taskDisplayTitle } from "@/lib/tasks/details";
 import { TaskStatusStepper } from "@/features/tasks/components/task-status-stepper";
+import { formatStatus } from "@/features/tasks/components/status-badge";
 import { TaskStatusForm } from "@/features/tasks/components/task-status-form";
 import { TaskSubtasks } from "@/features/tasks/components/task-subtasks";
 import {
@@ -36,6 +38,7 @@ import {
   canUpdateAgentStatus,
   closedTaskMessage,
   completeGateReasons,
+  displayedTaskStatus,
   hasStartedWork,
   isClosedTask,
   isFailedOrCancelled,
@@ -54,6 +57,12 @@ import { cn } from "@/lib/utils/cn";
 import { offerWindowEnd } from "@/types/agent";
 import type { TaskConfirmation } from "@/types/confirmation";
 import { isConfirmationConfirmed } from "@/types/confirmation";
+import {
+  isReceiptAccepted,
+  isReceiptPending,
+  isReceiptRejected,
+  type TaskReceipt,
+} from "@/types/receipt";
 import type { CustomerHistoryItem, CustomerProfile } from "@/types/customer";
 import type { Itinerary } from "@/types/itinerary";
 import type { TimelineEvent } from "@/types/message";
@@ -63,6 +72,7 @@ type TaskWorkspaceProps = {
   task: Task;
   timeline: TimelineEvent[];
   confirmation?: TaskConfirmation | null;
+  receipt?: TaskReceipt | null;
   customer?: CustomerProfile | null;
   customerHistory?: CustomerHistoryItem[];
   childTasks?: Task[];
@@ -73,24 +83,14 @@ type TaskWorkspaceProps = {
 
 type ExtraTab = "customer" | "itinerary" | "log";
 
-function phaseLabel(task: Task, rejecting = false): string {
+function phaseLabel(
+  task: Task,
+  confirmation: TaskConfirmation | null,
+  rejecting = false,
+): string {
   if (rejecting) return "Rejecting";
-  const status = task.backendStatus;
-  if (status === "OFFERED") return "Offered";
-  if (status === "QUEUED") return "Offered";
-  if (status === "ASSIGNED") return "Assigned";
-  if (status === "IN_PROGRESS") return "In progress";
-  if (status === "WAITING_FOR_USER") return "Waiting for user";
-  if (status === "WAITING_FOR_AGENT") return "Waiting for agent";
-  if (status === "COMPLETED") return "Completed";
-  if (status === "FAILED") return "Failed";
-  if (status === "CANCELLED") return "Cancelled";
-  if (status === "REJECTED") return "Rejected";
-  if (task.status === "completed") return "Completed";
-  if (task.status === "waiting_for_payment") return "Waiting payment";
-  if (task.status === "waiting_for_customer") return "Waiting customer";
-  if (hasStartedWork(task)) return "In progress";
-  return "Assigned";
+  if (task.backendStatus === "REJECTED") return "Rejected";
+  return formatStatus(displayedTaskStatus(task, confirmation));
 }
 
 function withBackendStatus(task: Task, backendStatus: AgentTaskStatus): Task {
@@ -110,6 +110,7 @@ export function TaskWorkspace({
   task: taskProp,
   timeline,
   confirmation: confirmationProp = null,
+  receipt: receiptProp = null,
   customer = null,
   customerHistory = [],
   childTasks = [],
@@ -127,6 +128,8 @@ export function TaskWorkspace({
   const chatRef = useRef<TaskChatThreadHandle>(null);
   const [taskState, setTask] = useState(taskProp);
   const [confirmation, setConfirmation] = useState(confirmationProp);
+  const [receipt, setReceipt] = useState(receiptProp);
+  const declinedResumeKey = useRef<string | null>(null);
   const decision = useOfferDecision(taskProp.id);
   const rejecting =
     decision.flight === "reject" || decision.settled === "rejected";
@@ -157,20 +160,60 @@ export function TaskWorkspace({
     setConfirmation(liveAt >= propAt ? live : confirmationProp);
   }, [confirmationProp, ops?.liveConfirmation, taskState.id]);
 
+  useEffect(() => {
+    const live =
+      ops?.liveReceipt?.taskId === taskState.id ? ops.liveReceipt : null;
+    if (!live) {
+      setReceipt(receiptProp);
+      return;
+    }
+    if (!receiptProp) {
+      setReceipt(live);
+      return;
+    }
+    const liveAt = new Date(live.updatedAt || live.decidedAt || 0).getTime();
+    const propAt = new Date(
+      receiptProp.updatedAt || receiptProp.decidedAt || 0,
+    ).getTime();
+    setReceipt(liveAt >= propAt ? live : receiptProp);
+  }, [receiptProp, ops?.liveReceipt, taskState.id]);
+
+  useEffect(() => {
+    if (confirmation?.status !== "DECLINED") {
+      if (confirmation?.status === "PENDING") declinedResumeKey.current = null;
+      return;
+    }
+    const key = `${taskState.id}:${confirmation.id}`;
+    if (declinedResumeKey.current === key) return;
+    declinedResumeKey.current = key;
+    setTask((current) => withBackendStatus(current, "IN_PROGRESS"));
+    ops?.patchLiveTask(
+      taskState.id,
+      liveStatusPatch("IN_PROGRESS", "in_progress"),
+    );
+    void updateTaskAgentStatusAction(taskState.id, "IN_PROGRESS");
+  }, [confirmation, ops, taskState.id]);
+
   const task = rejecting ? pinWhileRejecting(taskState) : taskState;
+  const viewTask = {
+    ...task,
+    status: displayedTaskStatus(task, confirmation),
+  };
   const closed = isClosedTask(task);
   const lockedReadOnly = readOnly || closed;
-  const clientConfirmed = isConfirmationConfirmed(confirmation);
+  const detailsConfirmed = isConfirmationConfirmed(confirmation);
+  const receiptAccepted = isReceiptAccepted(receipt);
+  const bothConfirmed = detailsConfirmed && receiptAccepted;
   const actionLabel = lockedReadOnly
     ? null
-    : primaryActionLabel(task, true, confirmation);
+    : primaryActionLabel(task, confirmation, receipt);
   const started = hasStartedWork(task);
-  const gateReasons = completeGateReasons(task, true, confirmation);
-  const bookingLocked = !lockedReadOnly && started && !clientConfirmed;
+  const gateReasons = completeGateReasons(task, confirmation, receipt);
+  const bookingLocked = !lockedReadOnly && started && !bothConfirmed;
   const showCompleteHint =
     !lockedReadOnly &&
     started &&
-    !canCompleteTask(task, true, confirmation);
+    !canCompleteTask(task, confirmation, receipt);
   const showItinerary = !task.parentId && childTasks.length > 0;
 
   useEffect(() => {
@@ -186,6 +229,13 @@ export function TaskWorkspace({
     }
     if (panel === "brief") {
       document.getElementById("panel-brief")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+      return;
+    }
+    if (panel === "receipt") {
+      document.getElementById("panel-receipt")?.scrollIntoView({
         behavior: "smooth",
         block: "start",
       });
@@ -215,8 +265,8 @@ export function TaskWorkspace({
 
   function confirmComplete() {
     if (isClosedTask(task)) return;
-    if (!isConfirmationConfirmed(confirmation)) {
-      toast("Wait for the client to confirm before completing.", "error");
+    if (!isConfirmationConfirmed(confirmation) || !isReceiptAccepted(receipt)) {
+      toast("Wait for the user to accept the receipt before completing.", "error");
       setCompleteOpen(false);
       return;
     }
@@ -278,7 +328,7 @@ export function TaskWorkspace({
                 {taskDisplayCode(task)}
               </span>
               <span className="rounded-md border border-border px-2.5 py-0.5 font-medium text-foreground-soft">
-                {phaseLabel(task, rejecting)}
+                {phaseLabel(task, confirmation, rejecting)}
               </span>
               {task.tier === "vip" || task.tier === "family" ? (
                 <span className="rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-semibold text-accent">
@@ -298,7 +348,7 @@ export function TaskWorkspace({
 
             <div className="mt-4 border-t border-border pt-3">
               <TaskStatusStepper
-                task={task}
+                task={viewTask}
                 parent={parentTask}
                 compact
               />
@@ -335,10 +385,16 @@ export function TaskWorkspace({
               <p className="mt-4 text-sm text-muted">
                 {bookingLocked
                   ? confirmation?.status === "PENDING"
-                    ? "Waiting for the client to confirm. You cannot book yet."
+                    ? "Waiting for the client to confirm the task details."
                     : confirmation?.status === "DECLINED"
-                      ? "The client declined. Send a new confirmation below."
-                      : "Send the client confirmation below before you book."
+                      ? "The client declined the details. Send a new confirmation below."
+                      : !detailsConfirmed
+                        ? "Send the task details confirmation before you book."
+                        : isReceiptPending(receipt)
+                          ? "Waiting for the user to review the receipt."
+                          : isReceiptRejected(receipt)
+                            ? "The user rejected the receipt. Upload a new one below."
+                            : "Upload a receipt and wait for the user to accept it before you complete."
                   : null}
               </p>
             ) : null}
@@ -354,20 +410,49 @@ export function TaskWorkspace({
             onSent={(next) => {
               setConfirmation(next);
               ops?.setLiveConfirmation(next);
-              setTask(withBackendStatus(task, "WAITING_FOR_USER"));
+              setTask({
+                ...withBackendStatus(task, "WAITING_FOR_USER"),
+                status: "waiting_for_customer",
+              });
               ops?.patchLiveTask(
                 task.id,
                 liveStatusPatch("WAITING_FOR_USER", "waiting_for_customer"),
                 task,
               );
+              if (task.backendStatus !== "WAITING_FOR_USER") {
+                void updateTaskAgentStatusAction(task.id, "WAITING_FOR_USER");
+              }
               router.refresh();
             }}
           />
 
+          {detailsConfirmed ? (
+            <PaymentProofPanel
+              taskId={task.id}
+              taskStatus={task.backendStatus}
+              receipt={receipt}
+              disabled={lockedReadOnly}
+              onChanged={(next) => {
+                setReceipt(next);
+                ops?.setLiveReceipt(next);
+                if (next.status === "PENDING") {
+                  setTask(withBackendStatus(task, "WAITING_FOR_USER"));
+                  ops?.patchLiveTask(
+                    task.id,
+                    liveStatusPatch("WAITING_FOR_USER", "waiting_for_payment"),
+                    task,
+                  );
+                }
+                router.refresh();
+              }}
+            />
+          ) : null}
+
           <TaskStatusForm
             task={task}
+            displayStatus={viewTask.status}
             disabled={!canUpdateAgentStatus(task)}
-            blockComplete={!clientConfirmed}
+            blockComplete={!bothConfirmed}
             onUpdated={(status) => {
               setTask(withBackendStatus(task, status));
               ops?.patchLiveTask(task.id, {
@@ -469,7 +554,7 @@ export function TaskWorkspace({
         title="Complete this booking?"
         description={
           gateReasons.length === 0
-            ? "The client confirmed. Mark this booking complete?"
+            ? "The user accepted the receipt. Mark this booking complete?"
             : `Still open: ${gateReasons.join("; ")}`
         }
         confirmLabel="Complete booking"

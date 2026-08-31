@@ -60,6 +60,8 @@ export const wsTaskQueueEventTypeSchema = z.enum([
   "queue.updated",
   "task.confirmation_confirmed",
   "task.confirmation_declined",
+  "task.receipt_accepted",
+  "task.receipt_rejected",
 ]);
 
 /**

@@ -2,70 +2,98 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { updateTaskAgentStatusAction } from "@/features/tasks/actions/task-actions";
+import { formatStatus } from "@/features/tasks/components/status-badge";
 import { ConfirmDialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/providers/toast-provider";
 import { isClosedTask } from "@/features/tasks/lib/workflow";
-import type { Task } from "@/types/task";
+import type { Task, TaskStatus } from "@/types/task";
 
 const STATUS_OPTIONS = [
   {
+    value: "IN_PROGRESS" as const,
+    label: "In Progress",
+    hint: "You are working on this task. Chat does not change this.",
+    selectable: true,
+  },
+  {
     value: "WAITING_FOR_USER" as const,
-    label: "Waiting for user",
-    hint: "Pause until the client replies.",
+    label: "Waiting for Customer",
+    hint: "Set automatically when you send the final confirmation.",
+    selectable: false,
   },
   {
     value: "COMPLETED" as const,
     label: "Completed",
     hint: "Work is done. Nest notifies the client.",
+    selectable: true,
   },
   {
     value: "FAILED" as const,
     label: "Failed",
     hint: "Could not finish. Nest notifies the client.",
-  },
-  {
-    value: "CANCELLED" as const,
-    label: "Cancelled",
-    hint: "Stop the task. Nest notifies the client.",
+    selectable: true,
   },
 ];
 
+type AgentStatusChoice =
+  | "IN_PROGRESS"
+  | "WAITING_FOR_USER"
+  | "COMPLETED"
+  | "FAILED";
+
 type TaskStatusFormProps = {
   task: Task;
+  displayStatus?: TaskStatus;
   disabled?: boolean;
   blockComplete?: boolean;
-  onUpdated?: (
-    status: "WAITING_FOR_USER" | "COMPLETED" | "FAILED" | "CANCELLED",
-  ) => void;
+  onUpdated?: (status: AgentStatusChoice) => void;
 };
+
+function choiceFromDisplay(status: TaskStatus): AgentStatusChoice | null {
+  if (status === "completed") return "COMPLETED";
+  if (status === "failed" || status === "cancelled") return "FAILED";
+  if (status === "waiting_for_customer") return "WAITING_FOR_USER";
+  if (status === "in_progress") return "IN_PROGRESS";
+  return null;
+}
 
 export function TaskStatusForm({
   task,
+  displayStatus,
   disabled,
   blockComplete = false,
   onUpdated,
 }: TaskStatusFormProps) {
   const { toast } = useToast();
-  const [status, setStatus] = useState<
-    "WAITING_FOR_USER" | "COMPLETED" | "FAILED" | "CANCELLED"
-  >("WAITING_FOR_USER");
+  const shown = displayStatus ?? task.status;
+  const current = choiceFromDisplay(shown);
+  const [status, setStatus] = useState<AgentStatusChoice>(
+    current ?? "IN_PROGRESS",
+  );
   const [pending, startTransition] = useTransition();
   const [confirmComplete, setConfirmComplete] = useState(false);
 
   useEffect(() => {
-    if (blockComplete && status === "COMPLETED") {
-      setStatus("WAITING_FOR_USER");
+    if (current) setStatus(current);
+  }, [current, task.id]);
+
+  useEffect(() => {
+    if (blockComplete && status === "COMPLETED" && current && current !== "COMPLETED") {
+      setStatus(current);
     }
-  }, [blockComplete, status]);
+  }, [blockComplete, status, current]);
 
   const closed = isClosedTask(task);
   const locked = disabled || closed;
+  const unchanged = current === status;
+  const canSubmit = status !== "WAITING_FOR_USER" && !unchanged;
 
   function submit() {
+    if (!canSubmit) return;
     if (status === "COMPLETED") {
       if (blockComplete) {
-        toast("Wait for the client to confirm before completing.", "error");
+        toast("Wait for both confirmations before completing.", "error");
         return;
       }
       setConfirmComplete(true);
@@ -83,7 +111,7 @@ export function TaskStatusForm({
           return;
         }
         onUpdated?.(status);
-        toast("Status updated. The client will be notified.", "success");
+        toast("Status updated.", "success");
         setConfirmComplete(false);
       } catch (error) {
         toast(
@@ -102,45 +130,64 @@ export function TaskStatusForm({
           ? "This task is closed. Status cannot be changed."
           : locked
             ? "Start the task before you can update status."
-            : "Nest updates the task and messages the client."}
+            : `Current status: ${formatStatus(shown)}. Waiting for Customer is set only when you send the final confirmation.`}
       </p>
 
       <fieldset
         className="mt-3 space-y-2 disabled:pointer-events-none disabled:opacity-60"
         disabled={locked || pending}
       >
-        {STATUS_OPTIONS.map((option) => (
-          <label
-            key={option.value}
-            className="flex cursor-pointer items-start gap-2 rounded-lg border border-border px-3 py-2 has-[:checked]:border-accent/40 has-[:checked]:bg-accent/[0.04]"
-          >
-            <input
-              type="radio"
-              name="task-status"
-              className="mt-1"
-              checked={status === option.value}
-              disabled={option.value === "COMPLETED" && blockComplete}
-              onChange={() => setStatus(option.value)}
-            />
-            <span>
-              <span className="block text-sm font-semibold text-foreground">
-                {option.label}
+        {STATUS_OPTIONS.map((option) => {
+          const isCurrent = current === option.value;
+          const optionLocked =
+            !option.selectable ||
+            (option.value === "COMPLETED" && blockComplete) ||
+            (option.value === "IN_PROGRESS" && current === "WAITING_FOR_USER");
+          return (
+            <label
+              key={option.value}
+              className="flex cursor-pointer items-start gap-2 rounded-lg border border-border px-3 py-2 has-[:checked]:border-accent/40 has-[:checked]:bg-accent/[0.04]"
+            >
+              <input
+                type="radio"
+                name="task-status"
+                className="mt-1"
+                checked={status === option.value}
+                disabled={optionLocked}
+                onChange={() => {
+                  if (!option.selectable) return;
+                  setStatus(option.value);
+                }}
+              />
+              <span className="min-w-0 flex-1">
+                <span className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-semibold text-foreground">
+                    {option.label}
+                  </span>
+                  {isCurrent ? (
+                    <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[11px] font-semibold text-accent">
+                      Current
+                    </span>
+                  ) : null}
+                </span>
+                <span className="text-xs text-muted">
+                  {option.value === "COMPLETED" && blockComplete
+                    ? "Locked until the user accepts the receipt."
+                    : option.value === "IN_PROGRESS" && current === "WAITING_FOR_USER"
+                      ? "Goes back to In Progress if the customer rejects."
+                      : option.hint}
+                </span>
               </span>
-              <span className="text-xs text-muted">
-                {option.value === "COMPLETED" && blockComplete
-                  ? "Locked until the client confirms the details."
-                  : option.hint}
-              </span>
-            </span>
-          </label>
-        ))}
+            </label>
+          );
+        })}
       </fieldset>
 
       <div className="mt-3">
         <Button
           type="button"
           loading={pending}
-          disabled={locked || pending}
+          disabled={locked || pending || !canSubmit}
           onClick={submit}
         >
           Update status

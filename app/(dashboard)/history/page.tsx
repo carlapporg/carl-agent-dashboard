@@ -22,7 +22,7 @@ export default async function HistoryPage() {
       <PageShell wide>
         <PageHeader
           title="History"
-          description="Completed, failed, and cancelled tasks. Open one to review or message the client."
+          description="Completed and failed tasks. Open one to review or message the client."
           className="mb-5 sm:mb-6"
         />
         <EmptyState
@@ -39,7 +39,7 @@ export default async function HistoryPage() {
     <PageShell wide>
       <PageHeader
         title="History"
-        description="Completed, failed, and cancelled tasks. Open one to review or message the client."
+        description="Completed and failed tasks. Open one to review or message the client."
         className="mb-5 sm:mb-6"
       />
       <HistoryView tasks={roots} />

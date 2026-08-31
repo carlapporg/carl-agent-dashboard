@@ -2,11 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  EARLY_ACCEPT_MS,
-  autoAcceptExpiredOffer,
-  canAutoAcceptOffer,
   expireRejectWindow,
-  isOfferAcceptLocked,
   isRejectingOrRejected,
   useOfferDecision,
 } from "@/features/ops/auto-accept-offer";
@@ -40,12 +36,10 @@ function statusLabel(args: {
 export function OfferCountdown({
   expiresAt,
   taskId,
-  autoAccept = false,
   size = "sm",
   onExpire,
 }: OfferCountdownProps) {
   const fired = useRef(false);
-  const seenOpen = useRef(false);
   const onExpireRef = useRef(onExpire);
   onExpireRef.current = onExpire;
   const [now, setNow] = useState(() => Date.now());
@@ -63,69 +57,25 @@ export function OfferCountdown({
 
   useEffect(() => {
     fired.current = false;
-    seenOpen.current = false;
   }, [taskId]);
 
   useEffect(() => {
-    if (settled || inFlight) return;
-
     function tick() {
       const remaining = Number.isFinite(deadline)
         ? Math.max(0, deadline - Date.now())
         : 0;
-      if (remaining > 0) seenOpen.current = true;
       setNow(Date.now());
-      if (fired.current) return;
-      if (remaining > EARLY_ACCEPT_MS) return;
-      if (
-        taskId &&
-        (decision.flight === "accept" ||
-          decision.flight === "reject" ||
-          isRejectingOrRejected(taskId))
-      ) {
-        return;
-      }
-      if (taskId && decision.settled === "rejected") {
-        fired.current = true;
-        return;
-      }
-      if (
-        taskId &&
-        !canAutoAcceptOffer(taskId) &&
-        decision.settled !== "accepted"
-      ) {
-        return;
-      }
+      if (remaining > 0 || fired.current) return;
+      if (taskId && isRejectingOrRejected(taskId)) return;
       fired.current = true;
       if (taskId) expireRejectWindow(taskId);
-      void (async () => {
-        if (autoAccept && taskId && seenOpen.current) {
-          const accepted = await autoAcceptExpiredOffer(taskId);
-          if (
-            !accepted &&
-            taskId &&
-            (isRejectingOrRejected(taskId) || isOfferAcceptLocked(taskId))
-          ) {
-            fired.current = false;
-            return;
-          }
-        }
-        onExpireRef.current?.();
-      })();
+      onExpireRef.current?.();
     }
 
     tick();
-    const id = window.setInterval(tick, 1000);
+    const id = window.setInterval(tick, 250);
     return () => window.clearInterval(id);
-  }, [
-    autoAccept,
-    deadline,
-    decision.flight,
-    decision.settled,
-    inFlight,
-    settled,
-    taskId,
-  ]);
+  }, [deadline, taskId]);
 
   const ring = size === "lg" ? 72 : 40;
   const stroke = size === "lg" ? 7 : 4;

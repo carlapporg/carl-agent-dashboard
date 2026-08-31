@@ -14,13 +14,12 @@ import { ROUTES } from "@/lib/constants/routes";
 import { cn } from "@/lib/utils/cn";
 import type { Task, TaskStatus } from "@/types/task";
 
-type HistoryFilter = "all" | Extract<TaskStatus, "completed" | "failed" | "cancelled">;
+type HistoryFilter = "all" | Extract<TaskStatus, "completed" | "failed">;
 
 const FILTERS: Array<{ value: HistoryFilter; label: string; color: string }> = [
   { value: "all", label: "All", color: "#4f7cff" },
   { value: "completed", label: "Completed", color: "#10b981" },
   { value: "failed", label: "Failed", color: "#dc2626" },
-  { value: "cancelled", label: "Cancelled", color: "#6b7280" },
 ];
 
 type HistoryViewProps = {
@@ -41,12 +40,10 @@ export function HistoryView({ tasks }: HistoryViewProps) {
       all: visibleTasks.length,
       completed: 0,
       failed: 0,
-      cancelled: 0,
     };
     for (const task of visibleTasks) {
       if (task.status === "completed") next.completed += 1;
-      if (task.status === "failed") next.failed += 1;
-      if (task.status === "cancelled") next.cancelled += 1;
+      if (task.status === "failed" || task.status === "cancelled") next.failed += 1;
     }
     return next;
   }, [visibleTasks]);
@@ -54,7 +51,11 @@ export function HistoryView({ tasks }: HistoryViewProps) {
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return visibleTasks.filter((t) => {
-      if (status !== "all" && t.status !== status) return false;
+      if (status === "failed") {
+        if (t.status !== "failed" && t.status !== "cancelled") return false;
+      } else if (status !== "all" && t.status !== status) {
+        return false;
+      }
       if (!needle) return true;
       return (
         t.title.toLowerCase().includes(needle) ||
@@ -114,7 +115,7 @@ export function HistoryView({ tasks }: HistoryViewProps) {
           }
           description={
             visibleTasks.length === 0
-              ? "Completed, failed, and cancelled work will show up here."
+              ? "Completed and failed work will show up here."
               : "Try another status or clear your search."
           }
         />

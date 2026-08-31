@@ -9,9 +9,13 @@ import { ROUTES } from "@/lib/constants/routes";
 import {
   getTaskCached,
   getTaskConfirmationCached,
+  getTaskReceiptCached,
   listTaskMessagesCached,
 } from "@/lib/api/task-page";
-import { shouldFetchTaskConfirmation } from "@/types/confirmation";
+import {
+  isConfirmationConfirmed,
+  shouldFetchTaskConfirmation,
+} from "@/types/confirmation";
 
 type TaskPageProps = {
   params: Promise<{ taskId: string }>;
@@ -57,8 +61,12 @@ export default async function TaskWorkspacePage({ params }: TaskPageProps) {
   }
 
   const timeline = await listTaskMessagesCached(task.id).catch(() => []);
-  const confirmation = shouldFetchTaskConfirmation(task.backendStatus)
+  const shouldFetch = shouldFetchTaskConfirmation(task.backendStatus);
+  const confirmation = shouldFetch
     ? await getTaskConfirmationCached(task.id).catch(() => null)
+    : null;
+  const receipt = isConfirmationConfirmed(confirmation)
+    ? await getTaskReceiptCached(task.id).catch(() => null)
     : null;
 
   return (
@@ -67,6 +75,7 @@ export default async function TaskWorkspacePage({ params }: TaskPageProps) {
         task={task}
         timeline={timeline}
         confirmation={confirmation}
+        receipt={receipt}
         customer={null}
         customerHistory={[]}
         childTasks={[]}

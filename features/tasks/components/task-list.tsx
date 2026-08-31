@@ -54,17 +54,17 @@ const STATUS_FILTERS: Array<{
   },
   {
     value: "in_progress",
-    label: "In progress",
+    label: "In Progress",
     match: ["in_progress"],
   },
   {
     value: "waiting_for_customer",
-    label: "Waiting on customer",
+    label: "Waiting for Customer",
     match: ["waiting_for_customer"],
   },
   {
     value: "waiting_for_payment",
-    label: "Waiting on payment",
+    label: "Waiting for Payment",
     match: ["waiting_for_payment"],
   },
   {
@@ -75,12 +75,7 @@ const STATUS_FILTERS: Array<{
   {
     value: "failed",
     label: "Failed",
-    match: ["failed"],
-  },
-  {
-    value: "cancelled",
-    label: "Cancelled",
-    match: ["cancelled"],
+    match: ["failed", "cancelled"],
   },
 ];
 
@@ -89,6 +84,7 @@ type TaskListProps = {
 };
 
 function parseStatusFilter(raw: string | null): TaskStatus | "all" {
+  if (raw === "cancelled") return "failed";
   const value = (raw as TaskStatus | "all") || "all";
   if (value === "queued" || !STATUS_FILTERS.some((filter) => filter.value === value)) {
     return "all";
@@ -132,6 +128,12 @@ export function TaskList({ tasks }: TaskListProps) {
   const [viewReady, setViewReady] = useState(false);
 
   const rejectedTick = useRejectedOfferTick();
+  const hydrateOpenTasks = ops?.hydrateOpenTasks;
+
+  useEffect(() => {
+    hydrateOpenTasks?.(tasks);
+  }, [hydrateOpenTasks, tasks]);
+
   const allTasks = useMemo(
     () =>
       withoutRejectedOffers(

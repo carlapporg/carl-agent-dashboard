@@ -44,7 +44,7 @@ export const API_ENDPOINTS = {
     /** POST — ASSIGNED → IN_PROGRESS. No body. */
     taskStart: (taskId: string) =>
       `/agents/me/tasks/${taskId}/start` as const,
-    /** PATCH { status: COMPLETED|FAILED|CANCELLED|WAITING_FOR_USER, note? } */
+    /** PATCH { status: IN_PROGRESS|COMPLETED|FAILED|CANCELLED|WAITING_FOR_USER, note? } */
     taskStatus: (taskId: string) =>
       `/agents/me/tasks/${taskId}/status` as const,
     /**
@@ -54,6 +54,18 @@ export const API_ENDPOINTS = {
      */
     taskConfirmation: (taskId: string) =>
       `/agents/me/tasks/${taskId}/confirmation` as const,
+    /**
+     * GET latest receipt (any status). 404 if none.
+     * POST multipart { file, note? } — booking confirmation must be CONFIRMED.
+     */
+    taskReceipt: (taskId: string) =>
+      `/agents/me/tasks/${taskId}/receipt` as const,
+    /** GET one receipt by id. */
+    taskReceiptById: (taskId: string, receiptId: string) =>
+      `/agents/me/tasks/${taskId}/receipts/${receiptId}` as const,
+    /** GET raw file bytes. Use agentFileUrl. */
+    taskReceiptFile: (taskId: string, receiptId: string) =>
+      `/agents/me/tasks/${taskId}/receipts/${receiptId}/file` as const,
     /** GET list | POST { content } */
     taskMessages: (taskId: string) =>
       `/agents/me/tasks/${taskId}/messages` as const,

@@ -76,6 +76,8 @@ function kindAllowed(kind: NotificationKind, prefs: NotificationPrefs): boolean 
       return true;
     case "confirmation_confirmed":
     case "confirmation_declined":
+    case "receipt_accepted":
+    case "receipt_rejected":
       return true;
     default:
       return true;

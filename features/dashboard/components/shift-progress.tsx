@@ -166,7 +166,7 @@ export function ShiftProgress({
               </span>
               <span className="inline-flex items-center gap-2">
                 <span className="size-2.5 rounded-full bg-accent" />
-                In progress
+                In Progress
               </span>
               <span className="inline-flex items-center gap-2">
                 <span className="size-2.5 rounded-full bg-[#eef2f7] ring-1 ring-border" />

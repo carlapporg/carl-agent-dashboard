@@ -1,5 +1,14 @@
-import type { TaskConfirmation } from "@/types/confirmation";
-import { isConfirmationConfirmed } from "@/types/confirmation";
+import {
+  isConfirmationConfirmed,
+  isConfirmationPending,
+  type TaskConfirmation,
+} from "@/types/confirmation";
+import {
+  isReceiptAccepted,
+  isReceiptPending,
+  isReceiptRejected,
+  type TaskReceipt,
+} from "@/types/receipt";
 import type { Task, TaskStatus } from "@/types/task";
 
 /**
@@ -11,7 +20,6 @@ import type { Task, TaskStatus } from "@/types/task";
 export type WorkflowStageId =
   | "offered"
   | "assigned"
-  | "started"
   | "waiting_customer"
   | "waiting_payment"
   | "in_progress"
@@ -29,27 +37,64 @@ export function workflowStagesForTask(_task: Task): WorkflowStage[] {
     { id: "offered", label: "Offered", matches: ["queued"] },
     { id: "assigned", label: "Assigned", matches: ["assigned"] },
     {
-      id: "started",
-      label: "Started",
-      matches: ["in_progress"],
-    },
-    {
-      id: "waiting_customer",
-      label: "Waiting Customer",
-      matches: ["waiting_for_customer"],
-    },
-    {
-      id: "waiting_payment",
-      label: "Waiting Payment",
-      matches: ["waiting_for_payment"],
-    },
-    {
       id: "in_progress",
       label: "In Progress",
       matches: ["in_progress"],
     },
+    {
+      id: "waiting_customer",
+      label: "Waiting for Customer",
+      matches: ["waiting_for_customer"],
+    },
+    {
+      id: "waiting_payment",
+      label: "Waiting for Payment",
+      matches: ["waiting_for_payment"],
+    },
     { id: "completed", label: "Completed", matches: ["completed"] },
   ];
+}
+
+/**
+ * Status shown in the UI. Waiting for Customer only after a confirmation
+ * is pending. After the customer approves, show Waiting for Payment.
+ * Cancelled is shown as Failed.
+ */
+export function displayedTaskStatus(
+  task: Task,
+  confirmation?: TaskConfirmation | null,
+): TaskStatus {
+  if (task.backendStatus === "COMPLETED" || task.status === "completed") {
+    return "completed";
+  }
+  if (
+    task.backendStatus === "FAILED" ||
+    task.backendStatus === "CANCELLED" ||
+    task.status === "failed" ||
+    task.status === "cancelled"
+  ) {
+    return "failed";
+  }
+  if (task.backendStatus === "REJECTED") return "cancelled";
+  if (
+    task.backendStatus === "OFFERED" ||
+    task.backendStatus === "QUEUED" ||
+    task.status === "queued"
+  ) {
+    return "queued";
+  }
+  if (task.backendStatus === "ASSIGNED" || task.status === "assigned") {
+    return "assigned";
+  }
+
+  if (isConfirmationConfirmed(confirmation)) return "waiting_for_payment";
+  if (isConfirmationPending(confirmation)) return "waiting_for_customer";
+  if (confirmation?.status === "DECLINED" || confirmation?.status === "SUPERSEDED") {
+    return "in_progress";
+  }
+  if (task.status === "waiting_for_payment") return "waiting_for_payment";
+  if (task.status === "waiting_for_customer") return "waiting_for_customer";
+  return "in_progress";
 }
 
 /** Highlight only the current status stage (non-linear). */
@@ -58,9 +103,7 @@ export function currentStageId(task: Task): WorkflowStageId | null {
   if (task.status === "completed") return "completed";
   if (task.status === "waiting_for_payment") return "waiting_payment";
   if (task.status === "waiting_for_customer") return "waiting_customer";
-  if (task.status === "in_progress") {
-    return task.suggestedStepsDone.length === 0 ? "started" : "in_progress";
-  }
+  if (task.status === "in_progress") return "in_progress";
   if (task.status === "queued") return "offered";
   if (task.status === "assigned") return "assigned";
   return "assigned";
@@ -132,13 +175,13 @@ export function canStartTask(task: Task): boolean {
 }
 
 export function canSendConfirmationForTask(task: Task): boolean {
-  if (isClosedTask(task) || isOfferOpen(task)) return false;
+  if (isClosedTask(task) || isOfferOpen(task) || canStartTask(task)) {
+    return false;
+  }
   return (
-    task.backendStatus === "ASSIGNED" ||
     task.backendStatus === "IN_PROGRESS" ||
     task.backendStatus === "WAITING_FOR_USER" ||
     task.backendStatus === "WAITING_FOR_AGENT" ||
-    task.status === "assigned" ||
     task.status === "in_progress" ||
     task.status === "waiting_for_customer" ||
     task.status === "waiting_for_payment"
@@ -178,21 +221,25 @@ export function messageClientHint(task: Task): string | undefined {
   if (task.backendStatus === "REJECTED") {
     return "This offer was rejected, so messages cannot be sent.";
   }
-  if (task.backendStatus === "FAILED" || task.status === "failed") {
+  if (
+    task.backendStatus === "FAILED" ||
+    task.backendStatus === "CANCELLED" ||
+    task.status === "failed" ||
+    task.status === "cancelled"
+  ) {
     return "Tell the client why this task failed.";
-  }
-  if (task.backendStatus === "CANCELLED" || task.status === "cancelled") {
-    return "Tell the client why this task was cancelled.";
   }
   return undefined;
 }
 
 export function closedTaskMessage(task: Task): string {
-  if (task.backendStatus === "FAILED" || task.status === "failed") {
+  if (
+    task.backendStatus === "FAILED" ||
+    task.backendStatus === "CANCELLED" ||
+    task.status === "failed" ||
+    task.status === "cancelled"
+  ) {
     return "This task failed. You cannot start it, send confirmation, or change status. You can still message the client to explain why.";
-  }
-  if (task.backendStatus === "CANCELLED" || task.status === "cancelled") {
-    return "This task is cancelled. You cannot continue work on it. You can still message the client to explain why.";
   }
   if (task.backendStatus === "REJECTED") {
     return "This offer was rejected. No further actions are available.";
@@ -255,48 +302,54 @@ export type PrimaryActionLabel = "Start task" | "Complete task" | "Complete book
 
 export function primaryActionLabel(
   task: Task,
-  paymentApproved: boolean,
   confirmation?: TaskConfirmation | null,
+  receipt?: TaskReceipt | null,
 ): PrimaryActionLabel | null {
   if (isClosedTask(task) || isOfferOpen(task)) return null;
   if (canStartTask(task)) return "Start task";
-  if (!canCompleteTask(task, paymentApproved, confirmation)) return null;
+  if (!canCompleteTask(task, confirmation, receipt)) return null;
   return "Complete booking";
 }
 
 export function canCompleteTask(
   task: Task,
-  paymentApproved: boolean,
   confirmation?: TaskConfirmation | null,
+  receipt?: TaskReceipt | null,
 ): boolean {
   if (isClosedTask(task) || !hasStartedWork(task)) return false;
   if (!isConfirmationConfirmed(confirmation)) return false;
-  if (completeRequiresPayment(task) && !paymentApproved) return false;
+  if (!isReceiptAccepted(receipt)) return false;
   return true;
 }
 
 export function completeRequiresPayment(task: Task): boolean {
-  return task.requiresPayment === true || task.status === "waiting_for_payment";
+  return task.requiresPayment === true;
 }
 
 export function completeGateReasons(
   task: Task,
-  paymentApproved: boolean,
   confirmation?: TaskConfirmation | null,
+  receipt?: TaskReceipt | null,
 ): string[] {
   if (isClosedTask(task)) return [];
   const reasons: string[] = [];
   if (!isConfirmationConfirmed(confirmation)) {
     if (confirmation?.status === "PENDING") {
-      reasons.push("Wait for the client to confirm the details");
+      reasons.push("Wait for the client to confirm the task details");
     } else if (confirmation?.status === "DECLINED") {
-      reasons.push("Client declined. Send a new confirmation");
+      reasons.push("Client declined the details. Send a new confirmation");
     } else {
-      reasons.push("Send details to the client and wait for confirmation");
+      reasons.push("Send task details and wait for confirmation");
     }
   }
-  if (completeRequiresPayment(task) && !paymentApproved) {
-    reasons.push("Payment must be completed before you mark this done");
+  if (!isReceiptAccepted(receipt)) {
+    if (isReceiptPending(receipt)) {
+      reasons.push("Wait for the user to review the receipt");
+    } else if (isReceiptRejected(receipt)) {
+      reasons.push("User rejected the receipt. Upload a new one");
+    } else if (isConfirmationConfirmed(confirmation)) {
+      reasons.push("Upload a receipt and wait for the user to accept it");
+    }
   }
   return reasons;
 }
@@ -310,9 +363,12 @@ export function clientMessageForStatus(status: TaskStatus): string {
     case "waiting_for_payment":
       return "Your task is awaiting payment approval.";
     case "waiting_for_customer":
-      return "Your task is waiting on your reply.";
+      return "Please review the details and approve or reject them.";
     case "completed":
       return "Your task has been completed.";
+    case "failed":
+    case "cancelled":
+      return "This task could not be completed.";
     default:
       return `Your task status is now ${status.replaceAll("_", " ")}.`;
   }

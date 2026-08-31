@@ -26,16 +26,23 @@ type LiveTaskQueueProps = {
 function receivedLabel(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return date.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
 }
 
 function statusBadgeLabel(task: Task): string {
   if (isRejectingOrRejected(task.id) || isPendingReject(task.id)) return "Rejecting";
+  if (task.status === "waiting_for_payment") return "Waiting for Payment";
+  if (task.status === "waiting_for_customer") return "Waiting for Customer";
   if (task.backendStatus === "OFFERED") return "Offered";
   if (task.backendStatus === "ASSIGNED") return "Assigned";
-  if (task.backendStatus === "WAITING_FOR_USER") return "Waiting";
-  if (task.backendStatus === "IN_PROGRESS") return "Active";
-  if (task.backendStatus === "WAITING_FOR_AGENT") return "Waiting";
+  if (task.backendStatus === "WAITING_FOR_USER") return "In Progress";
+  if (task.backendStatus === "IN_PROGRESS") return "In Progress";
+  if (task.backendStatus === "WAITING_FOR_AGENT") return "In Progress";
+  if (task.status === "cancelled") return "Failed";
   return task.status.replaceAll("_", " ");
 }
 
@@ -171,7 +178,8 @@ export function LiveTaskQueue({ seedTasks }: LiveTaskQueueProps) {
                                 ? "bg-amber-50 text-amber-800"
                                 : assigned
                                   ? "bg-accent/10 text-accent"
-                                  : item.backendStatus === "WAITING_FOR_USER"
+                                  : item.status === "waiting_for_payment" ||
+                                      item.status === "waiting_for_customer"
                                   ? "bg-amber-50 text-amber-800"
                                   : "bg-emerald-50 text-emerald-800",
                             )}

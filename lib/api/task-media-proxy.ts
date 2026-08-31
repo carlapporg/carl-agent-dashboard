@@ -53,12 +53,15 @@ export async function proxyTaskMediaGet(
       return NextResponse.json({ message }, { status: upstream.status });
     }
     const contentType = upstream.headers.get("content-type") || fallbackType;
+    const disposition = upstream.headers.get("content-disposition");
+    const headers: Record<string, string> = {
+      "Content-Type": contentType,
+      "Cache-Control": "private, max-age=120",
+    };
+    if (disposition) headers["Content-Disposition"] = disposition;
     return new NextResponse(upstream.body, {
       status: 200,
-      headers: {
-        "Content-Type": contentType,
-        "Cache-Control": "private, max-age=120",
-      },
+      headers,
     });
   } catch (error) {
     return jsonError(error);

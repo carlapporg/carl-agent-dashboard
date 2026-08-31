@@ -19,14 +19,13 @@ export function uiStatusFromAgent(status: AgentTaskStatus): TaskStatus {
       return "assigned";
     case "IN_PROGRESS":
     case "WAITING_FOR_AGENT":
-      return "in_progress";
     case "WAITING_FOR_USER":
-      return "waiting_for_customer";
+      return "in_progress";
     case "COMPLETED":
       return "completed";
     case "FAILED":
-      return "failed";
     case "CANCELLED":
+      return "failed";
     case "REJECTED":
       return "cancelled";
     default:
@@ -36,7 +35,7 @@ export function uiStatusFromAgent(status: AgentTaskStatus): TaskStatus {
 
 export function agentStatusFromUi(
   status: TaskStatus,
-): "COMPLETED" | "FAILED" | "CANCELLED" | "WAITING_FOR_USER" | null {
+): "IN_PROGRESS" | "COMPLETED" | "FAILED" | "CANCELLED" | "WAITING_FOR_USER" | null {
   switch (status) {
     case "completed":
       return "COMPLETED";
@@ -46,6 +45,8 @@ export function agentStatusFromUi(
       return "CANCELLED";
     case "waiting_for_customer":
       return "WAITING_FOR_USER";
+    case "in_progress":
+      return "IN_PROGRESS";
     default:
       return null;
   }

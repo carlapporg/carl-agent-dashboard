@@ -7,6 +7,7 @@ import { agentStatusFromUi } from "@/lib/api/map-task";
 import { messagesApi } from "@/lib/api/messages";
 import { USER_MESSAGES } from "@/lib/api/public-messages";
 import { confirmationApi } from "@/lib/api/confirmation";
+import { receiptApi } from "@/lib/api/receipt";
 import { tasksApi } from "@/lib/api/tasks";
 import { ROUTES } from "@/lib/constants/routes";
 import type { SendTaskConfirmationBody, TaskConfirmation } from "@/types/confirmation";
@@ -185,7 +186,12 @@ export async function getOfferLiveStateAction(
 
 export async function updateTaskAgentStatusAction(
   taskId: string,
-  status: "COMPLETED" | "FAILED" | "CANCELLED" | "WAITING_FOR_USER",
+  status:
+    | "IN_PROGRESS"
+    | "COMPLETED"
+    | "FAILED"
+    | "CANCELLED"
+    | "WAITING_FOR_USER",
   note?: string,
 ): Promise<TaskActionResult> {
   try {
@@ -244,6 +250,12 @@ export async function updateTaskStatusAction(
   taskId: string,
   status: import("@/types/task").TaskStatus,
 ): Promise<TaskActionResult> {
+  if (status === "waiting_for_customer") {
+    return {
+      ok: false,
+      message: "Waiting for Customer is set when you send the final confirmation.",
+    };
+  }
   const mapped = agentStatusFromUi(status);
   if (!mapped) return { ok: true };
   return updateTaskAgentStatusAction(taskId, mapped);
@@ -293,6 +305,43 @@ export async function getTaskConfirmationAction(
   try {
     const confirmation = await confirmationApi.get(taskId);
     return { ok: true, confirmation };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export type ReceiptActionResult =
+  | { ok: true; receipt: import("@/types/receipt").TaskReceipt }
+  | { ok: false; message: string };
+
+export async function uploadTaskReceiptAction(
+  taskId: string,
+  formData: FormData,
+): Promise<ReceiptActionResult> {
+  try {
+    const file = formData.get("file");
+    if (typeof File === "undefined" || !(file instanceof File) || file.size === 0) {
+      return { ok: false, message: "Choose a receipt file first." };
+    }
+    const note = String(formData.get("note") ?? "").trim();
+    const receipt = await receiptApi.upload(taskId, file, note);
+    revalidateWorkQueues();
+    revalidateTaskPage(taskId);
+    return { ok: true, receipt };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function getTaskReceiptAction(
+  taskId: string,
+): Promise<
+  | { ok: true; receipt: import("@/types/receipt").TaskReceipt | null }
+  | { ok: false; message: string }
+> {
+  try {
+    const receipt = await receiptApi.get(taskId);
+    return { ok: true, receipt };
   } catch (error) {
     return fail(error);
   }

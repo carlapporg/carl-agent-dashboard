@@ -29,6 +29,7 @@ import {
 import {
   isKeptAfterMiss,
   liveStatusPatch,
+  keepStatusOverlays,
   mergeByProgress,
   shouldIgnoreClosedSocketUpdate,
 } from "@/lib/tasks/merge-live-task";
@@ -41,6 +42,7 @@ import {
   parseConfirmationNotification,
   parseMissedTask,
   parsePaymentNotification,
+  parseReceiptNotification,
   parseWaitingForAgent,
 } from "@/lib/notifications/from-events";
 import { getOpenTasksAction } from "@/features/dashboard/actions";
@@ -55,8 +57,10 @@ import {
 } from "@/lib/realtime/agent-socket";
 import { ROUTES } from "@/lib/constants/routes";
 import { parseTaskConfirmationPayload, type TaskConfirmation } from "@/types/confirmation";
+import { parseTaskReceiptPayload, type TaskReceipt } from "@/types/receipt";
 import type { Task } from "@/types/task";
 import type { Socket } from "socket.io-client";
+import { useOfferAutoAssign } from "@/features/ops/offer-auto-assign";
 
 function taskIdFromPath(pathname: string): string | undefined {
   const match = pathname.match(/^\/tasks\/([^/]+)/);
@@ -146,12 +150,15 @@ type OpsContextValue = {
   dismissOffer: () => void;
   patchLiveTask: (taskId: string, patch: Partial<Task>, fallback?: Task) => void;
   dropLiveTask: (taskId: string) => void;
+  hydrateOpenTasks: (tasks: Task[]) => void;
   silenceOffer: (taskId: string) => void;
   queuePulse: number;
   livePulse: boolean;
   liveChat: LiveChatEvent | null;
   liveConfirmation: TaskConfirmation | null;
   setLiveConfirmation: (row: TaskConfirmation | null) => void;
+  liveReceipt: TaskReceipt | null;
+  setLiveReceipt: (row: TaskReceipt | null) => void;
   refresh: () => void;
 };
 
@@ -214,6 +221,7 @@ export function AgentOpsProvider({
   const [liveChat, setLiveChat] = useState<LiveChatEvent | null>(null);
   const [liveConfirmation, setLiveConfirmation] =
     useState<TaskConfirmation | null>(null);
+  const [liveReceipt, setLiveReceipt] = useState<TaskReceipt | null>(null);
   const refreshTimer = useRef<number>(0);
   const presenceRef = useRef(presence);
   presenceRef.current = presence;
@@ -242,12 +250,41 @@ export function AgentOpsProvider({
     setLiveTasks((prev) => prev.filter((row) => row.id !== taskId));
   }, [silenceOffer]);
 
+  const hydrateOpenTasks = useCallback((tasks: Task[]) => {
+    didInitialCatchUpGlobal = true;
+    if (tasks.length === 0) return;
+    setLiveTasks((prev) => {
+      const byId = new Map(prev.map((row) => [row.id, row]));
+      let changed = false;
+      for (const task of tasks) {
+        if (isRejectingOrRejected(task.id)) continue;
+        const existing = byId.get(task.id);
+        if (!existing) {
+          byId.set(task.id, task);
+          changed = true;
+          continue;
+        }
+        if (
+          existing.backendStatus === task.backendStatus &&
+          existing.status === task.status &&
+          existing.updatedAt === task.updatedAt
+        ) {
+          continue;
+        }
+        const next = keepStatusOverlays(existing, mergeByProgress(existing, task));
+        byId.set(task.id, next);
+        changed = true;
+      }
+      return changed ? [...byId.values()] : prev;
+    });
+  }, []);
+
   const upsertLiveTask = useCallback((task: Task) => {
     if (isRejectingOrRejected(task.id)) return;
     setLiveTasks((prev) => {
       const index = prev.findIndex((row) => row.id === task.id);
       if (index === -1) return [task, ...prev];
-      const merged = mergeByProgress(prev[index], task);
+      const merged = keepStatusOverlays(prev[index], mergeByProgress(prev[index], task));
       if (
         merged.backendStatus === prev[index].backendStatus &&
         merged.status === prev[index].status &&
@@ -273,15 +310,18 @@ export function AgentOpsProvider({
       if (index === -1) {
         if (!fallback) return prev;
         return [
-          mergeByProgress(fallback, { ...fallback, ...extras }),
+          keepStatusOverlays(fallback, mergeByProgress(fallback, { ...fallback, ...extras })),
           ...prev,
         ];
       }
       const next = [...prev];
-      next[index] = mergeByProgress(next[index], {
-        ...next[index],
-        ...extras,
-      });
+      next[index] = keepStatusOverlays(
+        next[index],
+        mergeByProgress(next[index], {
+          ...next[index],
+          ...extras,
+        }),
+      );
       return next;
     });
     setOffer((current) => {
@@ -302,12 +342,27 @@ export function AgentOpsProvider({
   silenceOfferRef.current = silenceOffer;
   const setLiveConfirmationRef = useRef(setLiveConfirmation);
   setLiveConfirmationRef.current = setLiveConfirmation;
+  const setLiveReceiptRef = useRef(setLiveReceipt);
+  setLiveReceiptRef.current = setLiveReceipt;
   const liveTasksRef = useRef(liveTasks);
   liveTasksRef.current = liveTasks;
   const offerRef = useRef(offer);
   offerRef.current = offer;
   const socketTokenRef = useRef(socketToken);
   socketTokenRef.current = socketToken;
+
+  const autoAssignTasks = useMemo(() => {
+    const byId = new Map<string, Task>();
+    for (const row of liveTasks) byId.set(row.id, row);
+    if (offer) byId.set(offer.id, offer);
+    return [...byId.values()];
+  }, [liveTasks, offer]);
+
+  useOfferAutoAssign({
+    tasks: autoAssignTasks,
+    patchLiveTask,
+    dropLiveTask,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -482,8 +537,6 @@ export function AgentOpsProvider({
       disconnectedAt = 0;
       if (gap >= CATCH_UP_AFTER_GAP_MS) {
         requestCatchUp();
-      } else if (!didInitialCatchUpGlobal) {
-        requestCatchUp();
       }
     }
 
@@ -585,10 +638,10 @@ export function AgentOpsProvider({
       if (item) notificationsRef.current.push(item);
       const id = item?.taskId ?? extractTaskId(payload);
       if (id) {
-        patchLiveTaskRef.current(id, liveStatusPatch("CANCELLED", "cancelled"));
+        patchLiveTaskRef.current(id, liveStatusPatch("FAILED", "failed"));
         setOffer((current) => (current?.id === id ? null : current));
       }
-      toastRef.current("A task was cancelled.", "info", { title: "Task cancelled" });
+      toastRef.current("A task failed.", "info", { title: "Task failed" });
       pulseQueue();
     }
 
@@ -613,6 +666,16 @@ export function AgentOpsProvider({
     function onConfirmationConfirmed(payload: unknown) {
       const confirmation = parseTaskConfirmationPayload(payload);
       if (confirmation) setLiveConfirmationRef.current(confirmation);
+      const id =
+        confirmation?.taskId ??
+        parseConfirmationNotification(payload, "confirmation_confirmed")?.taskId ??
+        extractTaskId(payload);
+      if (id) {
+        patchLiveTaskRef.current(
+          id,
+          liveStatusPatch("WAITING_FOR_USER", "waiting_for_payment"),
+        );
+      }
       const item = parseConfirmationNotification(payload, "confirmation_confirmed");
       if (item) {
         notificationsRef.current.push(item);
@@ -629,12 +692,54 @@ export function AgentOpsProvider({
     function onConfirmationDeclined(payload: unknown) {
       const confirmation = parseTaskConfirmationPayload(payload);
       if (confirmation) setLiveConfirmationRef.current(confirmation);
+      const id =
+        confirmation?.taskId ??
+        parseConfirmationNotification(payload, "confirmation_declined")?.taskId ??
+        extractTaskId(payload);
+      if (id) {
+        patchLiveTaskRef.current(
+          id,
+          liveStatusPatch("IN_PROGRESS", "in_progress"),
+        );
+      }
       const item = parseConfirmationNotification(payload, "confirmation_declined");
       if (item) {
         notificationsRef.current.push(item);
         toastRef.current(item.body, "info", {
           title: item.title,
           href: item.taskId ? ROUTES.task(item.taskId) : undefined,
+          actionLabel: "Open task",
+        });
+        playNotificationChime();
+      }
+      pulseQueue();
+    }
+
+    function onReceiptAccepted(payload: unknown) {
+      const receipt = parseTaskReceiptPayload(payload);
+      if (receipt) setLiveReceiptRef.current(receipt);
+      const item = parseReceiptNotification(payload, "receipt_accepted");
+      if (item) {
+        notificationsRef.current.push(item);
+        toastRef.current(item.body, "success", {
+          title: item.title,
+          href: item.taskId ? ROUTES.taskPanel(item.taskId, "receipt") : undefined,
+          actionLabel: "Open task",
+        });
+        playNotificationChime();
+      }
+      pulseQueue();
+    }
+
+    function onReceiptRejected(payload: unknown) {
+      const receipt = parseTaskReceiptPayload(payload);
+      if (receipt) setLiveReceiptRef.current(receipt);
+      const item = parseReceiptNotification(payload, "receipt_rejected");
+      if (item) {
+        notificationsRef.current.push(item);
+        toastRef.current(item.body, "info", {
+          title: item.title,
+          href: item.taskId ? ROUTES.taskPanel(item.taskId, "receipt") : undefined,
           actionLabel: "Open task",
         });
         playNotificationChime();
@@ -762,6 +867,10 @@ export function AgentOpsProvider({
     socket.on("task_confirmation_confirmed", onConfirmationConfirmed);
     socket.on("task.confirmation_declined", onConfirmationDeclined);
     socket.on("task_confirmation_declined", onConfirmationDeclined);
+    socket.on("task.receipt_accepted", onReceiptAccepted);
+    socket.on("task_receipt_accepted", onReceiptAccepted);
+    socket.on("task.receipt_rejected", onReceiptRejected);
+    socket.on("task_receipt_rejected", onReceiptRejected);
     socket.on("task.status_changed", onStatusChanged);
     socket.on("task_status_changed", onStatusChanged);
     socket.on("task.missed", onMissed);
@@ -800,6 +909,10 @@ export function AgentOpsProvider({
       socket.off("task_confirmation_confirmed", onConfirmationConfirmed);
       socket.off("task.confirmation_declined", onConfirmationDeclined);
       socket.off("task_confirmation_declined", onConfirmationDeclined);
+      socket.off("task.receipt_accepted", onReceiptAccepted);
+      socket.off("task_receipt_accepted", onReceiptAccepted);
+      socket.off("task.receipt_rejected", onReceiptRejected);
+      socket.off("task_receipt_rejected", onReceiptRejected);
       socket.off("task.status_changed", onStatusChanged);
       socket.off("task_status_changed", onStatusChanged);
       socket.off("task.missed", onMissed);
@@ -829,20 +942,25 @@ export function AgentOpsProvider({
       dismissOffer,
       patchLiveTask,
       dropLiveTask,
+      hydrateOpenTasks,
       silenceOffer,
       queuePulse,
       livePulse,
       liveChat,
       liveConfirmation,
       setLiveConfirmation,
+      liveReceipt,
+      setLiveReceipt,
       refresh,
     }),
     [
       connected,
       dismissOffer,
       dropLiveTask,
+      hydrateOpenTasks,
       liveChat,
       liveConfirmation,
+      liveReceipt,
       livePulse,
       liveTasks,
       offer,
@@ -851,6 +969,7 @@ export function AgentOpsProvider({
       queuePulse,
       refresh,
       setLiveConfirmation,
+      setLiveReceipt,
       setPresence,
       silenceOffer,
     ],

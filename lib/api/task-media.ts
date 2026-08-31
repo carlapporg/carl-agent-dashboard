@@ -24,6 +24,10 @@ export function dashboardImageSrc(taskId: string, messageId: string): string {
   return `/api/agent/tasks/${encodeURIComponent(taskId)}/messages/${encodeURIComponent(messageId)}/image`;
 }
 
+export function dashboardReceiptFileSrc(taskId: string, receiptId: string): string {
+  return `/api/agent/tasks/${encodeURIComponent(taskId)}/receipts/${encodeURIComponent(receiptId)}/file`;
+}
+
 export function isImageFile(file: File): boolean {
   if (file.type.startsWith("image/")) return true;
   return /\.(jpe?g|png|gif|webp|heic|heif)$/i.test(file.name);

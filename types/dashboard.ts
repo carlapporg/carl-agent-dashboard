@@ -76,7 +76,9 @@ export type NotificationKind =
   | "waiting_for_agent"
   | "missed_task"
   | "confirmation_confirmed"
-  | "confirmation_declined";
+  | "confirmation_declined"
+  | "receipt_accepted"
+  | "receipt_rejected";
 
 export type NotificationItem = {
   id: string;
@@ -86,7 +88,7 @@ export type NotificationItem = {
   createdAt: string;
   read: boolean;
   taskId?: string;
-  panel?: "payment" | "chat" | "brief" | "log";
+  panel?: "payment" | "chat" | "brief" | "log" | "receipt";
 };
 
 export type NotificationPrefs = {

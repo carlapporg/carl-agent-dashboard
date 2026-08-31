@@ -79,7 +79,13 @@ function applyClientFilters(tasks: Task[], filters: TaskListFilters = {}): Task[
   let list = [...tasks];
 
   if (filters.status && filters.status !== "all") {
-    list = list.filter((t) => t.status === filters.status);
+    if (filters.status === "failed") {
+      list = list.filter((t) => t.status === "failed" || t.status === "cancelled");
+    } else if (filters.status === "cancelled") {
+      list = list.filter((t) => t.status === "failed" || t.status === "cancelled");
+    } else {
+      list = list.filter((t) => t.status === filters.status);
+    }
   }
 
   if (filters.waitingOn === "customer") {
@@ -318,7 +324,12 @@ export const tasksApi = {
 
   async updateAgentStatus(
     taskId: string,
-    status: "COMPLETED" | "FAILED" | "CANCELLED" | "WAITING_FOR_USER",
+    status:
+      | "IN_PROGRESS"
+      | "COMPLETED"
+      | "FAILED"
+      | "CANCELLED"
+      | "WAITING_FOR_USER",
     note?: string,
   ): Promise<Task | null> {
     const row = await apiRequest(API_ENDPOINTS.agents.taskStatus(taskId), {
@@ -346,7 +357,7 @@ export async function getOverviewStats(): Promise<OverviewStats> {
     needsAttention: open.filter((t) => t.backendStatus === "OFFERED").length,
     inProgress: open.filter((t) => t.backendStatus === "IN_PROGRESS").length,
     waitingOnCustomer: open.filter(
-      (t) => t.backendStatus === "WAITING_FOR_USER",
+      (t) => t.status === "waiting_for_customer",
     ).length,
   };
 }

@@ -327,6 +327,22 @@ function SendIcon({ className }: { className?: string }) {
   );
 }
 
+/** Pending send — clock like WhatsApp / iMessage pending ticks. */
+function ClockIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden className={className}>
+      <circle cx="8" cy="8" r="6.25" stroke="currentColor" strokeWidth="1.5" />
+      <path
+        d="M8 4.75V8l2.25 1.5"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 const ChatBubble = memo(function ChatBubble({
   event,
   role,
@@ -388,16 +404,29 @@ const ChatBubble = memo(function ChatBubble({
           <p className="whitespace-pre-wrap wrap-break-word">{event.body}</p>
         ) : null}
         {event.delivery === "sending" ? (
-          <p
+          <span
             className={cn(
-              "mt-0.5 text-[10px]",
-              fromAgent ? "text-white/75" : "text-muted",
+              "mt-1 flex items-center justify-end gap-1",
+              fromAgent ? "text-white/70" : "text-muted",
             )}
+            title={
+              typeof event.uploadProgress === "number"
+                ? `Sending… ${event.uploadProgress}%`
+                : "Sending…"
+            }
+            aria-label={
+              typeof event.uploadProgress === "number"
+                ? `Sending ${event.uploadProgress}%`
+                : "Sending"
+            }
           >
-            {typeof event.uploadProgress === "number"
-              ? `Sending… ${event.uploadProgress}%`
-              : "Sending…"}
-          </p>
+            <ClockIcon className="size-3.5 shrink-0" />
+            {typeof event.uploadProgress === "number" ? (
+              <span className="text-[10px] tabular-nums leading-none">
+                {event.uploadProgress}%
+              </span>
+            ) : null}
+          </span>
         ) : null}
         {event.delivery === "failed" ? (
           <p
