@@ -24,7 +24,6 @@ import {
 } from "@/lib/notifications/sound";
 import {
   mergeNotification,
-  NOTIFICATION_STORE_KEY,
   readNotifications,
   writeNotifications,
 } from "@/lib/notifications/store";
@@ -151,9 +150,6 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     function onStorage(event: StorageEvent) {
-      if (event.key === NOTIFICATION_STORE_KEY) {
-        setItems(readNotifications());
-      }
       if (event.key === NOTIFICATION_PREFS_KEY) {
         setPrefsState(readNotificationPrefs());
       }

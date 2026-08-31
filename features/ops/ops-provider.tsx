@@ -11,7 +11,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { setAvailabilityAction } from "@/features/agents/actions";
+import { getAvailabilityAction } from "@/features/agents/actions";
 import { offerWasAccepted, isRejectingOrRejected } from "@/features/ops/auto-accept-offer";
 import { useNotifications } from "@/features/notifications/notification-provider";
 import { useToast } from "@/components/providers/toast-provider";
@@ -25,7 +25,6 @@ import { readJwtExpiryMs } from "@/lib/auth/access-jwt";
 import {
   normalizePresence,
   readChosenPresence,
-  writeChosenPresence,
 } from "@/lib/agent/presence";
 import {
   isKeptAfterMiss,
@@ -172,9 +171,7 @@ type AgentOpsProviderProps = {
 
 const CATCH_UP_MIN_MS = 15_000;
 const CATCH_UP_AFTER_GAP_MS = 2_000;
-const PRESENCE_MIN_MS = 60_000;
 let lastCatchUpAtMs = 0;
-let lastPresencePushAtMs = 0;
 let catchUpInFlightGlobal = false;
 let didInitialCatchUpGlobal = false;
 
@@ -313,17 +310,18 @@ export function AgentOpsProvider({
   socketTokenRef.current = socketToken;
 
   useEffect(() => {
-    const chosen = readChosenPresence();
-    if (chosen) {
-      setPresenceState(chosen);
-      return;
-    }
-    if (initialPresence) {
-      const next = normalizePresence(initialPresence);
-      setPresenceState(next);
-      writeChosenPresence(next);
-    }
-  }, [initialPresence]);
+    let cancelled = false;
+    void getAvailabilityAction()
+      .then((row) => {
+        if (cancelled) return;
+        if (readChosenPresence()) return;
+        setPresenceState(normalizePresence(row.status));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     setSocketToken(accessToken);
@@ -377,18 +375,6 @@ export function AgentOpsProvider({
       window.setTimeout(() => setLivePulse(false), 1600);
     }
 
-    function reassertPresence() {
-      const chosen = readChosenPresence();
-      if (!chosen || chosen === "OFFLINE") return;
-      const now = Date.now();
-      if (now - lastPresencePushAtMs < PRESENCE_MIN_MS) return;
-      lastPresencePushAtMs = now;
-      const restore = normalizePresence(chosen);
-      writeChosenPresence(restore);
-      setPresenceState(restore);
-      void setAvailabilityAction(restore).catch(() => undefined);
-    }
-
     function rejoinRooms() {
       const ids = new Set<string>();
       const viewingId = taskIdFromPath(pathnameRef.current);
@@ -427,6 +413,7 @@ export function AgentOpsProvider({
       if (catchUpInFlightGlobal) return;
       catchUpInFlightGlobal = true;
       try {
+        const fetchedAt = Date.now();
         const tasks = await getOpenTasksAction();
         if (cancelled) return;
         lastCatchUpAtMs = Date.now();
@@ -455,6 +442,23 @@ export function AgentOpsProvider({
         }
         hydrated = true;
         didInitialCatchUpGlobal = true;
+        const backendIds = new Set(tasks.map((task) => task.id));
+        setLiveTasks((prev) =>
+          prev.filter((row) => {
+            if (backendIds.has(row.id) || isRejectingOrRejected(row.id)) {
+              return true;
+            }
+            const rowAt = new Date(row.updatedAt).getTime();
+            return Number.isFinite(rowAt) && rowAt >= fetchedAt;
+          }),
+        );
+        setOffer((current) => {
+          if (!current) return current;
+          if (backendIds.has(current.id) || isRejectingOrRejected(current.id)) {
+            return current;
+          }
+          return null;
+        });
         rejoinRooms();
       } catch {
         lastCatchUpAtMs = 0;
@@ -477,7 +481,6 @@ export function AgentOpsProvider({
       const gap = disconnectedAt ? Date.now() - disconnectedAt : 0;
       disconnectedAt = 0;
       if (gap >= CATCH_UP_AFTER_GAP_MS) {
-        reassertPresence();
         requestCatchUp();
       } else if (!didInitialCatchUpGlobal) {
         requestCatchUp();

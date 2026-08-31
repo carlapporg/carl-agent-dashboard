@@ -1,4 +1,3 @@
-import { readLocalJson, writeLocalJson } from "@/lib/tasks/local-store";
 import type { NotificationItem, NotificationKind } from "@/types/dashboard";
 
 export const NOTIFICATION_STORE_KEY = "carl.agent.notifications";
@@ -17,6 +16,8 @@ const KINDS: NotificationKind[] = [
   "confirmation_confirmed",
   "confirmation_declined",
 ];
+
+let memoryItems: NotificationItem[] = [];
 
 function isKind(value: unknown): value is NotificationKind {
   return typeof value === "string" && KINDS.includes(value as NotificationKind);
@@ -46,29 +47,33 @@ function parseItem(value: unknown): NotificationItem | null {
   };
 }
 
-export function readNotifications(): NotificationItem[] {
-  const raw = readLocalJson<unknown>(NOTIFICATION_STORE_KEY, []);
-  if (!Array.isArray(raw)) return [];
-  const items: NotificationItem[] = [];
-  const seen = new Set<string>();
-  for (const row of raw) {
-    const item = parseItem(row);
-    if (!item || seen.has(item.id)) continue;
-    seen.add(item.id);
-    items.push(item);
+function dropLegacyStore() {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(NOTIFICATION_STORE_KEY);
+  } catch {
+    // Private mode / blocked storage.
   }
-  return items
-    .sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    )
-    .slice(0, MAX_NOTIFICATIONS);
+}
+
+dropLegacyStore();
+
+export function readNotifications(): NotificationItem[] {
+  return memoryItems;
 }
 
 export function writeNotifications(items: NotificationItem[]) {
-  writeLocalJson(
-    NOTIFICATION_STORE_KEY,
-    items.slice(0, MAX_NOTIFICATIONS),
+  const next: NotificationItem[] = [];
+  const seen = new Set<string>();
+  for (const row of items.slice(0, MAX_NOTIFICATIONS)) {
+    const item = parseItem(row);
+    if (!item || seen.has(item.id)) continue;
+    seen.add(item.id);
+    next.push(item);
+  }
+  memoryItems = next.sort(
+    (a, b) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
 }
 

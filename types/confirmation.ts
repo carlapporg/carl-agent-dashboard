@@ -72,6 +72,16 @@ export function canSendTaskConfirmation(status?: string | null): boolean {
   return CONFIRM_SEND_STATUSES.has(status);
 }
 
+/** GET confirmation only after work has started (or the task is done). */
+export function shouldFetchTaskConfirmation(status?: string | null): boolean {
+  return (
+    status === "IN_PROGRESS" ||
+    status === "WAITING_FOR_USER" ||
+    status === "WAITING_FOR_AGENT" ||
+    status === "COMPLETED"
+  );
+}
+
 export function isConfirmationPending(
   confirmation?: Pick<TaskConfirmation, "status"> | null,
 ): boolean {

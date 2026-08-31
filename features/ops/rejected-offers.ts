@@ -3,11 +3,12 @@
 import { useSyncExternalStore } from "react";
 import type { Task } from "@/types/task";
 
-const STORAGE_KEY = "carl.rejected-offers";
-
 const listeners = new Set<() => void>();
 let version = 0;
 const pendingIds = new Set<string>();
+const hiddenIds = new Set<string>();
+
+const LEGACY_KEYS = ["carl.rejected-offers"] as const;
 
 function emit() {
   version += 1;
@@ -19,40 +20,26 @@ function subscribe(listener: () => void) {
   return () => listeners.delete(listener);
 }
 
-function writeIds(ids: Set<string>) {
+function dropLegacyStores() {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify([...ids]));
+    for (const key of LEGACY_KEYS) {
+      window.localStorage.removeItem(key);
+      window.sessionStorage.removeItem(key);
+    }
   } catch {
     // Private mode / blocked storage.
   }
 }
 
-function readIds(): Set<string> {
-  if (typeof window === "undefined") return new Set();
-  try {
-    const local = window.localStorage.getItem(STORAGE_KEY);
-    const session = window.sessionStorage.getItem(STORAGE_KEY);
-    const raw = local ?? session;
-    if (!raw) return new Set();
-    if (!local && session) {
-      window.localStorage.setItem(STORAGE_KEY, session);
-    }
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed)
-      ? new Set(parsed.filter((id) => typeof id === "string"))
-      : new Set();
-  } catch {
-    return new Set();
-  }
-}
+dropLegacyStores();
 
 export function useRejectedOfferTick(): number {
   return useSyncExternalStore(subscribe, () => version, () => 0);
 }
 
 export function isMarkedRejected(taskId: string): boolean {
-  return pendingIds.has(taskId) || readIds().has(taskId);
+  return pendingIds.has(taskId) || hiddenIds.has(taskId);
 }
 
 export function isPendingReject(taskId: string): boolean {
@@ -63,27 +50,20 @@ export function isPendingReject(taskId: string): boolean {
 export function beginHideRejected(taskId: string) {
   if (!taskId) return;
   pendingIds.add(taskId);
-  const ids = readIds();
-  ids.add(taskId);
-  writeIds(ids);
   emit();
 }
 
 export function finishHideRejected(taskId: string) {
   if (!taskId) return;
   pendingIds.delete(taskId);
-  const ids = readIds();
-  ids.add(taskId);
-  writeIds(ids);
+  hiddenIds.add(taskId);
   emit();
 }
 
 export function unhideRejected(taskId: string) {
   if (!taskId) return;
   pendingIds.delete(taskId);
-  const ids = readIds();
-  ids.delete(taskId);
-  writeIds(ids);
+  hiddenIds.delete(taskId);
   emit();
 }
 
@@ -95,12 +75,11 @@ export function isRejectedOffer(task: Pick<Task, "backendStatus">): boolean {
   return task.backendStatus === "REJECTED";
 }
 
-/** Hide rejected offers for this agent. Never un-hide if Nest later sends ASSIGNED/FAILED. */
+/** Hide while Nest says REJECTED, or this session already rejected it. */
 export function shouldHideRejectedOffer(task: Task): boolean {
   if (isRejectedOffer(task)) return true;
-  if (!readIds().has(task.id) && !pendingIds.has(task.id)) return false;
   if (pendingIds.has(task.id)) return false;
-  return true;
+  return hiddenIds.has(task.id);
 }
 
 export function withoutRejectedOffers(tasks: Task[]): Task[] {

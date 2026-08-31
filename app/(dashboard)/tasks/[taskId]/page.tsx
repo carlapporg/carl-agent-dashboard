@@ -11,6 +11,7 @@ import {
   getTaskConfirmationCached,
   listTaskMessagesCached,
 } from "@/lib/api/task-page";
+import { shouldFetchTaskConfirmation } from "@/types/confirmation";
 
 type TaskPageProps = {
   params: Promise<{ taskId: string }>;
@@ -56,7 +57,9 @@ export default async function TaskWorkspacePage({ params }: TaskPageProps) {
   }
 
   const timeline = await listTaskMessagesCached(task.id).catch(() => []);
-  const confirmation = await getTaskConfirmationCached(task.id).catch(() => null);
+  const confirmation = shouldFetchTaskConfirmation(task.backendStatus)
+    ? await getTaskConfirmationCached(task.id).catch(() => null)
+    : null;
 
   return (
     <PageShell>

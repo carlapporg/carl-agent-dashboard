@@ -59,7 +59,7 @@ export function MessagesView({
   const [timelines, setTimelines] = useState<Record<string, TimelineEvent[]>>(
     {},
   );
-  const loadedIds = useRef(new Set<string>());
+  const fetchGen = useRef(0);
 
   const selected = useMemo(
     () => visibleConversations.find((c) => c.taskId === selectedId) ?? null,
@@ -71,12 +71,11 @@ export function MessagesView({
 
   useEffect(() => {
     if (!selectedId) return;
-    if (loadedIds.current.has(selectedId)) return;
     const taskId = selectedId;
+    const gen = ++fetchGen.current;
     let cancelled = false;
     void listTaskMessagesAction(taskId).then((events) => {
-      if (cancelled) return;
-      loadedIds.current.add(taskId);
+      if (cancelled || gen !== fetchGen.current) return;
       setTimelines((prev) => ({ ...prev, [taskId]: events }));
     });
     return () => {

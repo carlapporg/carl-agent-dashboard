@@ -3,6 +3,19 @@ import type { AgentAvailability } from "@/types/dashboard";
 
 const CHOSEN_PRESENCE_KEY = "carl.agent.chosen-presence";
 
+let chosenPresence: AgentPresence | null = null;
+
+function dropLegacyStore() {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(CHOSEN_PRESENCE_KEY);
+  } catch {
+    // Private mode / blocked storage.
+  }
+}
+
+dropLegacyStore();
+
 export function normalizePresence(status: string | null | undefined): AgentPresence {
   if (status === "BUSY") return "BUSY";
   if (status === "OFFLINE") return "OFFLINE";
@@ -10,25 +23,11 @@ export function normalizePresence(status: string | null | undefined): AgentPrese
 }
 
 export function readChosenPresence(): AgentPresence | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.sessionStorage.getItem(CHOSEN_PRESENCE_KEY);
-    if (raw === "AVAILABLE" || raw === "ONLINE" || raw === "BUSY" || raw === "OFFLINE") {
-      return normalizePresence(raw);
-    }
-  } catch {
-    return null;
-  }
-  return null;
+  return chosenPresence;
 }
 
 export function writeChosenPresence(status: AgentPresence) {
-  if (typeof window === "undefined") return;
-  try {
-    window.sessionStorage.setItem(CHOSEN_PRESENCE_KEY, normalizePresence(status));
-  } catch {
-    // Private mode / blocked storage.
-  }
+  chosenPresence = normalizePresence(status);
 }
 
 export function presenceToUi(status: AgentPresence): AgentAvailability {

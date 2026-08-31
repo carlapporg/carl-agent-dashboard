@@ -8,11 +8,7 @@ export async function getQueuePreviewAction(limit = 3) {
 }
 
 export async function getOpenTasksAction() {
-  try {
-    return await tasksApi.listOpen();
-  } catch {
-    return [];
-  }
+  return tasksApi.listOpen();
 }
 
 export async function getActiveTasksAction() {

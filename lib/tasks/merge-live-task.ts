@@ -98,8 +98,18 @@ function withFreshDeadline(merged: Task, base: Task, incoming: Task): Task {
   };
 }
 
-/** Keep the more advanced status so a stale live overlay cannot hide IN_PROGRESS. */
+/** Keep the more advanced, newer status so a stale socket cannot rewind work. */
 export function mergeByProgress(base: Task, incoming: Task): Task {
+  const incomingAt = new Date(incoming.updatedAt).getTime();
+  const baseAt = new Date(base.updatedAt).getTime();
+  if (
+    Number.isFinite(incomingAt) &&
+    Number.isFinite(baseAt) &&
+    incomingAt < baseAt
+  ) {
+    return withFreshDeadline(base, base, incoming);
+  }
+
   // A thin socket payload (offer missed, status-only) must not close real work.
   if (
     isSparse(incoming) &&
@@ -155,8 +165,6 @@ export function mergeByProgress(base: Task, incoming: Task): Task {
       incoming,
     );
   }
-  const incomingAt = new Date(incoming.updatedAt).getTime();
-  const baseAt = new Date(base.updatedAt).getTime();
   if (incomingAt >= baseAt) {
     if (isSparse(incoming)) return withFreshDeadline(base, base, incoming);
     return withFreshDeadline({ ...base, ...incoming }, base, incoming);
