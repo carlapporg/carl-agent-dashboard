@@ -20,14 +20,9 @@ import { getAgentDisplayName, type BackendUser } from "@/types/user";
 
 type UserMenuProps = {
   user: BackendUser;
+  statusLabel?: string;
+  online?: boolean;
 };
-
-function initials(user: BackendUser): string {
-  const first = user.firstName?.trim()?.[0] ?? "";
-  const last = user.lastName?.trim()?.[0] ?? "";
-  const value = `${first}${last}`.toUpperCase();
-  return value || user.email.slice(0, 2).toUpperCase();
-}
 
 function UserIcon() {
   return (
@@ -63,32 +58,14 @@ function SignOutIcon() {
   );
 }
 
-function ChevronIcon({ open }: { open: boolean }) {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      fill="none"
-      className={cn(
-        "size-3.5 shrink-0 text-muted transition-transform duration-150",
-        open && "rotate-180",
-      )}
-      aria-hidden
-    >
-      <path
-        d="M4 6.25 8 10.25 12 6.25"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
 const ITEM_CLASS =
   "flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm font-medium outline-none transition-colors focus-visible:bg-surface-hover focus-visible:ring-2 focus-visible:ring-accent/40";
 
-export function UserMenu({ user }: UserMenuProps) {
+export function UserMenu({
+  user,
+  statusLabel = "Online",
+  online = true,
+}: UserMenuProps) {
   const pathname = usePathname();
   const clearCache = useClearAppCache();
   const name = getAgentDisplayName(user);
@@ -203,10 +180,10 @@ export function UserMenu({ user }: UserMenuProps) {
         ref={triggerRef}
         type="button"
         className={cn(
-          "flex max-w-60 cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-surface-hover/60 px-2.5 py-1.5 text-left",
+          "flex max-w-64 cursor-pointer items-center gap-2.5 rounded-[var(--radius-pill)] px-2 py-1.5 text-left",
           "transition-colors hover:bg-surface-hover",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-          open && "border-accent/35 bg-surface-hover",
+          open && "bg-surface-hover",
         )}
         aria-haspopup="menu"
         aria-expanded={open}
@@ -215,19 +192,23 @@ export function UserMenu({ user }: UserMenuProps) {
         onClick={() => (open ? close() : openMenu(0))}
         onKeyDown={onTriggerKeyDown}
       >
-        <span
-          className="flex size-9 items-center justify-center rounded-full bg-accent/10 text-xs font-semibold text-accent"
-          aria-hidden
-        >
-          {initials(user)}
-        </span>
         <span className="hidden min-w-0 sm:block">
-          <span className="block truncate text-sm font-semibold text-foreground">
+          <span className="block truncate text-sm font-semibold leading-tight text-foreground">
             {name}
           </span>
-          <span className="text-sm text-muted">Agent</span>
+          <span className="mt-0.5 inline-flex items-center gap-1.5 text-xs font-medium text-muted">
+            <span
+              className={cn(
+                "size-1.5 rounded-full",
+                online ? "bg-success" : "bg-muted-dim",
+              )}
+            />
+            {statusLabel}
+          </span>
         </span>
-        <ChevronIcon open={open} />
+        <span className="flex size-8 items-center justify-center rounded-md border border-border bg-surface-muted text-muted sm:hidden">
+          <UserIcon />
+        </span>
       </button>
 
       {open ? (
@@ -237,14 +218,28 @@ export function UserMenu({ user }: UserMenuProps) {
           role="menu"
           aria-label="Account"
           onKeyDown={onMenuKeyDown}
-          className="absolute right-0 z-50 mt-2 w-56 origin-top-right rounded-xl border border-border bg-surface p-1.5 shadow-[var(--shadow-soft)]"
+          className="absolute right-0 z-50 mt-2 w-72 origin-top-right rounded-[var(--radius-lg)] border border-border bg-surface p-3 shadow-[var(--shadow-dropdown)]"
         >
-          <div className="border-b border-border px-2.5 py-2">
-            <p className="truncate text-sm font-semibold text-foreground">{name}</p>
+          <div className="border-b border-border pb-3">
+            <p className="truncate text-sm font-semibold text-foreground">
+              {name}
+            </p>
             <p className="truncate text-xs text-muted">{user.email}</p>
+            <span className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-success-soft px-2 py-0.5 text-[11px] font-semibold text-success-foreground">
+              <span
+                className={cn(
+                  "size-1.5 rounded-full",
+                  online ? "bg-success" : "bg-muted-dim",
+                )}
+              />
+              {statusLabel}
+            </span>
+            <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-dim">
+              Support agent
+            </p>
           </div>
 
-          <div className="py-1">
+          <div className="space-y-2 pt-3">
             <Link
               ref={(el) => {
                 itemRefs.current[0] = el;
@@ -255,8 +250,9 @@ export function UserMenu({ user }: UserMenuProps) {
               aria-current={profileActive ? "page" : undefined}
               className={cn(
                 ITEM_CLASS,
+                "justify-center border border-border",
                 profileActive
-                  ? "bg-accent/10 text-accent"
+                  ? "bg-accent-soft text-accent"
                   : "text-foreground hover:bg-surface-hover",
               )}
               onClick={() => close()}
@@ -271,14 +267,17 @@ export function UserMenu({ user }: UserMenuProps) {
               type="button"
               role="menuitem"
               tabIndex={-1}
-              className={cn(ITEM_CLASS, "text-danger hover:bg-danger/10")}
+              className={cn(
+                ITEM_CLASS,
+                "justify-center bg-accent text-accent-foreground hover:bg-accent-hover",
+              )}
               onClick={() => {
                 close();
                 setConfirmOpen(true);
               }}
             >
               <SignOutIcon />
-              Sign out
+              Log Out
             </button>
           </div>
         </div>
@@ -289,7 +288,7 @@ export function UserMenu({ user }: UserMenuProps) {
         onClose={() => setConfirmOpen(false)}
         title="Sign out?"
         description="You’ll need to sign in again to continue working on tasks."
-        confirmLabel="Sign out"
+        confirmLabel="Log Out"
         cancelLabel="Stay signed in"
         destructive
         loading={pending}

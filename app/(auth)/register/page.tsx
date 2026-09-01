@@ -12,7 +12,7 @@ export default function RegisterPage() {
   return (
     <AuthCard
       title="Create your account"
-      subtitle="Agent Dashboard"
+      subtitle="Agent workspace"
       description="Register as a Carl agent to manage customer requests and tasks."
       footer={
         <>

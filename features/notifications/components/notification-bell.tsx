@@ -40,10 +40,10 @@ export function NotificationBell() {
       <button
         type="button"
         className={cn(
-          "relative inline-flex size-10 items-center justify-center rounded-xl border border-border bg-surface text-foreground-soft transition-colors",
+          "relative inline-flex size-11 items-center justify-center rounded-full border border-border bg-surface text-foreground-soft transition-colors",
           "hover:bg-surface-hover hover:text-foreground",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-          panelOpen && "border-accent/40 bg-accent/10 text-accent",
+          panelOpen && "border-accent/40 bg-accent-soft text-accent",
         )}
         aria-label={label}
         aria-expanded={panelOpen}

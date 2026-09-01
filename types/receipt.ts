@@ -80,6 +80,25 @@ export function isReceiptRejected(
   return receipt?.status === "REJECTED";
 }
 
+/**
+ * GET receipt only after Task Details are approved and a receipt may exist.
+ * Never probe when confirmation is still missing / pending — that stage is
+ * Task Details Confirmation, not Payment Proof.
+ */
+export function shouldFetchTaskReceipt(
+  confirmationStatus?: string | null,
+  taskStatus?: string | null,
+): boolean {
+  if (confirmationStatus !== "CONFIRMED") return false;
+  // Only when Nest implies the customer may still be waiting, or the task is done.
+  // Do not probe on a blind IN_PROGRESS without a confirmed details stage loaded.
+  return (
+    taskStatus === "WAITING_FOR_USER" ||
+    taskStatus === "WAITING_FOR_AGENT" ||
+    taskStatus === "COMPLETED"
+  );
+}
+
 export function receiptStatusLabel(status: TaskReceiptStatus): string {
   switch (status) {
     case "PENDING":

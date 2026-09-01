@@ -16,7 +16,7 @@ export default function AuthLayout({
       </main>
 
       <footer className="relative z-10 shrink-0 pb-4 text-center text-xs text-muted-dim sm:pb-5">
-        Carl · Agent Dashboard
+        Carl · Agent workspace
       </footer>
     </div>
   );

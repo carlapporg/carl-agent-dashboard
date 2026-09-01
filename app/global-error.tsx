@@ -1,6 +1,15 @@
 "use client";
 
-import "@/styles/theme.css";
+const ERROR_THEME = `
+:root {
+  --background: #f8f9fb;
+  --foreground: #1a1c1e;
+  --muted: #6b7280;
+  --muted-dim: #9ca3af;
+  --accent: #3872e8;
+  --accent-foreground: #ffffff;
+}
+`;
 
 export default function GlobalError({
   error,
@@ -11,6 +20,9 @@ export default function GlobalError({
 }) {
   return (
     <html lang="en">
+      <head>
+        <style dangerouslySetInnerHTML={{ __html: ERROR_THEME }} />
+      </head>
       <body
         style={{
           margin: 0,
@@ -37,9 +49,7 @@ export default function GlobalError({
           >
             500
           </p>
-          <h1 style={{ fontSize: 24, margin: "12px 0" }}>
-            Something went wrong
-          </h1>
+          <h1 style={{ fontSize: 24, margin: "12px 0" }}>Something went wrong</h1>
           <p
             style={{
               color: "var(--muted)",

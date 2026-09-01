@@ -28,6 +28,7 @@ import {
 } from "@/lib/agent/presence";
 import {
   isKeptAfterMiss,
+  isStatusDowngrade,
   liveStatusPatch,
   keepStatusOverlays,
   mergeByProgress,
@@ -58,8 +59,13 @@ import {
 import { ROUTES } from "@/lib/constants/routes";
 import { parseTaskConfirmationPayload, type TaskConfirmation } from "@/types/confirmation";
 import { parseTaskReceiptPayload, type TaskReceipt } from "@/types/receipt";
+import {
+  markTaskConfirmationKnown,
+  markTaskReceiptKnown,
+} from "@/lib/tasks/confirmation-presence";
 import type { Task } from "@/types/task";
 import type { Socket } from "socket.io-client";
+import { markOfferAccepted } from "@/features/ops/auto-accept-offer";
 import { useOfferAutoAssign } from "@/features/ops/offer-auto-assign";
 
 function taskIdFromPath(pathname: string): string | undefined {
@@ -100,6 +106,30 @@ function extractStatus(payload: unknown): AgentTaskStatus | undefined {
   return parsed.success ? parsed.data : undefined;
 }
 
+function extractOfferDeadline(payload: unknown): string | undefined {
+  if (!payload || typeof payload !== "object") return undefined;
+  const root = payload as Record<string, unknown>;
+  const data =
+    root.data && typeof root.data === "object"
+      ? (root.data as Record<string, unknown>)
+      : root;
+  const nested =
+    data.task && typeof data.task === "object"
+      ? (data.task as Record<string, unknown>)
+      : null;
+  for (const source of [nested, data, root]) {
+    if (!source) continue;
+    for (const key of ["rejectUntil", "offerExpiresAt", "expiresAt"] as const) {
+      const value = source[key];
+      if (typeof value === "string" && value) {
+        const time = new Date(value).getTime();
+        if (Number.isFinite(time)) return new Date(time).toISOString();
+      }
+    }
+  }
+  return undefined;
+}
+
 function stubOffer(taskId: string, payload: unknown): Task {
   const root =
     payload && typeof payload === "object"
@@ -112,6 +142,7 @@ function stubOffer(taskId: string, payload: unknown): Task {
   const title =
     (typeof data.title === "string" && data.title) || "New task offered";
   const now = new Date().toISOString();
+  const serverDeadline = extractOfferDeadline(payload);
   return {
     id: taskId,
     number: 0,
@@ -127,7 +158,8 @@ function stubOffer(taskId: string, payload: unknown): Task {
     createdAt: now,
     updatedAt: now,
     backendStatus: "OFFERED",
-    expiresAt: new Date(Date.now() + 30_000).toISOString(),
+    expiresAt: serverDeadline ?? new Date(Date.now() + 30_000).toISOString(),
+    rejectUntil: serverDeadline ?? null,
   };
 }
 
@@ -237,6 +269,12 @@ export function AgentOpsProvider({
     }, 350);
   }, [router]);
 
+  const pulseQueue = useCallback(() => {
+    setQueuePulse((n) => n + 1);
+    setLivePulse(true);
+    window.setTimeout(() => setLivePulse(false), 1600);
+  }, []);
+
   const dismissOffer = useCallback(() => setOffer(null), []);
 
   const silenceOffer = useCallback((taskId: string) => {
@@ -248,7 +286,8 @@ export function AgentOpsProvider({
   const dropLiveTask = useCallback((taskId: string) => {
     silenceOffer(taskId);
     setLiveTasks((prev) => prev.filter((row) => row.id !== taskId));
-  }, [silenceOffer]);
+    pulseQueue();
+  }, [pulseQueue, silenceOffer]);
 
   const hydrateOpenTasks = useCallback((tasks: Task[]) => {
     didInitialCatchUpGlobal = true;
@@ -281,6 +320,9 @@ export function AgentOpsProvider({
 
   const upsertLiveTask = useCallback((task: Task) => {
     if (isRejectingOrRejected(task.id)) return;
+    if (task.backendStatus === "ASSIGNED") {
+      markOfferAccepted(task.id);
+    }
     setLiveTasks((prev) => {
       const index = prev.findIndex((row) => row.id === task.id);
       if (index === -1) return [task, ...prev];
@@ -300,11 +342,16 @@ export function AgentOpsProvider({
   }, []);
 
   const patchLiveTask = useCallback((taskId: string, patch: Partial<Task>, fallback?: Task) => {
-    if (isRejectingOrRejected(taskId)) return;
+    const nextStatus = patch.backendStatus;
+    if (nextStatus === "ASSIGNED") {
+      markOfferAccepted(taskId);
+    }
+    if (isRejectingOrRejected(taskId) && nextStatus !== "ASSIGNED") return;
     const extras = {
       ...patch,
       updatedAt: patch.updatedAt ?? new Date().toISOString(),
     };
+    let statusChanged = Boolean(patch.backendStatus || patch.status);
     setLiveTasks((prev) => {
       const index = prev.findIndex((row) => row.id === taskId);
       if (index === -1) {
@@ -314,11 +361,17 @@ export function AgentOpsProvider({
           ...prev,
         ];
       }
+      const current = prev[index];
+      if (isStatusDowngrade(current, extras)) return prev;
+      statusChanged =
+        (patch.backendStatus != null &&
+          patch.backendStatus !== current.backendStatus) ||
+        (patch.status != null && patch.status !== current.status);
       const next = [...prev];
       next[index] = keepStatusOverlays(
-        next[index],
-        mergeByProgress(next[index], {
-          ...next[index],
+        current,
+        mergeByProgress(current, {
+          ...current,
           ...extras,
         }),
       );
@@ -326,13 +379,14 @@ export function AgentOpsProvider({
     });
     setOffer((current) => {
       if (!current || current.id !== taskId) return current;
-      const nextStatus = extras.backendStatus ?? current.backendStatus;
-      if (nextStatus && nextStatus !== "OFFERED" && nextStatus !== "ASSIGNED") {
+      const offerNextStatus = extras.backendStatus ?? current.backendStatus;
+      if (offerNextStatus && offerNextStatus !== "OFFERED" && offerNextStatus !== "ASSIGNED") {
         return null;
       }
       return { ...current, ...extras };
     });
-  }, []);
+    if (statusChanged) pulseQueue();
+  }, [pulseQueue]);
 
   const upsertLiveTaskRef = useRef(upsertLiveTask);
   upsertLiveTaskRef.current = upsertLiveTask;
@@ -362,6 +416,7 @@ export function AgentOpsProvider({
     tasks: autoAssignTasks,
     patchLiveTask,
     dropLiveTask,
+    refresh,
   });
 
   useEffect(() => {
@@ -423,12 +478,6 @@ export function AgentOpsProvider({
     let dropBannerTimer = 0;
     let catchUpTimer = 0;
     const seenIds = new Set<string>();
-
-    function pulseQueue() {
-      setQueuePulse((n) => n + 1);
-      setLivePulse(true);
-      window.setTimeout(() => setLivePulse(false), 1600);
-    }
 
     function rejoinRooms() {
       const ids = new Set<string>();
@@ -580,6 +629,12 @@ export function AgentOpsProvider({
         if (!isRejectingOrRejected(task.id)) {
           upsertLiveTaskRef.current(task);
         }
+        if (task.backendStatus === "OFFERED" && !isRejectingOrRejected(task.id)) {
+          setOffer((current) =>
+            current?.id === task.id ? task : (current ?? task),
+          );
+          pulseQueue();
+        }
         return;
       }
       setOffer(task);
@@ -665,12 +720,16 @@ export function AgentOpsProvider({
 
     function onConfirmationConfirmed(payload: unknown) {
       const confirmation = parseTaskConfirmationPayload(payload);
-      if (confirmation) setLiveConfirmationRef.current(confirmation);
+      if (confirmation) {
+        markTaskConfirmationKnown(confirmation.taskId);
+        setLiveConfirmationRef.current(confirmation);
+      }
       const id =
         confirmation?.taskId ??
         parseConfirmationNotification(payload, "confirmation_confirmed")?.taskId ??
         extractTaskId(payload);
       if (id) {
+        markTaskConfirmationKnown(id);
         patchLiveTaskRef.current(
           id,
           liveStatusPatch("WAITING_FOR_USER", "waiting_for_payment"),
@@ -691,12 +750,16 @@ export function AgentOpsProvider({
 
     function onConfirmationDeclined(payload: unknown) {
       const confirmation = parseTaskConfirmationPayload(payload);
-      if (confirmation) setLiveConfirmationRef.current(confirmation);
+      if (confirmation) {
+        markTaskConfirmationKnown(confirmation.taskId);
+        setLiveConfirmationRef.current(confirmation);
+      }
       const id =
         confirmation?.taskId ??
         parseConfirmationNotification(payload, "confirmation_declined")?.taskId ??
         extractTaskId(payload);
       if (id) {
+        markTaskConfirmationKnown(id);
         patchLiveTaskRef.current(
           id,
           liveStatusPatch("IN_PROGRESS", "in_progress"),
@@ -717,9 +780,13 @@ export function AgentOpsProvider({
 
     function onReceiptAccepted(payload: unknown) {
       const receipt = parseTaskReceiptPayload(payload);
-      if (receipt) setLiveReceiptRef.current(receipt);
+      if (receipt) {
+        markTaskReceiptKnown(receipt.taskId);
+        setLiveReceiptRef.current(receipt);
+      }
       const item = parseReceiptNotification(payload, "receipt_accepted");
       if (item) {
+        if (item.taskId) markTaskReceiptKnown(item.taskId);
         notificationsRef.current.push(item);
         toastRef.current(item.body, "success", {
           title: item.title,
@@ -733,9 +800,13 @@ export function AgentOpsProvider({
 
     function onReceiptRejected(payload: unknown) {
       const receipt = parseTaskReceiptPayload(payload);
-      if (receipt) setLiveReceiptRef.current(receipt);
+      if (receipt) {
+        markTaskReceiptKnown(receipt.taskId);
+        setLiveReceiptRef.current(receipt);
+      }
       const item = parseReceiptNotification(payload, "receipt_rejected");
       if (item) {
+        if (item.taskId) markTaskReceiptKnown(item.taskId);
         notificationsRef.current.push(item);
         toastRef.current(item.body, "info", {
           title: item.title,
@@ -785,6 +856,7 @@ export function AgentOpsProvider({
       if (item && !notificationsRef.current.isViewingTaskInbox(item.taskId ?? "")) {
         notificationsRef.current.push(item);
       }
+      pulseQueue();
     }
 
     function onMissed(payload: unknown) {
@@ -820,6 +892,7 @@ export function AgentOpsProvider({
         return;
       }
       if (mapped) upsertLiveTaskRef.current(mapped);
+      pulseQueue();
     }
 
     function onConnectError(error: unknown) {

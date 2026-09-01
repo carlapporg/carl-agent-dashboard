@@ -13,12 +13,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { updateAgentNameAction } from "@/features/profile/actions/profile-actions";
 import { CheckIcon } from "@/features/auth/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
+import { ChangePasswordForm } from "@/features/profile/components/change-password-form";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardBody } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { PageHeader } from "@/components/ui/page-header";
 import { PageShell } from "@/components/ui/page-shell";
 import { ROUTES } from "@/lib/constants/routes";
 import { queryKeys } from "@/lib/query/keys";
@@ -32,7 +31,7 @@ type EditProfileFormProps = {
 
 export function EditProfileView({ user }: EditProfileFormProps) {
   return (
-    <PageShell wide>
+    <PageShell>
       <Link
         href={ROUTES.profile}
         className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-accent hover:text-accent-hover"
@@ -40,17 +39,22 @@ export function EditProfileView({ user }: EditProfileFormProps) {
         ← Back to profile
       </Link>
 
-      <PageHeader
-        title="Edit profile"
-        description="Update your display name. Your email is managed by your admin."
-      />
-
-      <div className="mx-auto max-w-2xl">
-        <Card>
-          <CardBody>
+      <div className="mx-auto max-w-2xl space-y-4">
+        <section className="rounded-[var(--radius-card)] border border-border bg-surface p-5 shadow-[var(--shadow-card)] md:p-6">
+          <h2 className="text-base font-semibold text-foreground">
+            Display name
+          </h2>
+          <p className="mt-1 text-sm text-muted">
+            Your email is managed by your admin.
+          </p>
+          <div className="mt-4">
             <EditProfileForm user={user} />
-          </CardBody>
-        </Card>
+          </div>
+        </section>
+
+        <section className="rounded-[var(--radius-card)] border border-border bg-surface p-5 shadow-[var(--shadow-card)] md:p-6">
+          <ChangePasswordForm />
+        </section>
       </div>
     </PageShell>
   );

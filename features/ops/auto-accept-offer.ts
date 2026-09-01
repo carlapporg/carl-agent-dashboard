@@ -24,6 +24,8 @@ export type OfferDecision = {
   settled: OfferSettled;
   rejectUiOpen: boolean;
   windowExpired: boolean;
+  /** Remaining ms frozen when the agent acts — stops the visible countdown. */
+  frozenRemainingMs: number | null;
 };
 
 const EMPTY: OfferDecision = {
@@ -31,6 +33,7 @@ const EMPTY: OfferDecision = {
   settled: "none",
   rejectUiOpen: false,
   windowExpired: false,
+  frozenRemainingMs: null,
 };
 
 const states = new Map<string, OfferDecision>();
@@ -38,10 +41,10 @@ const claims = new Map<string, OfferClaim>();
 const acceptPosts = new Map<string, Promise<TaskActionResult>>();
 const rejectPosts = new Map<string, Promise<TaskActionResult>>();
 const autoAcceptGen = new Map<string, number>();
-const listeners = new Set<() => void>();
+const taskListeners = new Map<string, Set<() => void>>();
 
-function emit() {
-  listeners.forEach((listener) => listener());
+function emit(taskId: string) {
+  taskListeners.get(taskId)?.forEach((listener) => listener());
 }
 
 function read(taskId: string): OfferDecision {
@@ -52,16 +55,28 @@ function write(taskId: string, patch: Partial<OfferDecision>) {
   if (!taskId) return;
   const next = { ...EMPTY, ...(states.get(taskId) ?? EMPTY), ...patch };
   states.set(taskId, next);
-  emit();
+  emit(taskId);
 }
 
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
+function subscribeTask(taskId: string, listener: () => void) {
+  let bucket = taskListeners.get(taskId);
+  if (!bucket) {
+    bucket = new Set();
+    taskListeners.set(taskId, bucket);
+  }
+  bucket.add(listener);
+  return () => {
+    bucket!.delete(listener);
+    if (bucket!.size === 0) taskListeners.delete(taskId);
+  };
 }
 
 function bumpAutoAcceptGen(taskId: string) {
   autoAcceptGen.set(taskId, (autoAcceptGen.get(taskId) ?? 0) + 1);
+}
+
+export function getOfferTimerGeneration(taskId: string): number {
+  return autoAcceptGen.get(taskId) ?? 0;
 }
 
 function claimOf(taskId: string): OfferClaim {
@@ -70,10 +85,33 @@ function claimOf(taskId: string): OfferClaim {
 
 export function useOfferDecision(taskId?: string): OfferDecision {
   return useSyncExternalStore(
-    subscribe,
+    (listener) => (taskId ? subscribeTask(taskId, listener) : () => {}),
     () => (taskId ? read(taskId) : EMPTY),
     () => EMPTY,
   );
+}
+
+function freezeOfferTimer(taskId: string, expiresAt: string) {
+  const end = new Date(expiresAt).getTime();
+  const remaining = Number.isFinite(end) ? Math.max(0, end - Date.now()) : 0;
+  write(taskId, { frozenRemainingMs: remaining });
+}
+
+/** Timer is paused while accept/reject is in flight or the reject dialog is open. */
+export function isOfferTimerPaused(taskId: string): boolean {
+  const state = read(taskId);
+  if (state.settled !== "none") return true;
+  if (state.flight !== "none") return true;
+  if (state.rejectUiOpen) return true;
+  return false;
+}
+
+export function hasOpenRejectUi(taskId: string): boolean {
+  return read(taskId).rejectUiOpen;
+}
+
+export function isOfferInRejectFlow(taskId: string): boolean {
+  return hasOpenRejectUi(taskId) || isRejectingOrRejected(taskId);
 }
 
 export function canAutoAcceptOffer(taskId: string): boolean {
@@ -81,6 +119,7 @@ export function canAutoAcceptOffer(taskId: string): boolean {
   return (
     state.settled === "none" &&
     state.flight === "none" &&
+    !state.rejectUiOpen &&
     claimOf(taskId) !== "reject"
   );
 }
@@ -117,30 +156,38 @@ export function canShowRejectUi(taskId: string): boolean {
   return true;
 }
 
-/** Invalidate any in-flight auto-accept without opening a gap at flight=none. */
 export function cancelInFlightAutoAccept(taskId: string) {
   if (!taskId) return;
   bumpAutoAcceptGen(taskId);
 }
 
-export function openRejectOfferUi(taskId: string) {
+export function openRejectOfferUi(taskId: string, expiresAt?: string) {
   if (!taskId) return;
   const state = read(taskId);
   if (state.settled !== "none" || state.windowExpired) return;
   if (claimOf(taskId) === "accept") return;
+  if (expiresAt) freezeOfferTimer(taskId, expiresAt);
   write(taskId, { rejectUiOpen: true });
 }
 
-export function closeRejectOfferUi(taskId: string, _expiresAt?: string) {
+export function closeRejectOfferUi(taskId: string, expiresAt?: string) {
   if (!taskId) return;
   const state = read(taskId);
   if (!state.rejectUiOpen) return;
   if (state.flight === "reject" || claimOf(taskId) === "reject") return;
-  write(taskId, { rejectUiOpen: false });
+  const windowStillOpen =
+    expiresAt != null &&
+    Number.isFinite(new Date(expiresAt).getTime()) &&
+    Date.now() < new Date(expiresAt).getTime();
+  write(taskId, {
+    rejectUiOpen: false,
+    frozenRemainingMs: windowStillOpen ? null : state.frozenRemainingMs,
+  });
 }
 
 export function expireRejectWindow(taskId: string) {
   if (!taskId) return;
+  if (isOfferTimerPaused(taskId)) return;
   const state = read(taskId);
   if (state.settled !== "none") return;
   const rejecting = state.flight === "reject" || claimOf(taskId) === "reject";
@@ -150,7 +197,7 @@ export function expireRejectWindow(taskId: string) {
   });
 }
 
-export function beginAcceptOffer(taskId: string): boolean {
+export function beginAcceptOffer(taskId: string, expiresAt?: string): boolean {
   if (!taskId) return false;
   const state = read(taskId);
   if (state.settled === "accepted") return true;
@@ -159,6 +206,7 @@ export function beginAcceptOffer(taskId: string): boolean {
   if (state.flight === "accept" || claimOf(taskId) === "accept") return false;
   claims.set(taskId, "accept");
   bumpAutoAcceptGen(taskId);
+  if (expiresAt) freezeOfferTimer(taskId, expiresAt);
   write(taskId, {
     flight: "accept",
     rejectUiOpen: false,
@@ -170,7 +218,7 @@ export function beginAcceptOffer(taskId: string): boolean {
  * Claim reject immediately so auto-accept cannot start.
  * Do not hide the task until Nest confirms.
  */
-export function beginRejectOffer(taskId: string): boolean {
+export function beginRejectOffer(taskId: string, expiresAt?: string): boolean {
   if (!taskId) return false;
   const state = read(taskId);
   if (state.settled === "rejected" || claimOf(taskId) === "reject") return true;
@@ -178,6 +226,7 @@ export function beginRejectOffer(taskId: string): boolean {
   if (state.flight === "accept" || claimOf(taskId) === "accept") return false;
   claims.set(taskId, "reject");
   bumpAutoAcceptGen(taskId);
+  if (expiresAt) freezeOfferTimer(taskId, expiresAt);
   write(taskId, {
     flight: "reject",
     rejectUiOpen: true,
@@ -299,6 +348,7 @@ export function markOfferAccepted(taskId: string) {
     settled: "accepted",
     rejectUiOpen: false,
     windowExpired: true,
+    frozenRemainingMs: null,
   });
 }
 
@@ -309,18 +359,25 @@ export function markOfferDecisionRejected(taskId: string) {
     flight: "none",
     settled: "rejected",
     rejectUiOpen: false,
+    frozenRemainingMs: null,
   });
 }
 
-export function releaseOfferFlight(taskId: string) {
+export function releaseOfferFlight(taskId: string, expiresAt?: string) {
   if (!taskId) return;
   const state = read(taskId);
   if (state.settled !== "none") return;
   if (claimOf(taskId) === "reject" && state.flight === "reject") return;
   claims.set(taskId, "none");
+  const windowStillOpen =
+    expiresAt != null &&
+    Number.isFinite(new Date(expiresAt).getTime()) &&
+    Date.now() < new Date(expiresAt).getTime() &&
+    !state.windowExpired;
   write(taskId, {
     flight: "none",
     rejectUiOpen: state.windowExpired ? false : state.rejectUiOpen,
+    frozenRemainingMs: windowStillOpen || expiresAt == null ? null : state.frozenRemainingMs,
   });
 }
 
@@ -398,6 +455,7 @@ export async function submitAcceptOffer(taskId: string): Promise<TaskActionResul
 
 export async function autoAcceptExpiredOffer(taskId: string): Promise<boolean> {
   if (!taskId) return offerWasAccepted(taskId);
+  if (isOfferTimerPaused(taskId)) return offerWasAccepted(taskId);
   expireRejectWindow(taskId);
   if (claimOf(taskId) === "reject" || read(taskId).flight === "reject") {
     return false;

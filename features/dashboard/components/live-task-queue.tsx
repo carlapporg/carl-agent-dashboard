@@ -2,11 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { StatusBadge } from "@/features/tasks/components/status-badge";
 import { OfferCountdown } from "@/features/ops/offer-countdown";
 import { OfferActions } from "@/features/dashboard/components/offer-actions";
 import { useOps } from "@/features/ops/ops-provider";
-import { Card } from "@/components/ui/card";
 import { ROUTES } from "@/lib/constants/routes";
 import { cn } from "@/lib/utils/cn";
 import {
@@ -14,7 +12,10 @@ import {
   useRejectedOfferTick,
   withoutRejectedOffers,
 } from "@/features/ops/rejected-offers";
-import { isRejectingOrRejected } from "@/features/ops/auto-accept-offer";
+import {
+  isRejectingOrRejected,
+  hasOpenRejectUi,
+} from "@/features/ops/auto-accept-offer";
 import { mergeTaskLists } from "@/lib/tasks/merge-live-task";
 import { offerWindowEnd } from "@/types/agent";
 import type { Task } from "@/types/task";
@@ -35,15 +36,31 @@ function receivedLabel(iso: string): string {
 
 function statusBadgeLabel(task: Task): string {
   if (isRejectingOrRejected(task.id) || isPendingReject(task.id)) return "Rejecting";
-  if (task.status === "waiting_for_payment") return "Waiting for Payment";
-  if (task.status === "waiting_for_customer") return "Waiting for Customer";
+  if (task.status === "waiting_for_payment") return "Waiting For Payment";
+  if (task.status === "waiting_for_customer") return "Waiting For Customer";
   if (task.backendStatus === "OFFERED") return "Offered";
   if (task.backendStatus === "ASSIGNED") return "Assigned";
-  if (task.backendStatus === "WAITING_FOR_USER") return "In Progress";
+  if (task.backendStatus === "WAITING_FOR_USER") return "Waiting For Customer";
   if (task.backendStatus === "IN_PROGRESS") return "In Progress";
   if (task.backendStatus === "WAITING_FOR_AGENT") return "In Progress";
   if (task.status === "cancelled") return "Failed";
   return task.status.replaceAll("_", " ");
+}
+
+function chipTone(task: Task): string {
+  if (
+    task.status === "waiting_for_customer" ||
+    task.status === "waiting_for_payment" ||
+    task.backendStatus === "OFFERED" ||
+    task.backendStatus === "WAITING_FOR_USER"
+  ) {
+    return "bg-warning-soft text-warning-foreground";
+  }
+  if (task.status === "completed") return "bg-success-soft text-success-foreground";
+  if (task.status === "in_progress" || task.backendStatus === "IN_PROGRESS") {
+    return "bg-accent-soft text-accent";
+  }
+  return "bg-surface-hover text-muted";
 }
 
 export function LiveTaskQueue({ seedTasks }: LiveTaskQueueProps) {
@@ -51,7 +68,6 @@ export function LiveTaskQueue({ seedTasks }: LiveTaskQueueProps) {
   const [highlight, setHighlight] = useState(false);
   const prevIds = useRef<Set<string>>(new Set(seedTasks.map((t) => t.id)));
   const [newIds, setNewIds] = useState<Set<string>>(new Set());
-
   const rejectedTick = useRejectedOfferTick();
 
   const items = useMemo(() => {
@@ -100,18 +116,17 @@ export function LiveTaskQueue({ seedTasks }: LiveTaskQueueProps) {
 
   return (
     <section>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <h2 className="text-lg font-semibold text-foreground">Live task queue</h2>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <h2 className="text-lg font-semibold text-foreground">Live Task Queue</h2>
           <span
             className={cn(
-              "inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-700",
-              (ops?.livePulse || highlight) && "dash-live-badge-pop ring-2 ring-emerald-300",
+              "inline-flex items-center gap-1.5 rounded-full border border-success/25 bg-success-soft px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-success-foreground",
+              (ops?.livePulse || highlight) && "dash-live-badge-pop",
             )}
           >
-            <span className="dash-live-dot size-2 rounded-full bg-emerald-500" />
-            LIVE
-            <span className="tabular-nums text-emerald-800">{items.length}</span>
+            <span className="dash-live-dot size-1.5 rounded-full bg-success" />
+            Live {items.length}
           </span>
         </div>
         <Link
@@ -122,114 +137,94 @@ export function LiveTaskQueue({ seedTasks }: LiveTaskQueueProps) {
         </Link>
       </div>
 
-      <Card
-        className={cn(
-          "overflow-hidden p-0 transition-shadow",
-          highlight && "ring-2 ring-accent/30 shadow-[var(--shadow-soft)]",
-        )}
-      >
-        <div className="border-b border-border bg-[#f8fafc] px-4 py-3 text-sm text-muted">
-          Newest first. First offer: 30s to accept or reject. Later assignment: Start only.
+      {items.length === 0 ? (
+        <div className="rounded-[var(--radius-card)] border border-dashed border-border bg-surface px-4 py-12 text-center text-sm text-muted shadow-[var(--shadow-card)]">
+          Queue is quiet. New assignments will appear here live.
         </div>
+      ) : (
+        <ul className="flex flex-col gap-3">
+          {items.map((item, index) => {
+            const isNew = newIds.has(item.id);
+            const offered =
+              item.backendStatus === "OFFERED" || hasOpenRejectUi(item.id);
+            const assigned = item.backendStatus === "ASSIGNED";
+            const waiting =
+              item.status === "waiting_for_customer" ||
+              item.status === "waiting_for_payment" ||
+              item.backendStatus === "WAITING_FOR_USER";
+            const waitingLabel = statusBadgeLabel(item);
 
-        {items.length === 0 ? (
-          <p className="px-4 py-12 text-center text-sm text-muted">
-            Queue is quiet. New assignments will appear here live.
-          </p>
-        ) : (
-          <ul className="flex flex-col gap-2 p-3">
-            {items.map((item, index) => {
-              const isNew = newIds.has(item.id);
-              const offered = item.backendStatus === "OFFERED";
-              const assigned = item.backendStatus === "ASSIGNED";
-              return (
-                <li key={item.id}>
-                  <div
-                    className={cn(
-                      "group relative flex flex-col gap-3 overflow-hidden rounded-xl border border-border bg-surface px-4 py-3.5 transition-all hover:border-accent/30 sm:flex-row sm:items-center sm:justify-between",
-                      isNew && "dash-drop-in border-accent/40",
-                      index === 0 && "border-accent/20",
-                    )}
-                  >
-                    {isNew ? (
-                      <span className="absolute inset-y-0 left-0 w-1 bg-accent" />
-                    ) : null}
-
-                    <div className="flex min-w-0 items-start gap-3">
-                      <span
-                        className={cn(
-                          "mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-bold",
-                          index === 0
-                            ? "bg-accent text-accent-foreground"
-                            : "bg-accent/10 text-accent",
-                        )}
-                      >
-                        #{index + 1}
-                      </span>
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="rounded-full bg-surface-hover px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-muted">
-                            {item.taskType?.replaceAll("_", " ") ?? "Task"}
+            return (
+              <li key={item.id}>
+                <div
+                  className={cn(
+                    "flex min-h-[88px] flex-col gap-4 rounded-[var(--radius-card)] border border-border bg-surface px-4 py-4 shadow-[var(--shadow-card)] transition-shadow sm:flex-row sm:items-center sm:justify-between md:px-5",
+                    isNew && "dash-drop-in ring-2 ring-accent/25",
+                  )}
+                >
+                  <div className="flex min-w-0 items-start gap-3.5">
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-accent-soft text-xs font-bold text-accent">
+                      #{index + 1}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted">
+                          {item.taskType?.replaceAll("_", " ") ?? "Task"}
+                        </span>
+                        {waiting || offered ? (
+                          <span className="rounded-full bg-warning-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-warning-foreground">
+                            Waiting
                           </span>
-                          <span
-                            className={cn(
-                              "rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide",
-                              offered
-                                ? "bg-amber-50 text-amber-800"
-                                : assigned
-                                  ? "bg-accent/10 text-accent"
-                                  : item.status === "waiting_for_payment" ||
-                                      item.status === "waiting_for_customer"
-                                  ? "bg-amber-50 text-amber-800"
-                                  : "bg-emerald-50 text-emerald-800",
-                            )}
-                          >
-                            {statusBadgeLabel(item)}
-                          </span>
-                          {isNew ? (
-                            <span className="rounded-full bg-accent px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white">
-                              Just in
-                            </span>
-                          ) : null}
-                        </div>
-                        <p className="mt-1 truncate text-sm font-semibold text-foreground">
-                          {item.title}
-                        </p>
-                        <p className="mt-0.5 text-sm text-muted">
-                          {item.customerName}
-                          <span className="text-muted-dim">
-                            {" "}
-                            · {receivedLabel(item.updatedAt)}
-                          </span>
-                        </p>
+                        ) : null}
                       </div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-3 sm:justify-end">
-                      {offered ? (
-                        <OfferCountdown
-                          expiresAt={offerWindowEnd(item)}
-                          taskId={item.id}
-                          autoAccept
-                        />
-                      ) : (
-                        <StatusBadge status={item.status} />
-                      )}
-                      {offered || assigned ? <OfferActions task={item} /> : null}
-                      <Link
-                        href={ROUTES.task(item.id)}
-                        className="inline-flex h-9 items-center rounded-full bg-accent/10 px-3 text-sm font-semibold text-accent transition-colors hover:bg-accent hover:text-accent-foreground"
-                      >
-                        Open
-                      </Link>
+                      <p className="mt-1 truncate text-[15px] font-semibold text-foreground">
+                        {item.title}
+                      </p>
+                      <p className="mt-0.5 text-sm text-muted">
+                        {item.customerName}
+                        <span className="text-muted-dim">
+                          {" "}
+                          · {receivedLabel(item.updatedAt)}
+                        </span>
+                      </p>
                     </div>
                   </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </Card>
+
+                  <div className="flex flex-wrap items-center gap-3 sm:shrink-0 sm:justify-end">
+                    {offered ? (
+                      <OfferCountdown
+                        expiresAt={offerWindowEnd(item)}
+                        taskId={item.id}
+                        autoAccept
+                      />
+                    ) : waiting ? (
+                      <span className="text-sm font-medium text-muted">
+                        {waitingLabel}
+                      </span>
+                    ) : (
+                      <span
+                        className={cn(
+                          "rounded-full px-2.5 py-1 text-xs font-semibold capitalize",
+                          chipTone(item),
+                        )}
+                      >
+                        {waitingLabel}
+                      </span>
+                    )}
+                    {offered || assigned ? <OfferActions task={item} /> : null}
+                    <Link
+                      href={ROUTES.task(item.id)}
+                      className="inline-flex h-9 items-center rounded-[var(--radius-md)] border border-accent bg-surface px-4 text-sm font-semibold text-accent transition-colors hover:bg-accent-soft"
+                    >
+                      Open
+                    </Link>
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </section>
   );
 }

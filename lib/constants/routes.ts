@@ -29,3 +29,13 @@ export const PUBLIC_ROUTES = [
 ] as const;
 
 export const AUTH_COOKIE_NAME = "carl_agent_session";
+
+/** True for `/tasks` list only — not task detail or sub-routes. */
+export function isTaskHubPath(pathname: string): boolean {
+  return pathname === ROUTES.tasks;
+}
+
+/** True for `/tasks/:taskId` and nested routes like payments. */
+export function isTaskDetailPath(pathname: string): boolean {
+  return /^\/tasks\/[^/?#]+/.test(pathname);
+}

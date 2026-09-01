@@ -3,7 +3,7 @@ import {
   isMarkedRejected,
   isPendingReject,
 } from "@/features/ops/rejected-offers";
-import { isRejectingOrRejected } from "@/features/ops/auto-accept-offer";
+import { isRejectingOrRejected, hasOpenRejectUi } from "@/features/ops/auto-accept-offer";
 import type { Task } from "@/types/task";
 
 const RANK: Record<string, number> = {
@@ -19,7 +19,7 @@ const RANK: Record<string, number> = {
   REJECTED: 4,
 };
 
-function rank(task: Task): number {
+export function taskProgressRank(task: Task | Partial<Task>): number {
   const backend = task.backendStatus ?? "";
   if (backend in RANK) return RANK[backend];
   if (task.status === "in_progress" || task.status === "waiting_for_customer" || task.status === "waiting_for_payment") {
@@ -28,6 +28,12 @@ function rank(task: Task): number {
   if (task.status === "assigned") return 2;
   if (task.status === "queued") return 1;
   return 0;
+}
+
+/** True when a patch would move a task backward (e.g. ASSIGNED over IN_PROGRESS). */
+export function isStatusDowngrade(current: Task, patch: Partial<Task>): boolean {
+  if (patch.backendStatus == null && patch.status == null) return false;
+  return taskProgressRank({ ...current, ...patch }) < taskProgressRank(current);
 }
 
 function isSparse(task: Task): boolean {
@@ -89,7 +95,7 @@ function laterDeadline(left?: string, right?: string): string | undefined {
 }
 
 function withFreshDeadline(merged: Task, base: Task, incoming: Task): Task {
-  if (rank(merged) >= 2) {
+  if (taskProgressRank(merged) >= 2) {
     return { ...merged, expiresAt: undefined };
   }
   return {
@@ -121,8 +127,8 @@ export function mergeByProgress(base: Task, incoming: Task): Task {
   }
 
   if (isSparse(incoming) && !isSparse(base)) {
-    const incomingRank = rank(incoming);
-    const baseRank = rank(base);
+    const incomingRank = taskProgressRank(incoming);
+    const baseRank = taskProgressRank(base);
     if (incomingRank <= baseRank) {
       return withFreshDeadline(base, base, incoming);
     }
@@ -138,8 +144,8 @@ export function mergeByProgress(base: Task, incoming: Task): Task {
     );
   }
 
-  const incomingRank = rank(incoming);
-  const baseRank = rank(base);
+  const incomingRank = taskProgressRank(incoming);
+  const baseRank = taskProgressRank(base);
   if (incomingRank > baseRank) {
     return withFreshDeadline(
       {
@@ -173,7 +179,11 @@ export function mergeByProgress(base: Task, incoming: Task): Task {
 }
 
 export function pinWhileRejecting(task: Task): Task {
-  if (!isRejectingOrRejected(task.id) && !isPendingReject(task.id)) return task;
+  const inRejectFlow =
+    isRejectingOrRejected(task.id) ||
+    isPendingReject(task.id) ||
+    hasOpenRejectUi(task.id);
+  if (!inRejectFlow) return task;
   if (task.backendStatus === "OFFERED" || task.status === "queued") return task;
   return {
     ...task,

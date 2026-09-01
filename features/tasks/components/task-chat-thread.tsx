@@ -35,6 +35,8 @@ export type TaskChatThreadHandle = {
   prefills: (text: string) => void;
 };
 
+type ChatAppearance = "workspace" | "inbox";
+
 type TaskChatThreadProps = {
   taskId: string;
   timeline: TimelineEvent[];
@@ -46,8 +48,12 @@ type TaskChatThreadProps = {
   title?: string;
   subtitle?: string;
   clientLabel?: string;
+  agentLabel?: string;
+  appearance?: ChatAppearance;
   /** Full-height column (task workspace). Turn off for embedded panels. */
   fillHeight?: boolean;
+  /** Fires when merged server + optimistic thread changes (sidebar sync). */
+  onThreadUpdate?: (thread: TimelineEvent[]) => void;
 };
 
 type ChatItem = TimelineEvent & {
@@ -327,6 +333,58 @@ function SendIcon({ className }: { className?: string }) {
   );
 }
 
+function PaperclipIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden className={className}>
+      <path
+        d="M16.5 6.5v8.25a4.5 4.5 0 0 1-9 0v-9a3 3 0 0 1 6 0v7.5a1.5 1.5 0 0 1-3 0V7"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function PersonIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden className={className}>
+      <circle cx="12" cy="8" r="3.25" stroke="currentColor" strokeWidth="1.6" />
+      <path
+        d="M6.5 19c.9-2.8 2.9-4.25 5.5-4.25s4.6 1.45 5.5 4.25"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function ChatAvatar({
+  role,
+  appearance,
+}: {
+  role: "agent" | "client";
+  appearance: ChatAppearance;
+}) {
+  if (appearance !== "inbox") return null;
+  const fromAgent = role === "agent";
+  return (
+    <span
+      className={cn(
+        "flex size-9 shrink-0 items-center justify-center rounded-full",
+        fromAgent
+          ? "bg-accent-soft text-accent"
+          : "bg-surface-hover text-muted",
+      )}
+      aria-hidden
+    >
+      <PersonIcon className="size-4" />
+    </span>
+  );
+}
+
 /** Pending send — clock like WhatsApp / iMessage pending ticks. */
 function ClockIcon({ className }: { className?: string }) {
   return (
@@ -347,33 +405,41 @@ const ChatBubble = memo(function ChatBubble({
   event,
   role,
   grouped,
+  appearance,
   onRetry,
   onOpenImage,
 }: {
   event: ChatItem;
   role: "agent" | "client";
   grouped: boolean;
+  appearance: ChatAppearance;
   onRetry?: (event: ChatItem) => void;
   onOpenImage: (src: string) => void;
 }) {
   const fromAgent = role === "agent";
   const mediaKind = event.mediaKind ?? "text";
+  const inbox = appearance === "inbox";
   return (
     <div
       style={{ contentVisibility: "auto", containIntrinsicSize: "0 40px" }}
       className={cn(
         "w-fit max-w-[min(78%,22rem)]",
-        fromAgent ? "ml-auto" : "mr-auto",
+        !inbox && fromAgent && "ml-auto",
+        !inbox && !fromAgent && "mr-auto",
       )}
     >
       <div
         className={cn(
-          "px-2.5 py-1.5 text-[13px] leading-snug",
+          inbox ? "px-3.5 py-2.5 text-sm leading-relaxed" : "px-2.5 py-1.5 text-[13px] leading-snug",
           fromAgent
-            ? "rounded-2xl rounded-br-md bg-accent text-accent-foreground"
-            : "rounded-2xl rounded-bl-md bg-[#eef0f3] text-foreground",
-          grouped && fromAgent && "rounded-tr-md",
-          grouped && !fromAgent && "rounded-tl-md",
+            ? inbox
+              ? "rounded-xl bg-accent text-accent-foreground"
+              : "rounded-2xl rounded-br-md bg-accent text-accent-foreground"
+            : inbox
+              ? "rounded-xl bg-surface-hover text-foreground"
+              : "rounded-2xl rounded-bl-md bg-[#eef0f3] text-foreground",
+          grouped && fromAgent && !inbox && "rounded-tr-md",
+          grouped && !fromAgent && !inbox && "rounded-tl-md",
           mediaKind === "image" && "overflow-hidden p-1.5",
           mediaKind === "voice" && "min-w-52",
           event.delivery === "failed" && "bg-red-600",
@@ -538,6 +604,10 @@ const TaskChatThreadBody = forwardRef<
     title = "Conversation",
     subtitle,
     clientLabel = "Client",
+    agentLabel = "You",
+    appearance = "workspace",
+    fillHeight = true,
+    onThreadUpdate,
   },
   ref,
 ) {
@@ -649,6 +719,15 @@ const TaskChatThreadBody = forwardRef<
     [thread, unreadFromId],
   );
   const prevCount = useRef(thread.length);
+  const threadSigRef = useRef("");
+
+  useEffect(() => {
+    if (!onThreadUpdate) return;
+    const sig = thread.map((event) => event.id).join("\u0001");
+    if (sig === threadSigRef.current) return;
+    threadSigRef.current = sig;
+    onThreadUpdate(thread);
+  }, [onThreadUpdate, thread]);
 
   const scrollToBottom = useCallback((smooth = false) => {
     const scroller = scrollerRef.current;
@@ -1003,7 +1082,11 @@ const TaskChatThreadBody = forwardRef<
     }
   }
 
-  const showQuickBar = (showTemplates || quickActions.length > 0) && !disabled;
+  const showQuickBar =
+    appearance === "workspace" &&
+    (showTemplates || quickActions.length > 0) &&
+    !disabled;
+  const inbox = appearance === "inbox";
 
   return (
     <section
@@ -1013,25 +1096,36 @@ const TaskChatThreadBody = forwardRef<
         className,
       )}
     >
-      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-3 py-2">
-        <div className="min-w-0">
-          <h2 className="text-sm font-semibold text-foreground">{title}</h2>
-          <p className="truncate text-[11px] text-muted">
-            {subtitle ?? `With ${clientLabel}`}
-          </p>
-        </div>
-        {newBanner ? (
-          <span className="shrink-0 rounded-full bg-accent px-2 py-0.5 text-[11px] font-semibold text-accent-foreground">
-            New
-          </span>
-        ) : null}
-      </header>
+      {title || subtitle ? (
+        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-3 py-2">
+          <div className="min-w-0">
+            {title ? (
+              <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+            ) : null}
+            {(subtitle || clientLabel) && title ? (
+              <p className="truncate text-[11px] text-muted">
+                {subtitle ?? `With ${clientLabel}`}
+              </p>
+            ) : subtitle ? (
+              <p className="truncate text-[11px] text-muted">{subtitle}</p>
+            ) : null}
+          </div>
+          {newBanner ? (
+            <span className="shrink-0 rounded-full bg-accent px-2 py-0.5 text-[11px] font-semibold text-accent-foreground">
+              New
+            </span>
+          ) : null}
+        </header>
+      ) : null}
 
       <div className="relative min-h-0 flex-1">
         <div
           ref={scrollerRef}
           onScroll={onScrollerScroll}
-          className="h-full overflow-y-auto px-3 py-2"
+          className={cn(
+            "h-full overflow-y-auto",
+            inbox ? "px-5 py-5" : "px-3 py-2",
+          )}
         >
           {thread.length === 0 ? (
             <div className="flex h-full min-h-40 items-center justify-center px-4 text-center">
@@ -1040,7 +1134,7 @@ const TaskChatThreadBody = forwardRef<
               </p>
             </div>
           ) : (
-            <div className="flex flex-col gap-2">
+            <div className={cn("flex flex-col", inbox ? "gap-5" : "gap-2")}>
               {blocks.map((block) => {
                 if (block.type === "day") {
                   return (
@@ -1076,6 +1170,43 @@ const TaskChatThreadBody = forwardRef<
                 }
                 const first = block.items[0];
                 const fromAgent = block.role === "agent";
+                const speaker = fromAgent ? agentLabel : clientLabel;
+                if (inbox) {
+                  return (
+                    <div
+                      key={block.key}
+                      className={cn(
+                        "flex gap-3",
+                        fromAgent ? "flex-row-reverse" : "flex-row",
+                      )}
+                    >
+                      <ChatAvatar role={block.role} appearance={appearance} />
+                      <div
+                        className={cn(
+                          "flex min-w-0 max-w-[min(100%,36rem)] flex-col gap-1.5",
+                          fromAgent ? "items-end" : "items-start",
+                        )}
+                      >
+                        {block.items.map((event, index) => (
+                          <ChatBubble
+                            key={event.id}
+                            event={event}
+                            role={block.role}
+                            grouped={index > 0}
+                            appearance={appearance}
+                            onRetry={
+                              event.delivery === "failed" ? onRetry : undefined
+                            }
+                            onOpenImage={setLightbox}
+                          />
+                        ))}
+                        <p className="text-xs text-muted">
+                          {speaker} · {formatClock(first.createdAt)}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                }
                 return (
                   <div
                     key={block.key}
@@ -1103,6 +1234,7 @@ const TaskChatThreadBody = forwardRef<
                         event={event}
                         role={block.role}
                         grouped={index > 0}
+                        appearance={appearance}
                         onRetry={event.delivery === "failed" ? onRetry : undefined}
                         onOpenImage={setLightbox}
                       />
@@ -1165,7 +1297,7 @@ const TaskChatThreadBody = forwardRef<
             event.preventDefault();
             submitComposer();
           }}
-          className="px-3 pb-2.5 pt-1"
+          className={cn(inbox ? "px-5 py-4" : "px-3 pb-2.5 pt-1")}
         >
           {disabledHint ? (
             <p className="mb-1.5 text-[11px] text-muted">{disabledHint}</p>
@@ -1262,6 +1394,71 @@ const TaskChatThreadBody = forwardRef<
                 className="text-[11px] font-semibold text-muted hover:text-foreground"
               >
                 Cancel
+              </button>
+            </div>
+          ) : inbox ? (
+            <div className="flex items-end gap-3">
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  disabled={disabled}
+                  aria-label="Attach image"
+                  onClick={() => fileRef.current?.click()}
+                  className="inline-flex size-10 items-center justify-center rounded-[var(--radius-md)] border border-border bg-surface text-muted transition-colors hover:bg-surface-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <PaperclipIcon className="size-4.5" />
+                </button>
+                <button
+                  type="button"
+                  disabled={disabled}
+                  aria-label="Send a voice message"
+                  onClick={() => void startRecording()}
+                  className="inline-flex size-10 items-center justify-center rounded-[var(--radius-md)] border border-border bg-surface text-muted transition-colors hover:bg-surface-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <MicIcon className="size-4.5" />
+                </button>
+              </div>
+              <div
+                className={cn(
+                  "flex min-w-0 flex-1 items-end gap-2 rounded-[var(--radius-md)] bg-surface-hover px-3 py-2",
+                  flash && "ring-2 ring-accent/20",
+                  disabled && "opacity-70",
+                )}
+              >
+                <textarea
+                  ref={inputRef}
+                  name="body"
+                  value={draft}
+                  onChange={(e) => {
+                    setDraft(e.target.value);
+                    if (error) setError(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter" || e.shiftKey) return;
+                    e.preventDefault();
+                    submitComposer();
+                  }}
+                  placeholder={
+                    disabled
+                      ? "Messaging is paused"
+                      : imagePreview
+                        ? "Add a caption…"
+                        : "Type your response here..."
+                  }
+                  rows={1}
+                  disabled={disabled}
+                  className="max-h-28 min-h-9 flex-1 resize-none bg-transparent py-1 text-sm leading-snug text-foreground outline-none placeholder:text-muted-dim"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={
+                  disabled ||
+                  (!draft.trim() && !imagePreview && !voicePreview)
+                }
+                className="inline-flex h-10 shrink-0 items-center justify-center rounded-[var(--radius-md)] bg-accent px-5 text-sm font-semibold text-accent-foreground transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Send
               </button>
             </div>
           ) : (

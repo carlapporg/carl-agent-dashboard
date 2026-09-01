@@ -1,6 +1,7 @@
 "use client";
 
 import { io, type ManagerOptions, type Socket, type SocketOptions } from "socket.io-client";
+import type { AgentPresence } from "@/types/agent";
 
 export type AgentSocketEvents = {
   "task.offered": (payload: unknown) => void;
@@ -125,6 +126,12 @@ export function releaseAgentSocket() {
 
 export function getAgentSocket(): Socket | null {
   return current;
+}
+
+export function emitAgentAvailability(status: AgentPresence) {
+  const socket = getAgentSocket();
+  if (!socket?.connected) return;
+  socket.emit("agent.availability", { status });
 }
 
 export function joinTaskRoom(socket: Socket, taskId: string) {

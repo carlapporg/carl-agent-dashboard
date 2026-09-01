@@ -16,13 +16,6 @@ function formatDate(value: string | null | undefined): string {
   });
 }
 
-function initials(user: BackendUser): string {
-  const first = user.firstName?.trim()?.[0] ?? "";
-  const last = user.lastName?.trim()?.[0] ?? "";
-  const value = `${first}${last}`.toUpperCase();
-  return value || user.email.slice(0, 2).toUpperCase();
-}
-
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-1 border-b border-border py-3 last:border-0 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
@@ -39,12 +32,6 @@ export function ProfileDetails({ user }: { user: BackendUser }) {
     <Card>
       <CardBody>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-          <div
-            className="flex size-14 shrink-0 items-center justify-center rounded-xl bg-accent/10 text-lg font-semibold text-accent"
-            aria-hidden
-          >
-            {initials(user)}
-          </div>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-lg font-semibold tracking-tight text-foreground">

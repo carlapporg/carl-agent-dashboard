@@ -19,19 +19,25 @@ const STATUS_OPTIONS = [
   {
     value: "WAITING_FOR_USER" as const,
     label: "Waiting for Customer",
-    hint: "Set automatically when you send the final confirmation.",
+    hint: "Set automatically when you send Task Details Confirmation. Chat does not set this.",
+    selectable: false,
+  },
+  {
+    value: "WAITING_FOR_PAYMENT" as const,
+    label: "Waiting for Payment",
+    hint: "Shown after Task Details are approved, until Payment Proof is accepted.",
     selectable: false,
   },
   {
     value: "COMPLETED" as const,
     label: "Completed",
-    hint: "Work is done. Nest notifies the client.",
+    hint: "Only after Payment Proof Confirmation is accepted.",
     selectable: true,
   },
   {
     value: "FAILED" as const,
     label: "Failed",
-    hint: "Could not finish. Nest notifies the client.",
+    hint: "Use only when the task could not be finished.",
     selectable: true,
   },
 ];
@@ -39,6 +45,7 @@ const STATUS_OPTIONS = [
 type AgentStatusChoice =
   | "IN_PROGRESS"
   | "WAITING_FOR_USER"
+  | "WAITING_FOR_PAYMENT"
   | "COMPLETED"
   | "FAILED";
 
@@ -47,13 +54,14 @@ type TaskStatusFormProps = {
   displayStatus?: TaskStatus;
   disabled?: boolean;
   blockComplete?: boolean;
-  onUpdated?: (status: AgentStatusChoice) => void;
+  onUpdated?: (status: "IN_PROGRESS" | "COMPLETED" | "FAILED" | "WAITING_FOR_USER") => void;
 };
 
 function choiceFromDisplay(status: TaskStatus): AgentStatusChoice | null {
   if (status === "completed") return "COMPLETED";
   if (status === "failed" || status === "cancelled") return "FAILED";
   if (status === "waiting_for_customer") return "WAITING_FOR_USER";
+  if (status === "waiting_for_payment") return "WAITING_FOR_PAYMENT";
   if (status === "in_progress") return "IN_PROGRESS";
   return null;
 }
@@ -87,7 +95,10 @@ export function TaskStatusForm({
   const closed = isClosedTask(task);
   const locked = disabled || closed;
   const unchanged = current === status;
-  const canSubmit = status !== "WAITING_FOR_USER" && !unchanged;
+  const canSubmit =
+    status !== "WAITING_FOR_USER" &&
+    status !== "WAITING_FOR_PAYMENT" &&
+    !unchanged;
 
   function submit() {
     if (!canSubmit) return;
@@ -103,6 +114,9 @@ export function TaskStatusForm({
   }
 
   function apply() {
+    if (status === "WAITING_FOR_USER" || status === "WAITING_FOR_PAYMENT") {
+      return;
+    }
     startTransition(async () => {
       try {
         const result = await updateTaskAgentStatusAction(task.id, status);
@@ -130,7 +144,7 @@ export function TaskStatusForm({
           ? "This task is closed. Status cannot be changed."
           : locked
             ? "Start the task before you can update status."
-            : `Current status: ${formatStatus(shown)}. Waiting for Customer is set only when you send the final confirmation.`}
+            : `Current status: ${formatStatus(shown)}. Waiting for Customer is set only when you send Task Details Confirmation — not by chat.`}
       </p>
 
       <fieldset
@@ -142,7 +156,8 @@ export function TaskStatusForm({
           const optionLocked =
             !option.selectable ||
             (option.value === "COMPLETED" && blockComplete) ||
-            (option.value === "IN_PROGRESS" && current === "WAITING_FOR_USER");
+            (option.value === "IN_PROGRESS" &&
+              (current === "WAITING_FOR_USER" || current === "WAITING_FOR_PAYMENT"));
           return (
             <label
               key={option.value}
@@ -174,8 +189,11 @@ export function TaskStatusForm({
                   {option.value === "COMPLETED" && blockComplete
                     ? "Locked until the user accepts the receipt."
                     : option.value === "IN_PROGRESS" && current === "WAITING_FOR_USER"
-                      ? "Goes back to In Progress if the customer rejects."
-                      : option.hint}
+                      ? "Goes back to In Progress if the customer rejects Task Details."
+                      : option.value === "IN_PROGRESS" &&
+                          current === "WAITING_FOR_PAYMENT"
+                        ? "Available again after Payment Proof is accepted or rejected."
+                        : option.hint}
                 </span>
               </span>
             </label>

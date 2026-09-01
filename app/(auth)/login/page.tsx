@@ -9,7 +9,7 @@ export default function LoginPage() {
   return (
     <AuthCard
       title="Sign in to continue"
-      subtitle="Agent Dashboard"
+      subtitle="Agent workspace"
       description="Handle customer requests, follow ups, and approvals — all in one calm workspace."
       footer={
         <>

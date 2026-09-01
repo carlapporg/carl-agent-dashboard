@@ -89,7 +89,11 @@ function applyClientFilters(tasks: Task[], filters: TaskListFilters = {}): Task[
   }
 
   if (filters.waitingOn === "customer") {
-    list = list.filter((t) => t.status === "waiting_for_customer");
+    list = list.filter(
+      (t) =>
+        t.status === "waiting_for_customer" ||
+        t.backendStatus === "WAITING_FOR_USER",
+    );
   } else if (filters.waitingOn === "payment") {
     list = list.filter((t) => t.status === "waiting_for_payment");
   }
@@ -357,7 +361,9 @@ export async function getOverviewStats(): Promise<OverviewStats> {
     needsAttention: open.filter((t) => t.backendStatus === "OFFERED").length,
     inProgress: open.filter((t) => t.backendStatus === "IN_PROGRESS").length,
     waitingOnCustomer: open.filter(
-      (t) => t.status === "waiting_for_customer",
+      (t) =>
+        t.status === "waiting_for_customer" ||
+        t.backendStatus === "WAITING_FOR_USER",
     ).length,
   };
 }

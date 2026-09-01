@@ -93,6 +93,26 @@ export const API_ENDPOINTS = {
       `/agents/me/admin-chats/${id}/messages` as const,
     adminChatRead: (id: string) =>
       `/agents/me/admin-chats/${id}/read` as const,
+
+    /**
+     * Placeholder until Nest ships analytics / chat-meta.
+     * Swap URLs here only — UI already calls these via lib/api/*.
+     */
+    tasksPerHour: "/agents/me/dashboard/tasks-per-hour",
+    taskChatMeta: (taskId: string) =>
+      `/agents/me/tasks/${taskId}/chat-meta` as const,
+    /** Placeholder payments overview until Nest ships ledger APIs. */
+    paymentsSummary: "/agents/me/payments/summary",
+    paymentsTransactions: "/agents/me/payments/transactions",
+    /** Placeholder activity / audit log until Nest ships. */
+    activityLogs: "/agents/me/activity-logs",
+    /** Profile extras until Nest expands /agents/me. */
+    profileStats: "/agents/me/profile/stats",
+    profileDetails: "/agents/me/profile/details",
+    profileActivity: "/agents/me/profile/activity",
+    /** Settings placeholders. */
+    appSettings: "/agents/me/settings",
+    revokeSessions: "/agents/me/revoke-sessions",
   },
 
   notifications: {

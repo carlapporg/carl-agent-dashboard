@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   expireRejectWindow,
-  isRejectingOrRejected,
+  isOfferTimerPaused,
   useOfferDecision,
 } from "@/features/ops/auto-accept-offer";
 import { REJECT_WINDOW_MS } from "@/types/agent";
@@ -22,12 +22,16 @@ function statusLabel(args: {
   expired: boolean;
   flight: string;
   settled: string;
+  paused: boolean;
 }): string {
   if (args.flight === "reject" || args.settled === "rejected") {
     return "Rejecting offer…";
   }
   if (args.flight === "accept" || args.settled === "accepted") {
     return "Accepting offer…";
+  }
+  if (args.paused && args.flight === "none") {
+    return "Confirm rejection…";
   }
   if (args.expired) return "Offer ended";
   return `Accept within ${args.remainingSec}s`;
@@ -44,29 +48,38 @@ export function OfferCountdown({
   onExpireRef.current = onExpire;
   const [now, setNow] = useState(() => Date.now());
   const decision = useOfferDecision(taskId);
+  const paused = taskId ? isOfferTimerPaused(taskId) : false;
   const settled = decision.settled !== "none";
   const inFlight = decision.flight !== "none";
   const deadline = new Date(expiresAt).getTime();
-  const remainingMs = Number.isFinite(deadline)
+  const liveRemainingMs = Number.isFinite(deadline)
     ? Math.max(0, deadline - now)
     : 0;
+  const remainingMs =
+    paused && decision.frozenRemainingMs != null
+      ? decision.frozenRemainingMs
+      : liveRemainingMs;
   const remainingSec = Math.ceil(remainingMs / 1000);
-  const expired = remainingMs <= 0;
-  const urgent = remainingSec <= 10 && !expired && !settled;
+  const expired = !paused && liveRemainingMs <= 0;
+  const urgent = remainingSec <= 10 && !expired && !settled && !paused;
   const pct = Math.min(100, (remainingMs / REJECT_WINDOW_MS) * 100);
+  const waitingOnApi = inFlight;
+  const pausedForRejectDialog = paused && decision.rejectUiOpen && !inFlight;
 
   useEffect(() => {
     fired.current = false;
   }, [taskId]);
 
   useEffect(() => {
+    if (paused) return;
+
     function tick() {
+      if (taskId && isOfferTimerPaused(taskId)) return;
       const remaining = Number.isFinite(deadline)
         ? Math.max(0, deadline - Date.now())
         : 0;
       setNow(Date.now());
       if (remaining > 0 || fired.current) return;
-      if (taskId && isRejectingOrRejected(taskId)) return;
       fired.current = true;
       if (taskId) expireRejectWindow(taskId);
       onExpireRef.current?.();
@@ -75,7 +88,7 @@ export function OfferCountdown({
     tick();
     const id = window.setInterval(tick, 250);
     return () => window.clearInterval(id);
-  }, [deadline, taskId]);
+  }, [deadline, paused, taskId]);
 
   const ring = size === "lg" ? 72 : 40;
   const stroke = size === "lg" ? 7 : 4;
@@ -83,13 +96,15 @@ export function OfferCountdown({
   const circ = 2 * Math.PI * radius;
   const dash = (pct / 100) * circ;
   const color =
-    expired || inFlight || settled
+    expired || waitingOnApi || settled
       ? "#9ca3af"
-      : urgent
-        ? "#dc2626"
-        : remainingSec <= 20
-          ? "#d97706"
-          : "#4f7cff";
+      : pausedForRejectDialog
+        ? "#6b7280"
+        : urgent
+          ? "#dc2626"
+          : remainingSec <= 20
+            ? "#d97706"
+            : "#4f7cff";
 
   return (
     <div
@@ -123,14 +138,16 @@ export function OfferCountdown({
           className={cn(
             "absolute inset-0 flex items-center justify-center font-bold tabular-nums",
             size === "lg" ? "text-lg" : "text-xs",
-            expired || inFlight || settled
+            expired || waitingOnApi || settled
               ? "text-muted"
-              : urgent
-                ? "text-red-600"
-                : "text-foreground",
+              : pausedForRejectDialog
+                ? "text-muted"
+                : urgent
+                  ? "text-red-600"
+                  : "text-foreground",
           )}
         >
-          {expired ? "0" : remainingSec}
+          {waitingOnApi ? "…" : expired ? "0" : remainingSec}
         </span>
       </div>
       {size === "lg" ? (
@@ -145,6 +162,7 @@ export function OfferCountdown({
             expired,
             flight: decision.flight,
             settled: decision.settled,
+            paused,
           })}
         </p>
       ) : null}

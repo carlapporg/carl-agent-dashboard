@@ -19,8 +19,9 @@ export function uiStatusFromAgent(status: AgentTaskStatus): TaskStatus {
       return "assigned";
     case "IN_PROGRESS":
     case "WAITING_FOR_AGENT":
-    case "WAITING_FOR_USER":
       return "in_progress";
+    case "WAITING_FOR_USER":
+      return "waiting_for_customer";
     case "COMPLETED":
       return "completed";
     case "FAILED":

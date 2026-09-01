@@ -10,6 +10,7 @@ import {
   autoAcceptExpiredOffer,
   beginAcceptOffer,
   canShowRejectUi,
+  hasOpenRejectUi,
   isOfferAcceptLocked,
   isRejectingOrRejected,
   markOfferAccepted,
@@ -46,7 +47,8 @@ export function OfferActions({ task }: OfferActionsProps) {
   const [pending, startTransition] = useTransition();
   const decision = useOfferDecision(task.id);
   const rejecting = isRejectingOrRejected(task.id);
-  const offered = isOfferedTask(task) && !isClosedTask(task);
+  const offered =
+    (isOfferedTask(task) || hasOpenRejectUi(task.id)) && !isClosedTask(task);
   const assigned = isAssignedPendingStart(task) && !isClosedTask(task);
   const windowOpen = isOfferRejectWindowOpen(task) && !decision.windowExpired;
   const showReject =
@@ -65,7 +67,7 @@ export function OfferActions({ task }: OfferActionsProps) {
 
   function done(patch?: Partial<Task>) {
     if (patch) ops?.patchLiveTask(task.id, patch, task);
-    ops?.dismissOffer();
+    ops?.silenceOffer(task.id);
     ops?.refresh();
     router.refresh();
   }
@@ -73,7 +75,7 @@ export function OfferActions({ task }: OfferActionsProps) {
   function rejected() {
     markOfferRejected(task.id);
     ops?.dropLiveTask(task.id);
-    ops?.dismissOffer();
+    ops?.silenceOffer(task.id);
     const onTaskPage =
       pathname === ROUTES.task(task.id) ||
       pathname.startsWith(`${ROUTES.task(task.id)}/`);
@@ -88,7 +90,7 @@ export function OfferActions({ task }: OfferActionsProps) {
   function openReject() {
     if (decision.settled !== "none" || decision.windowExpired) return;
     if (!isOfferRejectWindowOpen(task)) return;
-    openRejectOfferUi(task.id);
+    openRejectOfferUi(task.id, offerWindowEnd(task));
   }
 
   function closeReject() {
@@ -97,7 +99,7 @@ export function OfferActions({ task }: OfferActionsProps) {
 
   function accept() {
     if (decision.flight !== "none" || decision.settled !== "none") return;
-    if (!beginAcceptOffer(task.id)) return;
+    if (!beginAcceptOffer(task.id, offerWindowEnd(task))) return;
     startTransition(async () => {
       const result = await submitAcceptOffer(task.id);
       if (result.ok) {

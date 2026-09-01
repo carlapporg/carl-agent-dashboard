@@ -53,7 +53,7 @@ export function RejectDialog({
 
   function submit() {
     if (!taskId || trimmed.length < 1 || processing || expired) return;
-    if (!beginRejectOffer(taskId)) {
+    if (!beginRejectOffer(taskId, expiresAt)) {
       toast("This task was already accepted.", "info");
       onAlreadyAccepted?.();
       return;

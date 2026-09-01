@@ -91,9 +91,9 @@ export function TaskBriefPane({ task, timeline }: TaskBriefPaneProps) {
                     <Button type="submit">Accept task</Button>
                   </form>
                 ) : null}
-                <Link href={ROUTES.taskPayments(task.id)}>
+                <Link href={ROUTES.taskPanel(task.id, "receipt")}>
                   <Button type="button" variant="secondary">
-                    Payments
+                    Receipt
                   </Button>
                 </Link>
               </div>

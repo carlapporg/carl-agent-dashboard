@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { ConfirmDialog } from "@/components/ui/dialog";
 import { setAvailabilityAction } from "@/features/agents/actions";
 import { useOps } from "@/features/ops/ops-provider";
+import { emitAgentAvailability } from "@/lib/realtime/agent-socket";
 import {
   normalizePresence,
   presenceToUi,
@@ -74,9 +75,11 @@ export function AvailabilityToggle({
     writeChosenPresence(kept);
 
     void setAvailabilityAction(nextWrite)
-      .then(() => {
-        ops?.setPresence(kept);
-        writeChosenPresence(kept);
+      .then((row) => {
+        const synced = normalizePresence(row.status);
+        ops?.setPresence(synced);
+        writeChosenPresence(synced);
+        emitAgentAvailability(synced);
       })
       .catch(() => {
         ops?.setPresence(previous);

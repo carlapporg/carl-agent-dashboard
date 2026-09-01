@@ -71,10 +71,14 @@ export function canSendTaskConfirmation(status?: string | null): boolean {
   return CONFIRM_SEND_STATUSES.has(status);
 }
 
-/** GET confirmation only after work has started (or the task is done). */
+/**
+ * GET confirmation only when Nest status implies one was already created.
+ * Do **not** probe on fresh IN_PROGRESS — Nest returns 404 when none exists.
+ * After a decline Nest returns to IN_PROGRESS; the workspace hydrates via
+ * session presence + socket instead of a blind GET.
+ */
 export function shouldFetchTaskConfirmation(status?: string | null): boolean {
   return (
-    status === "IN_PROGRESS" ||
     status === "WAITING_FOR_USER" ||
     status === "WAITING_FOR_AGENT" ||
     status === "COMPLETED"

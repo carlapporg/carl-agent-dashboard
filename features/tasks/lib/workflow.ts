@@ -56,13 +56,17 @@ export function workflowStagesForTask(_task: Task): WorkflowStage[] {
 }
 
 /**
- * Status shown in the UI. Waiting for Customer only after a confirmation
- * is pending. After the customer approves, show Waiting for Payment.
- * Cancelled is shown as Failed.
+ * Status shown in the UI (workflow overlay on Nest backend status):
+ * - Waiting for Customer — only while Task Details Confirmation is PENDING
+ * - Waiting for Payment — details approved, receipt not yet accepted
+ * - In Progress — working, declined details, or receipt accepted (ready to complete)
+ * Chat / messages never drive this overlay.
+ * Cancelled Nest states are shown as Failed.
  */
 export function displayedTaskStatus(
   task: Task,
   confirmation?: TaskConfirmation | null,
+  receipt?: TaskReceipt | null,
 ): TaskStatus {
   if (task.backendStatus === "COMPLETED" || task.status === "completed") {
     return "completed";
@@ -83,14 +87,42 @@ export function displayedTaskStatus(
   ) {
     return "queued";
   }
+  if (
+    task.backendStatus === "IN_PROGRESS" ||
+    task.backendStatus === "WAITING_FOR_AGENT" ||
+    task.backendStatus === "WAITING_FOR_USER" ||
+    task.status === "in_progress" ||
+    task.status === "waiting_for_customer" ||
+    task.status === "waiting_for_payment"
+  ) {
+    if (isConfirmationPending(confirmation)) return "waiting_for_customer";
+    if (confirmation?.status === "DECLINED" || confirmation?.status === "SUPERSEDED") {
+      return "in_progress";
+    }
+    if (isConfirmationConfirmed(confirmation)) {
+      if (isReceiptAccepted(receipt)) return "in_progress";
+      return "waiting_for_payment";
+    }
+    if (task.status === "waiting_for_payment") return "waiting_for_payment";
+    if (
+      task.status === "waiting_for_customer" ||
+      task.backendStatus === "WAITING_FOR_USER"
+    ) {
+      return "waiting_for_customer";
+    }
+    return "in_progress";
+  }
   if (task.backendStatus === "ASSIGNED" || task.status === "assigned") {
     return "assigned";
   }
 
-  if (isConfirmationConfirmed(confirmation)) return "waiting_for_payment";
   if (isConfirmationPending(confirmation)) return "waiting_for_customer";
   if (confirmation?.status === "DECLINED" || confirmation?.status === "SUPERSEDED") {
     return "in_progress";
+  }
+  if (isConfirmationConfirmed(confirmation)) {
+    if (isReceiptAccepted(receipt)) return "in_progress";
+    return "waiting_for_payment";
   }
   if (task.status === "waiting_for_payment") return "waiting_for_payment";
   if (task.status === "waiting_for_customer") return "waiting_for_customer";
@@ -100,13 +132,120 @@ export function displayedTaskStatus(
 /** Highlight only the current status stage (non-linear). */
 export function currentStageId(task: Task): WorkflowStageId | null {
   if (task.status === "cancelled" || task.status === "failed") return null;
-  if (task.status === "completed") return "completed";
+  if (task.status === "completed" || task.backendStatus === "COMPLETED") {
+    return "completed";
+  }
   if (task.status === "waiting_for_payment") return "waiting_payment";
-  if (task.status === "waiting_for_customer") return "waiting_customer";
-  if (task.status === "in_progress") return "in_progress";
-  if (task.status === "queued") return "offered";
-  if (task.status === "assigned") return "assigned";
+  if (
+    task.status === "waiting_for_customer" ||
+    task.backendStatus === "WAITING_FOR_USER"
+  ) {
+    return "waiting_customer";
+  }
+  if (
+    task.status === "in_progress" ||
+    task.backendStatus === "IN_PROGRESS" ||
+    task.backendStatus === "WAITING_FOR_AGENT"
+  ) {
+    return "in_progress";
+  }
+  if (task.status === "queued" || task.backendStatus === "OFFERED") return "offered";
+  if (task.status === "assigned" || task.backendStatus === "ASSIGNED") {
+    return "assigned";
+  }
   return "assigned";
+}
+
+export type TaskListStatusChip = {
+  label: string;
+  className: string;
+};
+
+/** Backend-first status chip for the task hub table. */
+export function taskListStatusChip(task: Task): TaskListStatusChip {
+  const backend = task.backendStatus;
+  if (backend === "COMPLETED" || task.status === "completed") {
+    return {
+      label: "Completed",
+      className: "bg-success-soft text-success-foreground",
+    };
+  }
+  if (
+    backend === "FAILED" ||
+    backend === "CANCELLED" ||
+    backend === "REJECTED" ||
+    task.status === "failed" ||
+    task.status === "cancelled"
+  ) {
+    return {
+      label: "Cancelled",
+      className: "bg-surface-hover text-muted",
+    };
+  }
+  if (backend === "WAITING_FOR_USER" || task.status === "waiting_for_customer") {
+    return {
+      label: "Waiting on Cust",
+      className: "bg-danger-soft text-danger-foreground",
+    };
+  }
+  if (task.status === "waiting_for_payment") {
+    return {
+      label: "Waiting on Pay",
+      className: "bg-danger-soft text-danger-foreground",
+    };
+  }
+  if (
+    backend === "IN_PROGRESS" ||
+    backend === "WAITING_FOR_AGENT" ||
+    task.status === "in_progress"
+  ) {
+    return {
+      label: "In Progress",
+      className: "bg-accent-soft text-accent",
+    };
+  }
+  if (backend === "ASSIGNED" || task.status === "assigned") {
+    return {
+      label: "Assigned",
+      className: "bg-accent-soft text-info-foreground",
+    };
+  }
+  if (backend === "OFFERED" || backend === "QUEUED" || task.status === "queued") {
+    return {
+      label: "Pending",
+      className: "bg-warning-soft text-warning-foreground",
+    };
+  }
+  return {
+    label: String(task.status).replaceAll("_", " "),
+    className: "bg-surface-hover text-muted",
+  };
+}
+
+export function matchesTaskHubFilter(
+  task: Task,
+  filter:
+    | "all"
+    | "offered"
+    | "assigned"
+    | "in_progress"
+    | "waiting_for_customer"
+    | "waiting_for_payment"
+    | "completed"
+    | "cancelled",
+): boolean {
+  if (filter === "all") return true;
+  const chip = taskListStatusChip(task);
+  if (filter === "offered") {
+    return chip.label === "Pending";
+  }
+  if (filter === "assigned") return chip.label === "Assigned";
+  if (filter === "in_progress") return chip.label === "In Progress";
+  if (filter === "waiting_for_customer") return chip.label === "Waiting on Cust";
+  if (filter === "waiting_for_payment") return chip.label === "Waiting on Pay";
+  if (filter === "completed") return chip.label === "Completed";
+  if (filter === "cancelled") return chip.label === "Cancelled";
+  return true;
 }
 
 export function taskRequiresPayment(task: Task): boolean {
@@ -178,13 +317,14 @@ export function canSendConfirmationForTask(task: Task): boolean {
   if (isClosedTask(task) || isOfferOpen(task) || canStartTask(task)) {
     return false;
   }
+  // Only while actively working or waiting on the details confirmation.
+  // Payment-proof stage uses the separate receipt API — not this gate alone.
   return (
     task.backendStatus === "IN_PROGRESS" ||
     task.backendStatus === "WAITING_FOR_USER" ||
     task.backendStatus === "WAITING_FOR_AGENT" ||
     task.status === "in_progress" ||
-    task.status === "waiting_for_customer" ||
-    task.status === "waiting_for_payment"
+    task.status === "waiting_for_customer"
   );
 }
 

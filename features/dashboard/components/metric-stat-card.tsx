@@ -1,15 +1,13 @@
 "use client";
 
-import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils/cn";
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 
 type MetricStatCardProps = {
   label: string;
-  value: number;
-  ringValue?: number;
+  value: number | string;
   hint: string;
-  color: string;
+  icon: ReactNode;
   className?: string;
   style?: CSSProperties;
 };
@@ -17,18 +15,16 @@ type MetricStatCardProps = {
 export function MetricStatCard({
   label,
   value,
-  ringValue = 0,
   hint,
-  color,
+  icon,
   className,
   style,
 }: MetricStatCardProps) {
-  const size = 64;
-  const stroke = 7;
-  const radius = (size - stroke) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const [shown, setShown] = useState(value);
+  const numeric = typeof value === "number";
+  const [shown, setShown] = useState(numeric ? value : 0);
+
   useEffect(() => {
+    if (!numeric) return;
     const from = shown;
     const to = value;
     if (from === to) return;
@@ -45,53 +41,35 @@ export function MetricStatCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- animate from previous shown
   }, [value]);
 
-  const maxForRing = Math.max(value, ringValue, 1);
-  const pct =
-    value === 0
-      ? 0
-      : Math.min(100, Math.max(12, (ringValue / maxForRing) * 100));
-  const offset = circumference - (pct / 100) * circumference;
+  const display = numeric ? String(shown).padStart(2, "0") : value;
 
   return (
-    <Card className={cn("p-5", className)} style={style}>
-      <div className="flex items-center gap-4">
-        <div className="relative shrink-0">
-          <svg width={size} height={size} className="-rotate-90" aria-hidden>
-            <circle
-              cx={size / 2}
-              cy={size / 2}
-              r={radius}
-              fill="none"
-              stroke="#eef2f7"
-              strokeWidth={stroke}
-            />
-            <circle
-              cx={size / 2}
-              cy={size / 2}
-              r={radius}
-              fill="none"
-              stroke={color}
-              strokeWidth={stroke}
-              strokeLinecap="round"
-              strokeDasharray={circumference}
-              strokeDashoffset={value === 0 ? circumference : offset}
-              className="dash-progress-fill"
-            />
-          </svg>
-          <span className="absolute inset-0 flex items-center justify-center text-sm font-bold tabular-nums text-foreground">
-            {shown}
-          </span>
-        </div>
-        <div className="min-w-0">
-          <p className="text-2xl font-semibold tracking-tight text-foreground">
-            {shown}
-          </p>
-          <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-muted">
+    <div
+      className={cn(
+        "flex h-full min-h-[7.75rem] flex-col rounded-[var(--radius-card)] bg-accent-soft p-3.5 shadow-[var(--shadow-card)] sm:p-4",
+        className,
+      )}
+      style={style}
+    >
+      <div className="flex flex-1 items-start justify-between gap-2">
+        <div className="flex min-w-0 flex-1 flex-col">
+          <p className="text-xs font-semibold leading-tight text-muted">
             {label}
           </p>
-          <p className="mt-1 text-sm leading-snug text-muted-dim">{hint}</p>
+          <p className="mt-1 text-[1.5rem] font-bold leading-none tabular-nums tracking-tight text-foreground">
+            {display}
+          </p>
+          <p className="mt-auto pt-1.5 line-clamp-2 text-[10px] leading-snug text-muted">
+            {hint}
+          </p>
         </div>
+        <span
+          className="flex size-8 shrink-0 items-center justify-center rounded-full bg-surface text-accent shadow-[0_1px_6px_rgba(56,114,232,0.16)] [&_svg]:size-3.5"
+          aria-hidden
+        >
+          {icon}
+        </span>
       </div>
-    </Card>
+    </div>
   );
 }

@@ -12,7 +12,7 @@ type AuthCardProps = {
 
 export function AuthCard({
   title,
-  subtitle = "Agent Dashboard",
+  subtitle = "Agent workspace",
   description,
   children,
   footer,
@@ -23,25 +23,19 @@ export function AuthCard({
       className={cn("w-full animate-[fadeIn_300ms_ease-out]", className)}
       style={{ maxWidth: "var(--auth-card-max-width)" }}
     >
-      <div
-        className="border border-border bg-surface px-6 py-7 sm:px-8 sm:py-8"
-        style={{
-          borderRadius: "var(--radius-card)",
-          boxShadow: "var(--shadow-soft)",
-        }}
-      >
+      <div className="rounded-[var(--radius-card)] border border-border bg-surface px-6 py-7 shadow-[var(--shadow-soft)] sm:px-8 sm:py-8">
         <header className="mb-6 text-center">
-          <p className="text-2xl font-semibold tracking-tight text-foreground sm:text-[1.625rem]">
+          <p className="text-2xl font-bold tracking-tight text-foreground sm:text-[1.75rem]">
             Carl
           </p>
-          <p className="mt-1 text-xs font-medium uppercase tracking-[0.14em] text-accent sm:text-sm">
+          <p className="mt-1 text-[11px] font-semibold uppercase tracking-[var(--letter-nav)] text-muted-dim">
             {subtitle}
           </p>
-          <h1 className="mt-3 text-lg font-semibold tracking-tight text-foreground sm:text-xl">
+          <h1 className="mt-4 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
             {title}
           </h1>
           {description ? (
-            <p className="mx-auto mt-1.5 max-w-sm text-sm leading-snug text-muted">
+            <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-muted">
               {description}
             </p>
           ) : null}

@@ -1,24 +1,46 @@
 :root {
-  --background: #f7f8fa;
-  --foreground: #111827;
+  /* —— Figma / Carl Agent Workspace tokens —— */
+  --background: #f8f9fb;
+  --foreground: #1a1c1e;
   --foreground-soft: #374151;
   --muted: #6b7280;
   --muted-dim: #9ca3af;
   --surface: #ffffff;
   --surface-elevated: #ffffff;
   --surface-hover: #f3f4f6;
+  --surface-muted: #f9fafb;
+  --surface-tint: #dfeafc;
   --border: #e5e7eb;
-  --accent: #4f7cff;
-  --accent-hover: #3f6aef;
+  --border-soft: #eef2f7;
+
+  --accent: #3872e8;
+  --accent-hover: #2d63d4;
   --accent-foreground: #ffffff;
-  --danger: #dc2626;
+  --accent-soft: #dfeafc;
+  --accent-muted: #8fb0ef;
+
+  --danger: #ef4444;
   --danger-foreground: #b91c1c;
-  --success: #059669;
+  --danger-soft: #fef2f2;
+  --success: #10b981;
   --success-foreground: #047857;
-  --warning: #d97706;
+  --success-soft: #ecfdf5;
+  --warning: #f59e0b;
   --warning-foreground: #b45309;
-  --info: #2563eb;
-  --info-foreground: #1d4ed8;
+  --warning-soft: #fffbeb;
+  --info: #3872e8;
+  --info-foreground: #1a42c4;
+
+  --priority-high: #ef4444;
+  --priority-medium: #f59e0b;
+  --priority-low: #10b981;
+
+  --chart-completed: #1a42c4;
+  --chart-progress: #3872e8;
+  --chart-queue: #c5daf5;
+  --chart-line: #3872e8;
+  --chart-fill: rgba(56, 114, 232, 0.24);
+
   --ring-offset: #ffffff;
   --selection: color-mix(in srgb, var(--accent) 22%, transparent);
 
@@ -30,15 +52,25 @@
 
   --font-size-root: 16px;
   --line-height-body: 1.5;
+  --font-size-page-title: 1.5rem;
+  --font-size-section: 1.125rem;
+  --font-size-body: 0.875rem;
+  --font-size-meta: 0.75rem;
+  --font-size-table-head: 0.6875rem;
+  --letter-nav: 0.14em;
+  --letter-table: 0.08em;
 
   --radius-sm: 0.5rem;
-  --radius-md: 0.625rem;
-  --radius-lg: 0.75rem;
-  --radius-xl: 1rem;
-  --radius-card: 0.75rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+  --radius-card: 1rem;
+  --radius-pill: 9999px;
+  --radius-control: 0.75rem;
 
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04);
-  --shadow-soft: 0 4px 16px rgba(0, 0, 0, 0.06);
+  --shadow-card: 0 1px 2px rgba(56, 114, 232, 0.05), 0 8px 24px rgba(56, 114, 232, 0.1);
+  --shadow-soft: 0 8px 24px rgba(15, 23, 42, 0.08);
+  --shadow-dropdown: 0 12px 32px rgba(15, 23, 42, 0.12);
 
   --motion-fast: 150ms;
   --motion-base: 200ms;
@@ -47,9 +79,15 @@
 
   --auth-card-max-width: 420px;
   --control-height: 2.5rem;
+  --control-height-sm: 2.25rem;
   --card-padding: 1rem;
   --card-padding-md: 1.25rem;
-  --section-gap: 1rem;
+  --section-gap: 1.25rem;
+  --sidebar-width: 14rem;
+  --sidebar-width-xl: 15rem;
+  --header-height: 4.75rem;
+  --main-pad-x: 1.5rem;
+  --main-pad-y: 1.5rem;
 
   color-scheme: light;
 }
@@ -63,21 +101,39 @@
   --color-surface: var(--surface);
   --color-surface-elevated: var(--surface-elevated);
   --color-surface-hover: var(--surface-hover);
+  --color-surface-muted: var(--surface-muted);
+  --color-surface-tint: var(--surface-tint);
   --color-border: var(--border);
+  --color-border-soft: var(--border-soft);
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
   --color-accent-foreground: var(--accent-foreground);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-muted: var(--accent-muted);
   --color-danger: var(--danger);
   --color-danger-foreground: var(--danger-foreground);
+  --color-danger-soft: var(--danger-soft);
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
+  --color-success-soft: var(--success-soft);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
+  --color-warning-soft: var(--warning-soft);
   --color-info: var(--info);
   --color-info-foreground: var(--info-foreground);
+  --color-priority-high: var(--priority-high);
+  --color-priority-medium: var(--priority-medium);
+  --color-priority-low: var(--priority-low);
+  --color-chart-completed: var(--chart-completed);
+  --color-chart-progress: var(--chart-progress);
+  --color-chart-queue: var(--chart-queue);
+  --color-chart-line: var(--chart-line);
 
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  --radius-card: var(--radius-card);
+  --radius-pill: var(--radius-pill);
 }
 
 * {
@@ -163,13 +219,13 @@ body {
   0%,
   100% {
     box-shadow:
-      0 12px 40px rgba(79, 124, 255, 0.22),
+      0 12px 40px rgba(59, 130, 246, 0.22),
       0 4px 14px rgba(0, 0, 0, 0.08);
   }
   50% {
     box-shadow:
-      0 14px 48px rgba(79, 124, 255, 0.34),
-      0 0 0 4px rgba(79, 124, 255, 0.12);
+      0 14px 48px rgba(59, 130, 246, 0.34),
+      0 0 0 4px rgba(59, 130, 246, 0.12);
   }
 }
 
@@ -242,10 +298,6 @@ body {
   animation: dashDropIn 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-.dash-drop-in {
-  animation: dashDropIn 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
 .dash-row-flash {
   animation: dashFlash 1.8s ease-out both;
 }
@@ -260,14 +312,6 @@ body {
 
 .dash-live-dot {
   animation: dashPulse 1.4s ease-in-out infinite;
-}
-
-.dash-live-dot {
-  animation: dashPulse 1.4s ease-in-out infinite;
-}
-
-.dash-live-badge-pop {
-  animation: dashPulse 0.9s ease-in-out 2;
 }
 
 .dash-live-badge-pop {
@@ -309,23 +353,6 @@ body {
   animation: dashPulse 0.7s ease-in-out infinite;
 }
 
-.ops-toast-in {
-  animation: opsToastIn 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-.ops-toast-out {
-  animation: opsToastOut 260ms ease-in both;
-}
-
-.ops-toast-bar {
-  transform-origin: left center;
-  animation: dashToastBar 8s linear both;
-}
-
-.ops-timer-pulse {
-  animation: dashPulse 0.7s ease-in-out infinite;
-}
-
 .dash-progress-fill {
   transform-origin: left center;
   animation: dashProgress 700ms var(--ease-out) both;
@@ -342,7 +369,6 @@ body {
   animation: dashShine 2.4s linear infinite;
 }
 
-/* Tasks page — playful but clean motion */
 @keyframes taskCardIn {
   from {
     opacity: 0;

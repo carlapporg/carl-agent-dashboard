@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import {
+  getTaskConfirmationAction,
   startTaskAction,
   rejectTaskAction,
   updateTaskAgentStatusAction,
@@ -26,7 +27,13 @@ import { TaskConfirmationPanel } from "@/features/tasks/components/task-confirma
 import { PaymentProofPanel } from "@/features/tasks/components/payment-proof-panel";
 import { TaskCustomerSnippet } from "@/features/tasks/components/task-customer-snippet";
 import { TaskFacts } from "@/features/tasks/components/task-facts";
+import { PageChromeSetter } from "@/features/shell/page-chrome";
 import { taskDisplayCode, taskDisplayTitle } from "@/lib/tasks/details";
+import {
+  isTaskConfirmationKnown,
+  markTaskConfirmationKnown,
+  markTaskReceiptKnown,
+} from "@/lib/tasks/confirmation-presence";
 import { TaskStatusStepper } from "@/features/tasks/components/task-status-stepper";
 import { formatStatus } from "@/features/tasks/components/status-badge";
 import { TaskStatusForm } from "@/features/tasks/components/task-status-form";
@@ -86,11 +93,12 @@ type ExtraTab = "customer" | "itinerary" | "log";
 function phaseLabel(
   task: Task,
   confirmation: TaskConfirmation | null,
+  receipt: TaskReceipt | null,
   rejecting = false,
 ): string {
   if (rejecting) return "Rejecting";
   if (task.backendStatus === "REJECTED") return "Rejected";
-  return formatStatus(displayedTaskStatus(task, confirmation));
+  return formatStatus(displayedTaskStatus(task, confirmation, receipt));
 }
 
 function withBackendStatus(task: Task, backendStatus: AgentTaskStatus): Task {
@@ -143,39 +151,75 @@ export function TaskWorkspace({
   }, [taskProp, rejecting]);
 
   useEffect(() => {
+    if (confirmationProp) markTaskConfirmationKnown(taskProp.id);
+    if (receiptProp) markTaskReceiptKnown(taskProp.id);
+  }, [confirmationProp, receiptProp, taskProp.id]);
+
+  /**
+   * After customer declines, Nest returns the task to IN_PROGRESS.
+   * SSR skips confirmation GET on IN_PROGRESS (avoids 404). Reload the
+   * known confirmation only when we already created one this session.
+   */
+  useEffect(() => {
+    if (confirmationProp) return;
+    if (
+      taskProp.backendStatus !== "IN_PROGRESS" &&
+      taskProp.backendStatus !== "WAITING_FOR_AGENT"
+    ) {
+      return;
+    }
+    if (!isTaskConfirmationKnown(taskProp.id)) return;
+    let cancelled = false;
+    void getTaskConfirmationAction(taskProp.id).then((result) => {
+      if (cancelled || !result.ok || !result.confirmation) return;
+      markTaskConfirmationKnown(taskProp.id);
+      setConfirmation(result.confirmation);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [confirmationProp, taskProp.backendStatus, taskProp.id]);
+
+  useEffect(() => {
     const live =
       ops?.liveConfirmation?.taskId === taskState.id ? ops.liveConfirmation : null;
-    if (!live) {
+    if (live) {
+      markTaskConfirmationKnown(taskState.id);
+      if (!confirmationProp) {
+        setConfirmation(live);
+        return;
+      }
+      const liveAt = new Date(live.updatedAt || live.decidedAt || 0).getTime();
+      const propAt = new Date(
+        confirmationProp.updatedAt || confirmationProp.decidedAt || 0,
+      ).getTime();
+      setConfirmation(liveAt >= propAt ? live : confirmationProp);
+      return;
+    }
+    if (confirmationProp) {
       setConfirmation(confirmationProp);
-      return;
     }
-    if (!confirmationProp) {
-      setConfirmation(live);
-      return;
-    }
-    const liveAt = new Date(live.updatedAt || live.decidedAt || 0).getTime();
-    const propAt = new Date(
-      confirmationProp.updatedAt || confirmationProp.decidedAt || 0,
-    ).getTime();
-    setConfirmation(liveAt >= propAt ? live : confirmationProp);
   }, [confirmationProp, ops?.liveConfirmation, taskState.id]);
 
   useEffect(() => {
     const live =
       ops?.liveReceipt?.taskId === taskState.id ? ops.liveReceipt : null;
-    if (!live) {
+    if (live) {
+      markTaskReceiptKnown(taskState.id);
+      if (!receiptProp) {
+        setReceipt(live);
+        return;
+      }
+      const liveAt = new Date(live.updatedAt || live.decidedAt || 0).getTime();
+      const propAt = new Date(
+        receiptProp.updatedAt || receiptProp.decidedAt || 0,
+      ).getTime();
+      setReceipt(liveAt >= propAt ? live : receiptProp);
+      return;
+    }
+    if (receiptProp) {
       setReceipt(receiptProp);
-      return;
     }
-    if (!receiptProp) {
-      setReceipt(live);
-      return;
-    }
-    const liveAt = new Date(live.updatedAt || live.decidedAt || 0).getTime();
-    const propAt = new Date(
-      receiptProp.updatedAt || receiptProp.decidedAt || 0,
-    ).getTime();
-    setReceipt(liveAt >= propAt ? live : receiptProp);
   }, [receiptProp, ops?.liveReceipt, taskState.id]);
 
   useEffect(() => {
@@ -186,18 +230,23 @@ export function TaskWorkspace({
     const key = `${taskState.id}:${confirmation.id}`;
     if (declinedResumeKey.current === key) return;
     declinedResumeKey.current = key;
+    markTaskConfirmationKnown(taskState.id);
     setTask((current) => withBackendStatus(current, "IN_PROGRESS"));
     ops?.patchLiveTask(
       taskState.id,
       liveStatusPatch("IN_PROGRESS", "in_progress"),
+      taskState,
     );
-    void updateTaskAgentStatusAction(taskState.id, "IN_PROGRESS");
-  }, [confirmation, ops, taskState.id]);
+    // Nest should already move to IN_PROGRESS on decline; keep PATCH as safety.
+    if (taskState.backendStatus !== "IN_PROGRESS") {
+      void updateTaskAgentStatusAction(taskState.id, "IN_PROGRESS");
+    }
+  }, [confirmation, ops, taskState.backendStatus, taskState.id]);
 
   const task = rejecting ? pinWhileRejecting(taskState) : taskState;
   const viewTask = {
     ...task,
-    status: displayedTaskStatus(task, confirmation),
+    status: displayedTaskStatus(task, confirmation, receipt),
   };
   const closed = isClosedTask(task);
   const lockedReadOnly = readOnly || closed;
@@ -254,7 +303,11 @@ export function TaskWorkspace({
     startTransition(async () => {
       const snapshot = task;
       setTask(withBackendStatus(task, "IN_PROGRESS"));
-      ops?.patchLiveTask(task.id, liveStatusPatch("IN_PROGRESS", "in_progress"));
+      ops?.patchLiveTask(
+        task.id,
+        liveStatusPatch("IN_PROGRESS", "in_progress"),
+        task,
+      );
       const result = await startTaskAction(task.id);
       if (!result.ok) {
         setTask(snapshot);
@@ -273,7 +326,11 @@ export function TaskWorkspace({
     startTransition(async () => {
       const snapshot = task;
       setTask(withBackendStatus(task, "COMPLETED"));
-      ops?.patchLiveTask(task.id, liveStatusPatch("COMPLETED", "completed"));
+      ops?.patchLiveTask(
+        task.id,
+        liveStatusPatch("COMPLETED", "completed"),
+        task,
+      );
       setCompleteOpen(false);
       const result = await updateTaskAgentStatusAction(task.id, "COMPLETED");
       if (!result.ok) {
@@ -311,10 +368,15 @@ export function TaskWorkspace({
   }
 
   return (
-    <div className="flex flex-col gap-3 lg:h-[calc(100dvh-7.5rem)] lg:min-h-0 lg:overflow-hidden">
+    <>
+      <PageChromeSetter
+        title={taskDisplayTitle(task)}
+        subtitle={`${taskDisplayCode(task)} · ${task.customerName}`}
+      />
+      <div className="flex flex-col gap-3 lg:h-[calc(100dvh-7.5rem)] lg:min-h-0 lg:overflow-hidden">
       <Link
         href={lockedReadOnly ? ROUTES.history : ROUTES.tasks}
-        className="inline-flex shrink-0 text-sm font-semibold text-accent hover:text-accent-hover"
+        className="inline-flex shrink-0 items-center gap-1.5 text-sm font-semibold text-accent hover:text-accent-hover"
       >
         ← Back to {lockedReadOnly ? "history" : "tasks"}
       </Link>
@@ -324,19 +386,19 @@ export function TaskWorkspace({
         <div className="min-h-0 space-y-3 lg:overflow-y-auto lg:pr-1">
           <section className="rounded-[var(--radius-card)] border border-border bg-surface p-4 shadow-[var(--shadow-card)] md:p-5">
             <div className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="rounded-md bg-surface-hover px-2.5 py-0.5 font-semibold text-muted">
+              <span className="rounded-[var(--radius-sm)] bg-surface-hover px-2.5 py-0.5 font-semibold text-muted">
                 {taskDisplayCode(task)}
               </span>
-              <span className="rounded-md border border-border px-2.5 py-0.5 font-medium text-foreground-soft">
-                {phaseLabel(task, confirmation, rejecting)}
+              <span className="rounded-[var(--radius-sm)] border border-border px-2.5 py-0.5 font-medium text-foreground-soft">
+                {phaseLabel(task, confirmation, receipt, rejecting)}
               </span>
               {task.tier === "vip" || task.tier === "family" ? (
-                <span className="rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-semibold text-accent">
+                <span className="rounded-full bg-accent-soft px-2.5 py-0.5 text-xs font-semibold text-accent">
                   {task.tier.toUpperCase()}
                 </span>
               ) : null}
               {lockedReadOnly ? (
-                <span className="rounded-md bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
+                <span className="rounded-[var(--radius-sm)] bg-warning-soft px-2.5 py-0.5 text-xs font-semibold text-warning-foreground">
                   Read-only
                 </span>
               ) : null}
@@ -408,6 +470,7 @@ export function TaskWorkspace({
             confirmation={confirmation}
             disabled={lockedReadOnly}
             onSent={(next) => {
+              markTaskConfirmationKnown(task.id);
               setConfirmation(next);
               ops?.setLiveConfirmation(next);
               setTask({
@@ -419,6 +482,7 @@ export function TaskWorkspace({
                 liveStatusPatch("WAITING_FOR_USER", "waiting_for_customer"),
                 task,
               );
+              // Waiting for Customer is set only when Task Details Confirmation is sent.
               if (task.backendStatus !== "WAITING_FOR_USER") {
                 void updateTaskAgentStatusAction(task.id, "WAITING_FOR_USER");
               }
@@ -433,10 +497,14 @@ export function TaskWorkspace({
               receipt={receipt}
               disabled={lockedReadOnly}
               onChanged={(next) => {
+                markTaskReceiptKnown(task.id);
                 setReceipt(next);
                 ops?.setLiveReceipt(next);
                 if (next.status === "PENDING") {
-                  setTask(withBackendStatus(task, "WAITING_FOR_USER"));
+                  setTask({
+                    ...withBackendStatus(task, "WAITING_FOR_USER"),
+                    status: "waiting_for_payment",
+                  });
                   ops?.patchLiveTask(
                     task.id,
                     liveStatusPatch("WAITING_FOR_USER", "waiting_for_payment"),
@@ -459,7 +527,7 @@ export function TaskWorkspace({
                 backendStatus: status,
                 status: uiStatusFromAgent(status),
                 updatedAt: new Date().toISOString(),
-              });
+              }, task);
             }}
           />
 
@@ -561,5 +629,6 @@ export function TaskWorkspace({
         loading={pending}
       />
     </div>
+    </>
   );
 }

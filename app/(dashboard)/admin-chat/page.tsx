@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { AdminChatView } from "@/features/admin-chat/components/admin-chat-view";
 import { EmptyState } from "@/components/feedback/empty-state";
-import { PageHeader } from "@/components/ui/page-header";
 import { PageShell } from "@/components/ui/page-shell";
 import { adminChatsApi } from "@/lib/api/admin-chats";
 
@@ -21,11 +20,6 @@ export default async function AdminChatPage() {
 
   return (
     <PageShell wide>
-      <PageHeader
-        title="Admin chat"
-        description="Message Carl ops directly. Separate from client task chats."
-        className="mb-5 sm:mb-6"
-      />
       {loadFailed ? (
         <EmptyState
           title="Can't reach the server"

@@ -1,48 +1,38 @@
 import type { Metadata } from "next";
 import { HistoryView } from "@/features/history/components/history-view";
 import { EmptyState } from "@/components/feedback/empty-state";
-import { PageHeader } from "@/components/ui/page-header";
 import { PageShell } from "@/components/ui/page-shell";
+import { activityLogsApi } from "@/lib/api/activity-logs";
 import { tasksApi } from "@/lib/api/tasks";
 
 export const metadata: Metadata = {
-  title: "History",
+  title: "Activity Logs",
 };
 
 export default async function HistoryPage() {
-  let tasks: Awaited<ReturnType<typeof tasksApi.listByInbox>> | null = null;
+  let historyTasks: Awaited<ReturnType<typeof tasksApi.listByInbox>> = [];
   try {
-    tasks = await tasksApi.listByInbox("HISTORY");
+    historyTasks = await tasksApi.listByInbox("HISTORY");
   } catch {
-    tasks = null;
+    historyTasks = [];
   }
 
-  if (!tasks) {
+  try {
+    const roots = historyTasks.filter((t) => !t.parentId);
+    const logs = await activityLogsApi.list(roots);
     return (
       <PageShell wide>
-        <PageHeader
-          title="History"
-          description="Completed and failed tasks. Open one to review or message the client."
-          className="mb-5 sm:mb-6"
-        />
+        <HistoryView logs={logs} />
+      </PageShell>
+    );
+  } catch {
+    return (
+      <PageShell wide>
         <EmptyState
-          title="Can't reach the server"
-          description="Your login is still saved. The API tunnel may be down. Wait a moment and refresh."
+          title="Can't load activity"
+          description="Your login is still saved. Refresh the page and try again."
         />
       </PageShell>
     );
   }
-
-  const roots = tasks.filter((t) => !t.parentId);
-
-  return (
-    <PageShell wide>
-      <PageHeader
-        title="History"
-        description="Completed and failed tasks. Open one to review or message the client."
-        className="mb-5 sm:mb-6"
-      />
-      <HistoryView tasks={roots} />
-    </PageShell>
-  );
 }

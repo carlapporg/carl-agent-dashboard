@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useNotifications } from "@/features/notifications/notification-provider";
-import { DASHBOARD_NAV } from "@/features/shell/nav-items";
+import { DASHBOARD_NAV, NavIcon } from "@/features/shell/nav-items";
 import { ROUTES } from "@/lib/constants/routes";
 import { cn } from "@/lib/utils/cn";
 
@@ -12,26 +12,26 @@ export function DashboardSidebar() {
   const { unreadCount } = useNotifications();
 
   return (
-    <aside className="hidden w-64 shrink-0 border-r border-border bg-surface lg:flex lg:flex-col xl:w-72">
-      <div className="flex h-14 items-center border-b border-border px-5">
-        <Link href={DASHBOARD_NAV[0].href} className="group block min-w-0">
-          <p className="text-lg font-semibold tracking-tight text-foreground">
+    <aside className="hidden w-[length:var(--sidebar-width)] shrink-0 border-r border-border bg-surface lg:flex lg:flex-col xl:w-[length:var(--sidebar-width-xl)]">
+      <div className="flex h-[length:var(--header-height)] items-center border-b border-border px-4">
+        <Link href={DASHBOARD_NAV[0]!.href} className="group block min-w-0">
+          <p className="text-lg font-bold leading-none tracking-tight text-foreground">
             Carl
           </p>
-          <p className="mt-0.5 text-sm font-medium text-muted">
+          <p className="mt-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-dim">
             Agent workspace
           </p>
         </Link>
       </div>
 
-      <div className="flex flex-1 flex-col px-3 py-4">
-        <p className="mb-2 px-2.5 text-xs font-semibold uppercase tracking-[0.14em] text-muted-dim">
+      <div className="flex flex-1 flex-col px-2.5 py-4">
+        <p className="mb-2 px-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-dim">
           Navigation
         </p>
-        <nav className="flex flex-col gap-2" aria-label="Dashboard">
+        <nav className="flex flex-col gap-0.5" aria-label="Dashboard">
           {DASHBOARD_NAV.map((item) => {
             const active =
-              item.href === DASHBOARD_NAV[0].href
+              item.href === DASHBOARD_NAV[0]!.href
                 ? pathname === item.href
                 : pathname === item.href ||
                   pathname.startsWith(`${item.href}/`);
@@ -43,21 +43,18 @@ export function DashboardSidebar() {
                 key={item.label}
                 href={item.href}
                 className={cn(
-                  "relative flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                  "relative flex items-center gap-2.5 rounded-[var(--radius-md)] py-2 pl-2.5 pr-2 text-[13px] font-medium transition-colors",
                   active
-                    ? "bg-accent/10 text-accent shadow-sm"
-                    : "text-foreground-soft hover:bg-surface-hover hover:text-foreground",
+                    ? "bg-accent-soft text-accent before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-full before:bg-accent"
+                    : "text-muted hover:bg-surface-hover hover:text-foreground",
                 )}
               >
-                {active ? (
-                  <span
-                    className="absolute inset-y-2.5 left-0 w-1 rounded-full bg-accent"
-                    aria-hidden
-                  />
-                ) : null}
-                <span>{item.label}</span>
+                <span className="[&_svg]:size-[18px]">
+                  <NavIcon id={item.icon} />
+                </span>
+                <span className="flex-1 truncate">{item.label}</span>
                 {showUnread ? (
-                  <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-danger px-1.5 text-[10px] font-bold text-white">
+                  <span className="inline-flex min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[9px] font-bold text-white">
                     {unreadCount > 9 ? "9+" : unreadCount}
                   </span>
                 ) : null}
@@ -67,8 +64,8 @@ export function DashboardSidebar() {
         </nav>
       </div>
 
-      <div className="border-t border-border px-5 py-4">
-        <p className="text-sm leading-relaxed text-muted">
+      <div className="border-t border-border px-3.5 py-4">
+        <p className="text-[11px] leading-relaxed text-muted">
           Handle requests calmly. Ask → Confirm → Done.
         </p>
       </div>
