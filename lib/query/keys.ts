@@ -22,4 +22,11 @@ export const queryKeys = {
     all: ["payments"] as const,
     byTask: (taskId: string) => [...queryKeys.payments.all, taskId] as const,
   },
+  adminChats: {
+    all: ["admin-chats"] as const,
+    lists: () => [...queryKeys.adminChats.all, "list"] as const,
+    list: () => [...queryKeys.adminChats.lists()] as const,
+    details: () => [...queryKeys.adminChats.all, "detail"] as const,
+    detail: (id: string) => [...queryKeys.adminChats.details(), id] as const,
+  },
 } as const;

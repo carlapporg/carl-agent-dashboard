@@ -81,6 +81,18 @@ export const API_ENDPOINTS = {
     /** GET raw image */
     taskMessageImageFile: (taskId: string, messageId: string) =>
       `/agents/me/tasks/${taskId}/messages/${messageId}/image` as const,
+
+    /**
+     * Admin ↔ agent chat (text only).
+     * POST { subject?, message? } → open/get OPEN chat
+     * GET list | GET :id (detail + messages) | GET :id/messages | POST :id/messages | POST :id/read
+     */
+    adminChats: "/agents/me/admin-chats",
+    adminChat: (id: string) => `/agents/me/admin-chats/${id}` as const,
+    adminChatMessages: (id: string) =>
+      `/agents/me/admin-chats/${id}/messages` as const,
+    adminChatRead: (id: string) =>
+      `/agents/me/admin-chats/${id}/read` as const,
   },
 
   notifications: {

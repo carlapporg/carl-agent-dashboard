@@ -16,6 +16,8 @@ export type AgentSocketEvents = {
   "task.confirmation_declined": (payload: unknown) => void;
   "task.receipt_accepted": (payload: unknown) => void;
   "task.receipt_rejected": (payload: unknown) => void;
+  "agentAdmin.message": (payload: unknown) => void;
+  "agentAdmin.conversation_updated": (payload: unknown) => void;
 };
 
 type IoOpts = Partial<ManagerOptions> &
@@ -121,6 +123,10 @@ export function releaseAgentSocket() {
   }, 2_000);
 }
 
+export function getAgentSocket(): Socket | null {
+  return current;
+}
+
 export function joinTaskRoom(socket: Socket, taskId: string) {
   if (!taskId || !socket.connected) return;
   socket.emit("joinTask", { taskId });
@@ -129,4 +135,10 @@ export function joinTaskRoom(socket: Socket, taskId: string) {
 export function leaveTaskRoom(socket: Socket, taskId: string) {
   if (!taskId || !socket.connected) return;
   socket.emit("leaveTask", { taskId });
+}
+
+/** Join `agentAdmin:{conversationId}` for an open admin↔agent thread. */
+export function joinAgentAdminRoom(socket: Socket, conversationId: string) {
+  if (!conversationId || !socket.connected) return;
+  socket.emit("joinAgentAdmin", { conversationId });
 }

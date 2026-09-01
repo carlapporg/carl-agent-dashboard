@@ -11,6 +11,7 @@ export const ROUTES = {
     `/tasks/${taskId}?panel=${encodeURIComponent(panel)}` as const,
   inbox: "/inbox",
   messages: "/messages",
+  adminChat: "/admin-chat",
   payments: "/payments",
   history: "/history",
   notifications: "/notifications",
