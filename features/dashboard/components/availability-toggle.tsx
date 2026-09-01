@@ -2,15 +2,15 @@
 
 import { useRef, useState } from "react";
 import { ConfirmDialog } from "@/components/ui/dialog";
+import { useToast } from "@/components/providers/toast-provider";
 import { setAvailabilityAction } from "@/features/agents/actions";
 import { useOps } from "@/features/ops/ops-provider";
+import { toUserMessage } from "@/lib/api/error-handler";
 import { emitAgentAvailability } from "@/lib/realtime/agent-socket";
 import {
   normalizePresence,
   presenceToUi,
   uiToPresence,
-  writeChosenPresence,
-  writeToPresence,
 } from "@/lib/agent/presence";
 import { cn } from "@/lib/utils/cn";
 import type { AgentPresence } from "@/types/agent";
@@ -54,6 +54,7 @@ export function AvailabilityToggle({
   presence,
 }: AvailabilityToggleProps) {
   const ops = useOps();
+  const { toast } = useToast();
   const [confirmOffline, setConfirmOffline] = useState(false);
   const [saving, setSaving] = useState(false);
   const inFlight = useRef(false);
@@ -68,22 +69,17 @@ export function AvailabilityToggle({
     inFlight.current = true;
     setSaving(true);
 
-    const previous = normalizePresence(ops?.presence ?? presence ?? "AVAILABLE");
     const nextWrite = uiToPresence(next);
-    const kept = writeToPresence(nextWrite);
-    ops?.setPresence(kept);
-    writeChosenPresence(kept);
 
     void setAvailabilityAction(nextWrite)
       .then((row) => {
         const synced = normalizePresence(row.status);
         ops?.setPresence(synced);
-        writeChosenPresence(synced);
         emitAgentAvailability(synced);
       })
-      .catch(() => {
-        ops?.setPresence(previous);
-        writeChosenPresence(previous);
+      .catch((error) => {
+        toast(toUserMessage(error), "error");
+        void ops?.syncPresenceFromBackend();
       })
       .finally(() => {
         inFlight.current = false;

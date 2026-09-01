@@ -2,8 +2,9 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { agentsApi } from "@/lib/api/agents";
 import { authApi } from "@/lib/api/auth";
+import { apiRequest, clearServerAccessTokenMemory } from "@/lib/api/client";
+import { API_ENDPOINTS } from "@/lib/api/endpoints";
 import { toUserMessage, USER_MESSAGES } from "@/lib/api/error-handler";
 import { isApiError } from "@/lib/api/errors";
 import { logAuthEvent } from "@/lib/auth/audit-log";
@@ -22,6 +23,7 @@ import {
 import { ROUTES } from "@/lib/constants/routes";
 import { parseLoginFormData } from "@/features/auth/schemas/login";
 import { parseRegisterFormData } from "@/features/auth/schemas/register";
+import { backendUserSchema } from "@/types/user";
 import type { LoginFormState, RegisterFormState } from "@/types/auth";
 
 async function clientKey(email: string): Promise<string> {
@@ -61,6 +63,7 @@ export async function loginAction(
   }
 
   try {
+    clearServerAccessTokenMemory();
     const result = await authApi.login({
       email,
       password: validated.data.password,
@@ -74,6 +77,7 @@ export async function loginAction(
       return { message: USER_MESSAGES.unauthorizedApp };
     }
 
+    await destroySession();
     await createSession({
       accessToken: result.accessToken,
       refreshToken: result.refreshToken,
@@ -82,22 +86,27 @@ export async function loginAction(
     });
 
     try {
-      const profile = await agentsApi.me();
+      const profile = await apiRequest(API_ENDPOINTS.agents.me, {
+        method: "GET",
+        schema: backendUserSchema,
+        token: result.accessToken,
+        dedupe: false,
+      });
       if (profile.role !== "AGENT") {
         recordLoginFailure(key);
         logAuthEvent("login_failed", { email, reason: "wrong_role" });
         await destroySession();
         return { message: USER_MESSAGES.unauthorizedApp };
       }
+      if (profile.id !== result.user.id) {
+        recordLoginFailure(key);
+        logAuthEvent("login_failed", { email, reason: "session_mismatch" });
+        await destroySession();
+        return { message: USER_MESSAGES.serverUnavailable };
+      }
       await updateSessionUser(profile);
     } catch {
       // Login payload user is already from Backend.
-    }
-
-    try {
-      await agentsApi.setAvailability("AVAILABLE");
-    } catch {
-      // Presence is best-effort after login.
     }
 
     recordLoginSuccess(key);
@@ -147,6 +156,7 @@ export async function registerAction(
   }
 
   try {
+    clearServerAccessTokenMemory();
     const registered = await authApi.register({
       email,
       password,
@@ -173,6 +183,7 @@ export async function registerAction(
       return { message: USER_MESSAGES.unauthorizedApp };
     }
 
+    await destroySession();
     await createSession({
       accessToken: result.accessToken,
       refreshToken: result.refreshToken,
@@ -181,8 +192,13 @@ export async function registerAction(
     });
 
     try {
-      const profile = await agentsApi.me();
-      if (profile.role === "AGENT") {
+      const profile = await apiRequest(API_ENDPOINTS.agents.me, {
+        method: "GET",
+        schema: backendUserSchema,
+        token: result.accessToken,
+        dedupe: false,
+      });
+      if (profile.role === "AGENT" && profile.id === result.user.id) {
         await updateSessionUser(profile);
       }
     } catch {

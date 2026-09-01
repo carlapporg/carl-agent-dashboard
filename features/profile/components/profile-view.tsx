@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAgentMe } from "@/features/agents/hooks";
+import { AgentAvatar } from "@/components/ui/agent-avatar";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { PageSkeleton } from "@/components/feedback/skeleton";
 import { Button } from "@/components/ui/button";
@@ -145,13 +146,16 @@ export function ProfileView({ initialUser }: ProfileViewProps) {
 
       <div className="grid gap-4 lg:grid-cols-[minmax(16rem,0.9fr)_minmax(0,1.4fr)]">
         <div className="rounded-[var(--radius-card)] border border-border bg-surface p-5 shadow-[var(--shadow-card)] md:p-6">
-          <div className="min-w-0">
-            <h2 className="text-xl font-bold tracking-tight text-foreground">
-              {name}
-            </h2>
-            <span className="mt-2 inline-flex rounded-full bg-accent-soft px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-accent">
-              Support agent
-            </span>
+          <div className="flex items-start gap-4">
+            <AgentAvatar user={current} size="lg" />
+            <div className="min-w-0">
+              <h2 className="text-xl font-bold tracking-tight text-foreground">
+                {name}
+              </h2>
+              <span className="mt-2 inline-flex rounded-full bg-accent-soft px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-accent">
+                Support agent
+              </span>
+            </div>
           </div>
 
           <div className="mt-6 border-t border-border pt-4">

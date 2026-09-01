@@ -12,13 +12,24 @@ export const agentPresenceWriteSchema = agentPresenceSchema;
 
 export type AgentPresenceWrite = AgentPresence;
 
+function coercePresenceStatus(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  const upper = value.trim().toUpperCase();
+  if (upper === "ONLINE") return "AVAILABLE";
+  return upper;
+}
+
 export const agentPresenceStateSchema = z
-  .object({
+  .preprocess((raw) => {
+    if (!raw || typeof raw !== "object") return raw;
+    const row = { ...(raw as Record<string, unknown>) };
+    if (row.status == null) {
+      row.status = row.availability ?? row.presence ?? row.agentStatus;
+    }
+    return row;
+  }, z.object({
     userId: z.string().optional(),
-    status: z.preprocess(
-      (value) => (value === "ONLINE" ? "AVAILABLE" : value),
-      agentPresenceSchema,
-    ),
+    status: z.preprocess(coercePresenceStatus, agentPresenceSchema),
     isGeneralist: z.boolean().optional(),
     currentTaskId: z.string().nullable().optional(),
     socketId: z.string().nullable().optional(),
@@ -26,8 +37,7 @@ export const agentPresenceStateSchema = z
     lastAssignedAt: z.string().nullable().optional(),
     activeTaskCount: z.number().optional(),
     updatedAt: z.string().optional(),
-  })
-  .passthrough();
+  }).passthrough());
 
 export type AgentPresenceState = z.infer<typeof agentPresenceStateSchema>;
 

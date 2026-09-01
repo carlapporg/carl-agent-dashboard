@@ -18,6 +18,9 @@ export const API_ENDPOINTS = {
   agents: {
     /** GET current agent */
     me: "/agents/me",
+    /** POST multipart avatar | GET proxy stream */
+    meAvatar: "/agents/me/avatar",
+    avatar: (agentId: string) => `/agents/${agentId}/avatar` as const,
     /** PATCH { firstName?, lastName? } */
     meUpdate: "/agents/me",
     /** POST { currentPassword, newPassword } — revokes refresh tokens */

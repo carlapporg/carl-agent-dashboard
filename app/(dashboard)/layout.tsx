@@ -34,7 +34,7 @@ export default async function DashboardLayout({
     const row = await agentsApi.getAvailability();
     initialPresence = normalizePresence(row.status);
   } catch {
-    // Client will retry via getAvailabilityAction.
+    // Client syncs again after mount.
   }
 
   return (

@@ -1,4 +1,5 @@
 import { cookies, headers } from "next/headers";
+import { readJwtSubjectId } from "@/lib/auth/access-jwt";
 import {
   ACCESS_TOKEN_REQUEST_HEADER,
   encodeSessionCookie,
@@ -28,7 +29,10 @@ export async function getSession(): Promise<SessionPayload | null> {
     const headerStore = await headers();
     const overlay = headerStore.get(ACCESS_TOKEN_REQUEST_HEADER);
     if (overlay) {
-      return { ...session, accessToken: overlay };
+      const overlayUserId = readJwtSubjectId(overlay);
+      if (!overlayUserId || overlayUserId === session.user.id) {
+        return { ...session, accessToken: overlay };
+      }
     }
   } catch {
     /* headers() unavailable outside a request */

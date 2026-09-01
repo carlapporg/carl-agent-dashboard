@@ -72,11 +72,14 @@ function displayNumber(id: string): number {
 function inferBackendStatus(task: AgentTask): AgentTaskStatus {
   const parsed = agentTaskStatusSchema.safeParse(task.status);
   if (parsed.success) return parsed.data;
-  if (task.canReject === true) return "OFFERED";
-  if (task.rejectUntil) {
-    const until = new Date(task.rejectUntil).getTime();
-    if (Number.isFinite(until) && until > Date.now()) return "OFFERED";
-  }
+  if (task.assignedAgentId) return "ASSIGNED";
+  const rejectUntilMs = task.rejectUntil
+    ? new Date(task.rejectUntil).getTime()
+    : Number.NaN;
+  const rejectLive =
+    Number.isFinite(rejectUntilMs) && rejectUntilMs > Date.now();
+  if (task.canReject === true && rejectLive) return "OFFERED";
+  if (rejectLive) return "OFFERED";
   return "ASSIGNED";
 }
 

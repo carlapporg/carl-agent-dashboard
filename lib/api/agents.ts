@@ -15,6 +15,10 @@ import {
 } from "@/types/agent";
 import { backendUserSchema, type BackendUser } from "@/types/user";
 
+const avatarUploadResponseSchema = z.object({
+  avatarUrl: z.string().min(1),
+});
+
 const getAgentMe = cache(async (): Promise<BackendUser> => {
   if (!env.isApiConfigured) {
     return mockAgentUser;
@@ -28,6 +32,32 @@ const getAgentMe = cache(async (): Promise<BackendUser> => {
 
 export const agentsApi = {
   me: getAgentMe,
+
+  async fetchMe(): Promise<BackendUser> {
+    if (!env.isApiConfigured) {
+      return mockAgentUser;
+    }
+    return apiRequest(API_ENDPOINTS.agents.me, {
+      method: "GET",
+      schema: backendUserSchema,
+      dedupe: false,
+    });
+  },
+
+  async uploadAvatar(file: File): Promise<{ avatarUrl: string }> {
+    if (!env.isApiConfigured) {
+      return { avatarUrl: URL.createObjectURL(file) };
+    }
+    const form = new FormData();
+    form.set("file", file);
+    return apiRequest(API_ENDPOINTS.agents.meAvatar, {
+      method: "POST",
+      body: form,
+      schema: avatarUploadResponseSchema,
+      dedupe: false,
+      timeoutMs: 90_000,
+    });
+  },
 
   async updateMe(input: {
     firstName?: string | null;
@@ -75,6 +105,7 @@ export const agentsApi = {
     return apiRequest(API_ENDPOINTS.agents.availability, {
       method: "GET",
       schema: agentPresenceStateSchema,
+      looseEnvelope: true,
     });
   },
 
@@ -84,6 +115,7 @@ export const agentsApi = {
       body: { status },
       schema: agentPresenceStateSchema,
       dedupe: false,
+      looseEnvelope: true,
     });
   },
 

@@ -1,13 +1,12 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import {
   useActionState,
   useEffect,
   useId,
   useRef,
   useState,
-  useTransition,
 } from "react";
 import { loginAction } from "@/features/auth/actions/auth";
 import { CheckIcon } from "@/features/auth/components/icons";
@@ -31,14 +30,12 @@ type LoginFormProps = {
 };
 
 export function LoginForm({ demoMode = false }: LoginFormProps) {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const [state, formAction, pending] = useActionState(
     loginAction,
     undefined as LoginFormState,
   );
-  const [isRedirecting, startTransition] = useTransition();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [emailError, setEmailError] = useState<string | undefined>();
@@ -55,7 +52,7 @@ export function LoginForm({ demoMode = false }: LoginFormProps) {
   const toastedMessage = useRef<string | undefined>(undefined);
 
   const canSubmit = isLoginFormValid(email, password);
-  const isBusy = pending || showSuccess || isRedirecting;
+  const isBusy = pending || showSuccess;
   const nextPath = searchParams.get("next");
 
   useEffect(() => {
@@ -100,13 +97,11 @@ export function LoginForm({ demoMode = false }: LoginFormProps) {
         ? nextPath
         : ROUTES.dashboard;
     const timer = window.setTimeout(() => {
-      startTransition(() => {
-        router.replace(destination);
-      });
+      window.location.assign(destination);
     }, 450);
 
     return () => window.clearTimeout(timer);
-  }, [state?.success, router, nextPath]);
+  }, [state?.success, nextPath]);
 
   function handleSubmit(formData: FormData) {
     const normalizedEmail = email.trim().toLowerCase();
@@ -201,7 +196,7 @@ export function LoginForm({ demoMode = false }: LoginFormProps) {
         type="submit"
         fullWidth
         loading={pending && !showSuccess}
-        disabled={!canSubmit || pending || isRedirecting}
+        disabled={!canSubmit || pending}
         className={cn("mt-1", showSuccess && "disabled:opacity-100")}
       >
         {showSuccess ? (

@@ -10,6 +10,10 @@ export const backendUserSchema = z.preprocess((raw) => {
     accountType: o.accountType ?? o.accountType,
     isEmailVerified: o.isEmailVerified ?? o.isEmailVerified,
     familyId: o.familyId ?? o.familyId,
+    avatarUrl:
+      typeof o.avatarUrl === "string" && o.avatarUrl.trim()
+        ? o.avatarUrl.trim()
+        : null,
   };
 }, z
   .object({
@@ -22,6 +26,7 @@ export const backendUserSchema = z.preprocess((raw) => {
     authProvider: z.string().nullish(),
     isEmailVerified: z.boolean().nullish(),
     familyId: z.string().nullable().nullish(),
+    avatarUrl: z.string().min(1).nullable().nullish(),
     createdAt: z.string().nullish(),
     updatedAt: z.string().nullish(),
   })
@@ -49,4 +54,16 @@ export function getAgentDisplayName(user: {
   email?: string;
 }): string {
   return formatAgentName(user.firstName, user.lastName, user.email ?? "Agent");
+}
+
+export function getAgentInitials(user: {
+  firstName?: string | null;
+  lastName?: string | null;
+  email?: string;
+}): string {
+  const first = user.firstName?.trim()?.[0]?.toUpperCase() ?? "";
+  const last = user.lastName?.trim()?.[0]?.toUpperCase() ?? "";
+  if (first || last) return `${first}${last}` || "A";
+  const email = user.email?.trim()?.[0]?.toUpperCase();
+  return email || "A";
 }

@@ -5,7 +5,8 @@ import { redirect } from "next/navigation";
 import { agentsApi } from "@/lib/api/agents";
 import { toUserMessage } from "@/lib/api/error-handler";
 import { isApiError } from "@/lib/api/errors";
-import { destroySession, updateSessionUser } from "@/lib/auth/session";
+import { validateAvatarFile } from "@/lib/agent/avatar";
+import { destroySession, getSession, updateSessionUser } from "@/lib/auth/session";
 import { ROUTES } from "@/lib/constants/routes";
 import type { BackendUser } from "@/types/user";
 import { z } from "zod";
@@ -29,6 +30,18 @@ export type ChangePasswordState = {
     confirmPassword?: string[];
   };
 } | undefined;
+
+export type AvatarUploadState = {
+  success?: boolean;
+  message?: string;
+  user?: BackendUser;
+} | undefined;
+
+const avatarFileSchema = z.custom<File>(
+  (value) =>
+    typeof File !== "undefined" && value instanceof File && value.size > 0,
+  { message: "Choose an image to upload." },
+);
 
 const nameSchema = z.object({
   firstName: z
@@ -92,6 +105,48 @@ export async function updateAgentNameAction(
     return {
       message: toUserMessage(error),
     };
+  }
+}
+
+export async function uploadAgentAvatarAction(
+  _prev: AvatarUploadState,
+  formData: FormData,
+): Promise<AvatarUploadState> {
+  const parsed = avatarFileSchema.safeParse(formData.get("file"));
+  if (!parsed.success) {
+    return { message: "Choose an image to upload." };
+  }
+
+  const file = parsed.data;
+  const validation = validateAvatarFile(file);
+  if (validation) {
+    return { message: validation };
+  }
+
+  try {
+    const uploaded = await agentsApi.uploadAvatar(file);
+    const session = await getSession();
+    const baseUser = session?.user;
+    const user = baseUser
+      ? {
+          ...baseUser,
+          avatarUrl: uploaded.avatarUrl,
+          updatedAt: new Date().toISOString(),
+        }
+      : await agentsApi.fetchMe();
+    await updateSessionUser(user);
+    revalidatePath(ROUTES.profile);
+    revalidatePath(ROUTES.profileEdit);
+    revalidatePath(ROUTES.dashboard);
+    return { success: true, message: "Profile photo updated.", user };
+  } catch (error) {
+    if (isApiError(error) && error.kind === "server") {
+      return {
+        message:
+          "Upload failed on the server. Confirm the live API is reachable and try again.",
+      };
+    }
+    return { message: toUserMessage(error) };
   }
 }
 

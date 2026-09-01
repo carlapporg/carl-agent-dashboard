@@ -12,6 +12,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { ConfirmDialog } from "@/components/ui/dialog";
+import { AgentAvatar } from "@/components/ui/agent-avatar";
 import { logoutAction } from "@/features/auth/actions/auth";
 import { useClearAppCache } from "@/features/agents/hooks";
 import { ROUTES } from "@/lib/constants/routes";
@@ -192,6 +193,7 @@ export function UserMenu({
         onClick={() => (open ? close() : openMenu(0))}
         onKeyDown={onTriggerKeyDown}
       >
+        <AgentAvatar user={user} size="sm" />
         <span className="hidden min-w-0 sm:block">
           <span className="block truncate text-sm font-semibold leading-tight text-foreground">
             {name}
@@ -206,9 +208,6 @@ export function UserMenu({
             {statusLabel}
           </span>
         </span>
-        <span className="flex size-8 items-center justify-center rounded-md border border-border bg-surface-muted text-muted sm:hidden">
-          <UserIcon />
-        </span>
       </button>
 
       {open ? (
@@ -221,10 +220,15 @@ export function UserMenu({
           className="absolute right-0 z-50 mt-2 w-72 origin-top-right rounded-[var(--radius-lg)] border border-border bg-surface p-3 shadow-[var(--shadow-dropdown)]"
         >
           <div className="border-b border-border pb-3">
-            <p className="truncate text-sm font-semibold text-foreground">
-              {name}
-            </p>
-            <p className="truncate text-xs text-muted">{user.email}</p>
+            <div className="flex items-center gap-3">
+              <AgentAvatar user={user} size="md" />
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-foreground">
+                  {name}
+                </p>
+                <p className="truncate text-xs text-muted">{user.email}</p>
+              </div>
+            </div>
             <span className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-success-soft px-2 py-0.5 text-[11px] font-semibold text-success-foreground">
               <span
                 className={cn(

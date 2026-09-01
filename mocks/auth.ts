@@ -40,6 +40,7 @@ export function createMockLoginResponse(
       accountType: "ADULT",
       isEmailVerified: true,
       familyId: null,
+      avatarUrl: null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     },
@@ -55,6 +56,7 @@ export const mockAgentUser: BackendUser = {
   accountType: "ADULT",
   isEmailVerified: true,
   familyId: null,
+  avatarUrl: null,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 };

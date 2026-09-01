@@ -53,7 +53,7 @@ function statusToCode(status: number, kind: string): ApiErrorBody["code"] {
   return "VALIDATION_ERROR";
 }
 
-function joinApiUrl(path: string): string {
+export function joinApiUrl(path: string): string {
   const base = env.apiBaseUrl;
   let suffix = path.startsWith("/") ? path : `/${path}`;
   if (suffix === "/api/v1") suffix = "/";
@@ -162,6 +162,10 @@ function parseSuccessData<TSchema extends z.ZodTypeAny>(
 
 let memoryAccessToken: string | null = null;
 let refreshInFlight: Promise<RefreshAttempt> | null = null;
+
+export function clearServerAccessTokenMemory() {
+  memoryAccessToken = null;
+}
 
 export function rememberAccessToken(token: string) {
   if (!token) return;
@@ -339,7 +343,7 @@ export async function apiRequest<TSchema extends z.ZodTypeAny>(
   const token = options.skipAuth
     ? null
     : options.token ??
-      memoryAccessToken ??
+      (typeof window !== "undefined" ? memoryAccessToken : null) ??
       (await resolveAccessToken(options.token));
   const url = joinApiUrl(path);
   const key = dedupeKey(method, url, options.body, token);
@@ -442,7 +446,7 @@ export async function nestFetch(
   const token = init.skipAuth
     ? null
     : init.token ??
-      memoryAccessToken ??
+      (typeof window !== "undefined" ? memoryAccessToken : null) ??
       (await resolveAccessToken(init.token));
 
   return nestFetchOnce(path, init, token, false);

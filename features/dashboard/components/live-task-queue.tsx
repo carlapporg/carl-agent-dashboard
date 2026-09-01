@@ -91,7 +91,7 @@ export function LiveTaskQueue({ seedTasks }: LiveTaskQueueProps) {
         (a, b) =>
           new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
       );
-  }, [ops?.liveTasks, ops?.offer, rejectedTick, seedTasks]);
+  }, [ops?.liveTasks, ops?.offer, ops?.queuePulse, rejectedTick, seedTasks]);
 
   useEffect(() => {
     const next = new Set(items.map((t) => t.id));

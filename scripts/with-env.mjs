@@ -30,8 +30,21 @@ if (envPath) {
   );
 }
 
+function stripApiVersionPrefix(baseUrl) {
+  return baseUrl.trim().replace(/\/+$/, "").replace(/\/api\/v1$/i, "");
+}
+
 if (process.env.API_BASE_URL && !process.env.NEXT_PUBLIC_API_BASE_URL) {
   process.env.NEXT_PUBLIC_API_BASE_URL = process.env.API_BASE_URL;
+}
+
+if (
+  process.env.API_BASE_URL &&
+  !process.env.NEXT_PUBLIC_SOCKET_URL?.trim()
+) {
+  process.env.NEXT_PUBLIC_SOCKET_URL = stripApiVersionPrefix(
+    process.env.API_BASE_URL,
+  );
 }
 
 const [command, ...commandArgs] = args;

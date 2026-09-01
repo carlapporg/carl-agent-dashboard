@@ -12,6 +12,9 @@ import {
   type ReactNode,
 } from "react";
 import { getAvailabilityAction } from "@/features/agents/actions";
+import {
+  normalizePresence,
+} from "@/lib/agent/presence";
 import { offerWasAccepted, isRejectingOrRejected } from "@/features/ops/auto-accept-offer";
 import { useNotifications } from "@/features/notifications/notification-provider";
 import { useToast } from "@/components/providers/toast-provider";
@@ -22,10 +25,6 @@ import {
   subscribeAccessToken,
 } from "@/lib/auth/access-token-bus";
 import { readJwtExpiryMs } from "@/lib/auth/access-jwt";
-import {
-  normalizePresence,
-  readChosenPresence,
-} from "@/lib/agent/presence";
 import {
   isKeptAfterMiss,
   isStatusDowngrade,
@@ -99,11 +98,38 @@ function extractStatus(payload: unknown): AgentTaskStatus | undefined {
     data.task && typeof data.task === "object"
       ? (data.task as Record<string, unknown>)
       : null;
-  const raw = nested?.status ?? data.status ?? root.status;
+  const raw =
+    nested?.status ??
+    nested?.taskStatus ??
+    nested?.state ??
+    data.status ??
+    data.taskStatus ??
+    data.state ??
+    root.status;
   const parsed = agentTaskStatusSchema.safeParse(
     typeof raw === "string" ? raw.trim().toUpperCase().replace(/[\s-]+/g, "_") : raw,
   );
   return parsed.success ? parsed.data : undefined;
+}
+
+function syncOfferFromTask(current: Task | null, task: Task): Task | null {
+  if (!current || current.id !== task.id) return current;
+  const nextStatus = task.backendStatus;
+  if (nextStatus === "ASSIGNED") {
+    return {
+      ...current,
+      ...task,
+      backendStatus: "ASSIGNED",
+      status: "assigned",
+      expiresAt: undefined,
+      rejectUntil: null,
+      canReject: false,
+    };
+  }
+  if (nextStatus === "OFFERED") {
+    return { ...current, ...task };
+  }
+  return null;
 }
 
 function extractOfferDeadline(payload: unknown): string | undefined {
@@ -130,7 +156,11 @@ function extractOfferDeadline(payload: unknown): string | undefined {
   return undefined;
 }
 
-function stubOffer(taskId: string, payload: unknown): Task {
+function stubIncomingTask(
+  taskId: string,
+  payload: unknown,
+  fallbackStatus: AgentTaskStatus = "OFFERED",
+): Task {
   const root =
     payload && typeof payload === "object"
       ? (payload as Record<string, unknown>)
@@ -143,12 +173,14 @@ function stubOffer(taskId: string, payload: unknown): Task {
     (typeof data.title === "string" && data.title) || "New task offered";
   const now = new Date().toISOString();
   const serverDeadline = extractOfferDeadline(payload);
+  const backendStatus = extractStatus(payload) ?? fallbackStatus;
+  const isOffer = backendStatus === "OFFERED" || backendStatus === "QUEUED";
   return {
     id: taskId,
     number: 0,
     title,
     request: "",
-    status: "queued",
+    status: uiStatusFromAgent(backendStatus),
     priority: "normal",
     customerId: "Client",
     customerName: "Client",
@@ -157,9 +189,11 @@ function stubOffer(taskId: string, payload: unknown): Task {
     suggestedStepsDone: [],
     createdAt: now,
     updatedAt: now,
-    backendStatus: "OFFERED",
-    expiresAt: serverDeadline ?? new Date(Date.now() + 30_000).toISOString(),
-    rejectUntil: serverDeadline ?? null,
+    backendStatus,
+    expiresAt: isOffer
+      ? (serverDeadline ?? new Date(Date.now() + 30_000).toISOString())
+      : undefined,
+    rejectUntil: isOffer ? (serverDeadline ?? null) : null,
   };
 }
 
@@ -177,6 +211,7 @@ type OpsContextValue = {
   connected: boolean;
   presence: AgentPresence;
   setPresence: (status: AgentPresence) => void;
+  syncPresenceFromBackend: () => Promise<void>;
   offer: Task | null;
   liveTasks: Task[];
   dismissOffer: () => void;
@@ -243,7 +278,7 @@ export function AgentOpsProvider({
   const socketRef = useRef<Socket | null>(null);
   const [socketToken, setSocketToken] = useState(accessToken);
   const [connected, setConnected] = useState(false);
-  const [presence, setPresenceState] = useState<AgentPresence>(
+  const [presence, setPresenceState] = useState<AgentPresence>(() =>
     normalizePresence(initialPresence ?? "AVAILABLE"),
   );
   const [offer, setOffer] = useState<Task | null>(null);
@@ -257,10 +292,30 @@ export function AgentOpsProvider({
   const refreshTimer = useRef<number>(0);
   const presenceRef = useRef(presence);
   presenceRef.current = presence;
+  const pausePresenceSyncUntil = useRef(0);
 
   const setPresence = useCallback((status: AgentPresence) => {
+    pausePresenceSyncUntil.current = Date.now() + 4_000;
     setPresenceState(normalizePresence(status));
   }, []);
+
+  const syncPresenceFromBackend = useCallback(async () => {
+    if (Date.now() < pausePresenceSyncUntil.current) return;
+    try {
+      const row = await getAvailabilityAction();
+      if (Date.now() < pausePresenceSyncUntil.current) return;
+      setPresenceState(normalizePresence(row.status));
+    } catch {
+      // Keep the last known value when the API is unreachable.
+    }
+  }, []);
+
+  const syncPresenceRef = useRef(syncPresenceFromBackend);
+  syncPresenceRef.current = syncPresenceFromBackend;
+
+  useEffect(() => {
+    void syncPresenceFromBackend();
+  }, [syncPresenceFromBackend]);
 
   const refresh = useCallback(() => {
     window.clearTimeout(refreshTimer.current);
@@ -292,9 +347,9 @@ export function AgentOpsProvider({
   const hydrateOpenTasks = useCallback((tasks: Task[]) => {
     didInitialCatchUpGlobal = true;
     if (tasks.length === 0) return;
+    let changed = false;
     setLiveTasks((prev) => {
       const byId = new Map(prev.map((row) => [row.id, row]));
-      let changed = false;
       for (const task of tasks) {
         if (isRejectingOrRejected(task.id)) continue;
         const existing = byId.get(task.id);
@@ -316,13 +371,19 @@ export function AgentOpsProvider({
       }
       return changed ? [...byId.values()] : prev;
     });
-  }, []);
+    if (changed) pulseQueue();
+  }, [pulseQueue]);
 
   const upsertLiveTask = useCallback((task: Task) => {
     if (isRejectingOrRejected(task.id)) return;
     if (task.backendStatus === "ASSIGNED") {
       markOfferAccepted(task.id);
     }
+    const prior = liveTasksRef.current.find((row) => row.id === task.id);
+    const statusChanged =
+      !prior ||
+      prior.backendStatus !== task.backendStatus ||
+      prior.status !== task.status;
     setLiveTasks((prev) => {
       const index = prev.findIndex((row) => row.id === task.id);
       if (index === -1) return [task, ...prev];
@@ -339,7 +400,9 @@ export function AgentOpsProvider({
       next[index] = merged;
       return next;
     });
-  }, []);
+    setOffer((current) => syncOfferFromTask(current, task));
+    if (statusChanged) pulseQueue();
+  }, [pulseQueue]);
 
   const patchLiveTask = useCallback((taskId: string, patch: Partial<Task>, fallback?: Task) => {
     const nextStatus = patch.backendStatus;
@@ -383,6 +446,9 @@ export function AgentOpsProvider({
       if (offerNextStatus && offerNextStatus !== "OFFERED" && offerNextStatus !== "ASSIGNED") {
         return null;
       }
+      if (offerNextStatus === "ASSIGNED") {
+        return syncOfferFromTask(current, { ...current, ...extras } as Task);
+      }
       return { ...current, ...extras };
     });
     if (statusChanged) pulseQueue();
@@ -418,20 +484,6 @@ export function AgentOpsProvider({
     dropLiveTask,
     refresh,
   });
-
-  useEffect(() => {
-    let cancelled = false;
-    void getAvailabilityAction()
-      .then((row) => {
-        if (cancelled) return;
-        if (readChosenPresence()) return;
-        setPresenceState(normalizePresence(row.status));
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     setSocketToken(accessToken);
@@ -582,6 +634,7 @@ export function AgentOpsProvider({
       window.clearTimeout(dropBannerTimer);
       setConnected(true);
       rejoinRooms();
+      void syncPresenceRef.current();
       const gap = disconnectedAt ? Date.now() - disconnectedAt : 0;
       disconnectedAt = 0;
       if (gap >= CATCH_UP_AFTER_GAP_MS) {
@@ -611,13 +664,16 @@ export function AgentOpsProvider({
       return true;
     }
 
-    function onIncomingTask(payload: unknown) {
+    function onIncomingTask(payload: unknown, eventName?: string) {
       const mapped = mapSocketAssignedPayload(payload);
+      const fallbackStatus: AgentTaskStatus = eventName?.includes("assigned")
+        ? "ASSIGNED"
+        : "OFFERED";
       const task =
         mapped ??
         (() => {
           const id = extractTaskId(payload);
-          return id ? stubOffer(id, payload) : null;
+          return id ? stubIncomingTask(id, payload, fallbackStatus) : null;
         })();
       if (!task) {
         pulseQueue();
@@ -625,23 +681,22 @@ export function AgentOpsProvider({
       }
       if (forgetIfRejecting(task.id)) return;
       const alreadyKnown = liveTasksRef.current.some((row) => row.id === task.id);
-      if (alreadyKnown) {
-        if (!isRejectingOrRejected(task.id)) {
-          upsertLiveTaskRef.current(task);
+      if (!alreadyKnown) {
+        joinTaskRoom(socket, task.id);
+        if (task.backendStatus === "OFFERED") {
+          setOffer((current) => current ?? task);
+          notificationsRef.current.push(notificationFromOffer(task));
+          playNotificationChime();
         }
-        if (task.backendStatus === "OFFERED" && !isRejectingOrRejected(task.id)) {
-          setOffer((current) =>
-            current?.id === task.id ? task : (current ?? task),
-          );
-          pulseQueue();
-        }
-        return;
+      } else if (task.backendStatus === "OFFERED" && !isRejectingOrRejected(task.id)) {
+        setOffer((current) =>
+          current?.id === task.id ? task : (current ?? task),
+        );
       }
-      setOffer(task);
+      if (task.backendStatus === "ASSIGNED") {
+        setOffer((current) => syncOfferFromTask(current, task));
+      }
       upsertLiveTaskRef.current(task);
-      joinTaskRoom(socket, task.id);
-      notificationsRef.current.push(notificationFromOffer(task));
-      playNotificationChime();
       pulseQueue();
     }
 
@@ -910,6 +965,11 @@ export function AgentOpsProvider({
     function onVisibleOrOnline() {
       if (document.visibilityState === "hidden") return;
       ensureAgentSocketConnected();
+      void syncPresenceRef.current();
+    }
+
+    function onForcedOffline() {
+      void syncPresenceRef.current();
     }
 
     socket.on("connect", onConnect);
@@ -922,7 +982,7 @@ export function AgentOpsProvider({
     window.addEventListener("pageshow", onVisibleOrOnline);
 
     for (const eventName of TASK_INCOMING_EVENTS) {
-      socket.on(eventName, onIncomingTask);
+      socket.on(eventName, (payload: unknown) => onIncomingTask(payload, eventName));
     }
     socket.on("task.message", onMessage);
     socket.on("task_message", onMessage);
@@ -952,6 +1012,8 @@ export function AgentOpsProvider({
     socket.on("task_updated", onTaskUpdated);
     socket.on("queue.updated", onQueuePulse);
     socket.on("queue_updated", onQueuePulse);
+    socket.on("agent.forced_offline", onForcedOffline);
+    socket.on("agent_forced_offline", onForcedOffline);
 
     return () => {
       cancelled = true;
@@ -964,7 +1026,7 @@ export function AgentOpsProvider({
       socket.off("disconnect", onDisconnect);
       socket.off("connect_error", onConnectError);
       for (const eventName of TASK_INCOMING_EVENTS) {
-        socket.off(eventName, onIncomingTask);
+        socket.off(eventName);
       }
       socket.off("task.message", onMessage);
       socket.off("task_message", onMessage);
@@ -994,6 +1056,8 @@ export function AgentOpsProvider({
       socket.off("task_updated", onTaskUpdated);
       socket.off("queue.updated", onQueuePulse);
       socket.off("queue_updated", onQueuePulse);
+      socket.off("agent.forced_offline", onForcedOffline);
+      socket.off("agent_forced_offline", onForcedOffline);
       releaseAgentSocket();
     };
   }, [socketUrl, socketReady]);
@@ -1010,6 +1074,7 @@ export function AgentOpsProvider({
       connected,
       presence,
       setPresence,
+      syncPresenceFromBackend,
       offer,
       liveTasks,
       dismissOffer,
@@ -1044,6 +1109,7 @@ export function AgentOpsProvider({
       setLiveConfirmation,
       setLiveReceipt,
       setPresence,
+      syncPresenceFromBackend,
       silenceOffer,
     ],
   );

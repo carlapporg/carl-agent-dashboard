@@ -66,6 +66,7 @@ export async function proxy(request: NextRequest) {
   const isRegisterRoute =
     pathname === ROUTES.register || pathname.startsWith(`${ROUTES.register}/`);
   const isAuthRoute = isLoginRoute || isRegisterRoute;
+  const switchingAccount = request.nextUrl.searchParams.get("switch") === "1";
   const isUnauthorizedRoute = pathname.startsWith(ROUTES.unauthorized);
   const isProtectedRoute =
     pathname === ROUTES.home ||
@@ -77,7 +78,7 @@ export async function proxy(request: NextRequest) {
     return redirectToLogin(request, pathname);
   }
 
-  if (isAuthRoute && hasValidSession) {
+  if (isAuthRoute && hasValidSession && !switchingAccount) {
     return NextResponse.redirect(new URL(ROUTES.dashboard, request.url));
   }
 

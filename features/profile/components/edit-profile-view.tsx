@@ -13,6 +13,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { updateAgentNameAction } from "@/features/profile/actions/profile-actions";
 import { CheckIcon } from "@/features/auth/components/icons";
 import { useToast } from "@/components/providers/toast-provider";
+import { AvatarUploadPanel } from "@/features/profile/components/avatar-upload-panel";
 import { ChangePasswordForm } from "@/features/profile/components/change-password-form";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,10 @@ export function EditProfileView({ user }: EditProfileFormProps) {
       </Link>
 
       <div className="mx-auto max-w-2xl space-y-4">
+        <section className="rounded-[var(--radius-card)] border border-border bg-surface p-5 shadow-[var(--shadow-card)] md:p-6">
+          <AvatarUploadPanel user={user} />
+        </section>
+
         <section className="rounded-[var(--radius-card)] border border-border bg-surface p-5 shadow-[var(--shadow-card)] md:p-6">
           <h2 className="text-base font-semibold text-foreground">
             Display name
