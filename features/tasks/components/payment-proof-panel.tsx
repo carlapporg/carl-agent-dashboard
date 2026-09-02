@@ -12,10 +12,9 @@ import { cn } from "@/lib/utils/cn";
 import {
   formatFileSize,
   isAllowedReceiptFile,
-  isReceiptAccepted,
   isReceiptImage,
-  isReceiptPending,
   isReceiptRejected,
+  isReceiptSent,
   RECEIPT_ACCEPT,
   RECEIPT_MAX_FILE_BYTES,
   RECEIPT_NOTE_MAX,
@@ -42,10 +41,15 @@ type PaymentProofPanelProps = {
 function statusVariant(
   status: TaskReceiptStatus,
 ): "warning" | "success" | "danger" | "muted" {
-  if (status === "PENDING") return "warning";
-  if (status === "ACCEPTED") return "success";
+  if (status === "PENDING" || status === "ACCEPTED") return "success";
   if (status === "REJECTED") return "danger";
   return "muted";
+}
+
+function badgeLabel(status: TaskReceiptStatus): string {
+  if (status === "PENDING" || status === "ACCEPTED") return "Sent";
+  if (status === "REJECTED") return "Needs replace";
+  return "Replaced";
 }
 
 function FileRow({
@@ -80,11 +84,11 @@ function FileRow({
             rel="noreferrer"
             className="block truncate text-sm font-medium text-accent hover:text-accent-hover"
           >
-            {name || "Receipt file"}
+            {name || "Document file"}
           </a>
         ) : (
           <span className="block truncate text-sm font-medium text-foreground">
-            {name || "Receipt file"}
+            {name || "Document file"}
           </span>
         )}
         <span className="text-xs text-muted">{formatFileSize(size)}</span>
@@ -143,16 +147,11 @@ export function PaymentProofPanel({
 
   const closed = CLOSED_STATUSES.has(taskStatus ?? "");
   const canSend = !disabled && !closed;
-  const waiting = isReceiptPending(receipt);
-  const accepted = isReceiptAccepted(receipt);
+  const sent = isReceiptSent(receipt);
   const rejected = isReceiptRejected(receipt);
   const formOpen =
     canSend &&
-    (showForm ||
-      !receipt ||
-      rejected ||
-      receipt.status === "SUPERSEDED") &&
-    !accepted;
+    (showForm || !receipt || rejected || receipt.status === "SUPERSEDED");
   const fileHref = receipt
     ? dashboardReceiptFileSrc(taskId, receipt.id)
     : "";
@@ -176,7 +175,7 @@ export function PaymentProofPanel({
 
   function send() {
     if (!file) {
-      toast("Choose a receipt file first.", "error");
+      toast("Choose a file first.", "error");
       return;
     }
     startTransition(async () => {
@@ -188,7 +187,12 @@ export function PaymentProofPanel({
         toast(result.message, "error");
         return;
       }
-      toast("Receipt sent. Waiting for the user to review it.", "success");
+      toast(
+        receipt
+          ? "Document replaced. You can complete the task now."
+          : "Document sent. You can complete the task now.",
+        "success",
+      );
       setShowForm(false);
       setFile(null);
       onChanged?.(result.receipt);
@@ -202,21 +206,17 @@ export function PaymentProofPanel({
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h2 className="text-sm font-semibold text-foreground">Upload receipt</h2>
+          <h2 className="text-sm font-semibold text-foreground">
+            Upload document
+          </h2>
           <p className="mt-1 text-sm text-muted">
-            Send a photo, PDF, or document as proof. The user will accept or
-            reject it.
+            Send a receipt or any relevant file to the client. You can replace
+            it before completing the task — no client approval needed.
           </p>
         </div>
         {receipt ? (
           <Badge variant={statusVariant(receipt.status)}>
-            {receipt.status === "PENDING"
-              ? "Waiting"
-              : receipt.status === "ACCEPTED"
-                ? "Accepted"
-                : receipt.status === "REJECTED"
-                  ? "Rejected"
-                  : "Replaced"}
+            {badgeLabel(receipt.status)}
           </Badge>
         ) : null}
       </div>
@@ -225,8 +225,7 @@ export function PaymentProofPanel({
         <div
           className={cn(
             "mt-4 rounded-xl border px-4 py-3",
-            waiting && "border-amber-200 bg-amber-50",
-            accepted && "border-emerald-200 bg-emerald-50",
+            sent && "border-emerald-200 bg-emerald-50",
             rejected && "border-red-200 bg-red-50",
             receipt.status === "SUPERSEDED" && "border-border bg-surface-hover",
           )}
@@ -234,9 +233,10 @@ export function PaymentProofPanel({
           <p className="text-sm font-semibold text-foreground">
             {receiptStatusLabel(receipt.status)}
           </p>
-          {accepted ? (
+          {sent ? (
             <p className="mt-0.5 text-sm text-muted">
-              You can complete the task now.
+              The client can view this file. You can complete the task now, or
+              replace the file if you uploaded the wrong one.
             </p>
           ) : null}
           {rejected && receipt.rejectReason ? (
@@ -260,25 +260,27 @@ export function PaymentProofPanel({
         </div>
       ) : closed ? null : (
         <p className="mt-3 rounded-lg border border-dashed border-border bg-surface-hover px-3 py-2 text-sm text-muted">
-          No receipt yet. Upload one after the user confirms the booking
+          No document yet. Upload one after the client confirms the booking
           details.
         </p>
       )}
 
-      {canSend && receipt && !formOpen && !accepted ? (
+      {canSend && receipt && !formOpen ? (
         <button
           type="button"
           className="mt-3 text-sm font-semibold text-accent hover:text-accent-hover"
           onClick={() => setShowForm(true)}
         >
-          Upload a new receipt
+          Replace document
         </button>
       ) : null}
 
       {formOpen ? (
         <div className="mt-4 space-y-3 border-t border-border pt-4">
           <div>
-            <Label htmlFor="receipt-file">Receipt file</Label>
+            <Label htmlFor="receipt-file">
+              {receipt ? "Replacement file" : "Document file"}
+            </Label>
             <input
               ref={inputRef}
               id="receipt-file"
@@ -319,20 +321,35 @@ export function PaymentProofPanel({
               maxLength={RECEIPT_NOTE_MAX}
             />
           </div>
-          <Button
-            type="button"
-            loading={pending}
-            disabled={pending}
-            onClick={send}
-          >
-            Upload receipt
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              loading={pending}
+              disabled={pending}
+              onClick={send}
+            >
+              {receipt ? "Replace and send" : "Send to client"}
+            </Button>
+            {receipt && showForm && sent ? (
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={pending}
+                onClick={() => {
+                  setShowForm(false);
+                  setFile(null);
+                }}
+              >
+                Cancel
+              </Button>
+            ) : null}
+          </div>
         </div>
       ) : null}
 
       {closed ? (
         <p className="mt-3 text-sm text-muted">
-          This task is closed. You cannot upload a receipt.
+          This task is closed. You cannot upload a document.
         </p>
       ) : null}
     </section>

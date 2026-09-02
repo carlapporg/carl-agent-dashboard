@@ -25,13 +25,13 @@ const STATUS_OPTIONS = [
   {
     value: "WAITING_FOR_PAYMENT" as const,
     label: "Waiting for Payment",
-    hint: "Shown after Task Details are approved, until Payment Proof is accepted.",
+    hint: "Shown after Task Details are approved, until you upload a document.",
     selectable: false,
   },
   {
     value: "COMPLETED" as const,
     label: "Completed",
-    hint: "Only after Payment Proof Confirmation is accepted.",
+    hint: "Available after you send a document to the client.",
     selectable: true,
   },
   {
@@ -187,12 +187,12 @@ export function TaskStatusForm({
                 </span>
                 <span className="text-xs text-muted">
                   {option.value === "COMPLETED" && blockComplete
-                    ? "Locked until the user accepts the receipt."
+                    ? "Locked until you send a document to the client."
                     : option.value === "IN_PROGRESS" && current === "WAITING_FOR_USER"
                       ? "Goes back to In Progress if the customer rejects Task Details."
                       : option.value === "IN_PROGRESS" &&
                           current === "WAITING_FOR_PAYMENT"
-                        ? "Available again after Payment Proof is accepted or rejected."
+                        ? "Available again after you upload a document."
                         : option.hint}
                 </span>
               </span>

@@ -4,9 +4,8 @@ import {
   type TaskConfirmation,
 } from "@/types/confirmation";
 import {
-  isReceiptAccepted,
-  isReceiptPending,
   isReceiptRejected,
+  isReceiptSent,
   type TaskReceipt,
 } from "@/types/receipt";
 import type { Task, TaskStatus } from "@/types/task";
@@ -58,8 +57,8 @@ export function workflowStagesForTask(_task: Task): WorkflowStage[] {
 /**
  * Status shown in the UI (workflow overlay on Nest backend status):
  * - Waiting for Customer — only while Task Details Confirmation is PENDING
- * - Waiting for Payment — details approved, receipt not yet accepted
- * - In Progress — working, declined details, or receipt accepted (ready to complete)
+ * - Waiting for Payment — details approved, document not uploaded yet
+ * - In Progress — working, declined details, or document sent (ready to complete)
  * Chat / messages never drive this overlay.
  * Cancelled Nest states are shown as Failed.
  */
@@ -100,7 +99,7 @@ export function displayedTaskStatus(
       return "in_progress";
     }
     if (isConfirmationConfirmed(confirmation)) {
-      if (isReceiptAccepted(receipt)) return "in_progress";
+      if (isReceiptSent(receipt)) return "in_progress";
       return "waiting_for_payment";
     }
     if (task.status === "waiting_for_payment") return "waiting_for_payment";
@@ -121,7 +120,7 @@ export function displayedTaskStatus(
     return "in_progress";
   }
   if (isConfirmationConfirmed(confirmation)) {
-    if (isReceiptAccepted(receipt)) return "in_progress";
+    if (isReceiptSent(receipt)) return "in_progress";
     return "waiting_for_payment";
   }
   if (task.status === "waiting_for_payment") return "waiting_for_payment";
@@ -458,7 +457,7 @@ export function canCompleteTask(
 ): boolean {
   if (isClosedTask(task) || !hasStartedWork(task)) return false;
   if (!isConfirmationConfirmed(confirmation)) return false;
-  if (!isReceiptAccepted(receipt)) return false;
+  if (!isReceiptSent(receipt)) return false;
   return true;
 }
 
@@ -482,13 +481,11 @@ export function completeGateReasons(
       reasons.push("Send task details and wait for confirmation");
     }
   }
-  if (!isReceiptAccepted(receipt)) {
-    if (isReceiptPending(receipt)) {
-      reasons.push("Wait for the user to review the receipt");
-    } else if (isReceiptRejected(receipt)) {
-      reasons.push("User rejected the receipt. Upload a new one");
+  if (!isReceiptSent(receipt)) {
+    if (isReceiptRejected(receipt)) {
+      reasons.push("Upload a new document to replace the previous one");
     } else if (isConfirmationConfirmed(confirmation)) {
-      reasons.push("Upload a receipt and wait for the user to accept it");
+      reasons.push("Upload a receipt or document and send it to the client");
     }
   }
   return reasons;

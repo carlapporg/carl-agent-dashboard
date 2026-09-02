@@ -107,7 +107,7 @@ export default async function TaskWorkspacePage({ params }: TaskPageProps) {
     ? await getTaskConfirmationCached(task.id).catch(() => null)
     : null;
 
-  // Payment Proof Confirmation — separate endpoint; only after details CONFIRMED.
+  // Document upload — separate endpoint; only after details CONFIRMED.
   const receipt = shouldFetchTaskReceipt(
     confirmation?.status,
     task.backendStatus,

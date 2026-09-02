@@ -4,9 +4,14 @@ import { useEffect, useState } from "react";
 import { useOps } from "@/features/ops/ops-provider";
 import { cn } from "@/lib/utils/cn";
 
+/**
+ * Nest only offers tasks to agents with a live Socket.IO session.
+ * Show the same warning in local and production whenever we are not connected.
+ */
 export function WsConnectionBanner() {
   const ops = useOps();
-  const connected = ops?.connected ?? true;
+  // Only true means connected — never assume connected when ops is missing.
+  const connected = ops?.connected === true;
   const [show, setShow] = useState(false);
 
   useEffect(() => {
@@ -27,8 +32,8 @@ export function WsConnectionBanner() {
       )}
       role="status"
     >
-      Live connection dropped. Reconnecting and checking the task queue so you
-      do not miss an offer.
+      Live connection is down. Nest cannot offer you tasks until this reconnects.
+      Reconnecting and checking the task queue…
     </div>
   );
 }

@@ -118,10 +118,11 @@ export function connectAgentSocket(origin: string, token: string): Socket {
     current = null;
   }
 
-  // Proxy mode: polling first — more reliable through Vercel HTTP rewrites.
-  // Direct mode: prefer websocket as before.
+  // Proxy mode (HTTPS page → HTTP Nest via Next rewrite): polling only.
+  // Vercel rewrites often fail WebSocket upgrade; polling still registers the agent.
+  // Direct mode (local HTTP → Nest HTTP): prefer websocket.
   const transports: ("websocket" | "polling")[] = viaSameOriginProxy
-    ? ["polling", "websocket"]
+    ? ["polling"]
     : ["websocket", "polling"];
 
   current = io(url, {
@@ -129,9 +130,10 @@ export function connectAgentSocket(origin: string, token: string): Socket {
     query: { token },
     path: "/socket.io",
     extraHeaders: extraHeadersFor(url),
+    withCredentials: true,
     transports,
     rememberUpgrade: !viaSameOriginProxy,
-    upgrade: true,
+    upgrade: !viaSameOriginProxy,
     reconnection: true,
     reconnectionAttempts: Infinity,
     reconnectionDelay: 1_000,

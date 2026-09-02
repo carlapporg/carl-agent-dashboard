@@ -58,8 +58,9 @@ export const API_ENDPOINTS = {
     taskConfirmation: (taskId: string) =>
       `/agents/me/tasks/${taskId}/confirmation` as const,
     /**
-     * GET latest receipt (any status). 404 if none.
+     * GET latest receipt/document (any status). 404 if none.
      * POST multipart { file, note? } — booking confirmation must be CONFIRMED.
+     * Client approval is not required; replace by posting again.
      */
     taskReceipt: (taskId: string) =>
       `/agents/me/tasks/${taskId}/receipt` as const,

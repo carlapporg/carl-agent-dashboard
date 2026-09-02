@@ -11,7 +11,10 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { getAvailabilityAction } from "@/features/agents/actions";
+import {
+  getAvailabilityAction,
+  setAvailabilityAction,
+} from "@/features/agents/actions";
 import {
   normalizePresence,
 } from "@/lib/agent/presence";
@@ -49,6 +52,7 @@ import { getOpenTasksAction } from "@/features/dashboard/actions";
 import { parseIncomingTaskMessage, previewForIncomingMessage } from "@/lib/realtime/parse-task-message";
 import {
   connectAgentSocket,
+  emitAgentAvailability,
   ensureAgentSocketConnected,
   joinTaskRoom,
   leaveTaskRoom,
@@ -630,11 +634,25 @@ export function AgentOpsProvider({
       }, 80);
     }
 
+    function registerPresenceWithNest() {
+      const status = normalizePresence(presenceRef.current);
+      emitAgentAvailability(status);
+      // Nest dispatch needs AVAILABLE/BUSY + an active socketId.
+      // Re-assert HTTP presence after connect so this socket is bound.
+      void setAvailabilityAction(status)
+        .then((row) => {
+          if (cancelled) return;
+          pausePresenceSyncUntil.current = Date.now() + 4_000;
+          setPresenceState(normalizePresence(row.status));
+        })
+        .catch(() => undefined);
+    }
+
     function onConnect() {
       window.clearTimeout(dropBannerTimer);
       setConnected(true);
       rejoinRooms();
-      void syncPresenceRef.current();
+      registerPresenceWithNest();
       const gap = disconnectedAt ? Date.now() - disconnectedAt : 0;
       disconnectedAt = 0;
       if (gap >= CATCH_UP_AFTER_GAP_MS) {
@@ -645,6 +663,8 @@ export function AgentOpsProvider({
     function onDisconnect(reason: string) {
       if (!disconnectedAt) disconnectedAt = Date.now();
       window.clearTimeout(dropBannerTimer);
+      // Mark down immediately so local + production UI stay consistent.
+      setConnected(false);
       dropBannerTimer = window.setTimeout(() => {
         if (cancelled || socket.connected) return;
         setConnected(false);
@@ -951,6 +971,7 @@ export function AgentOpsProvider({
     }
 
     function onConnectError(error: unknown) {
+      setConnected(false);
       const message =
         error && typeof error === "object" && "message" in error
           ? String((error as { message: unknown }).message)

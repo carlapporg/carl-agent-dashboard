@@ -65,9 +65,8 @@ import { offerWindowEnd } from "@/types/agent";
 import type { TaskConfirmation } from "@/types/confirmation";
 import { isConfirmationConfirmed } from "@/types/confirmation";
 import {
-  isReceiptAccepted,
-  isReceiptPending,
   isReceiptRejected,
+  isReceiptSent,
   type TaskReceipt,
 } from "@/types/receipt";
 import type { CustomerHistoryItem, CustomerProfile } from "@/types/customer";
@@ -251,14 +250,14 @@ export function TaskWorkspace({
   const closed = isClosedTask(task);
   const lockedReadOnly = readOnly || closed;
   const detailsConfirmed = isConfirmationConfirmed(confirmation);
-  const receiptAccepted = isReceiptAccepted(receipt);
-  const bothConfirmed = detailsConfirmed && receiptAccepted;
+  const receiptSent = isReceiptSent(receipt);
+  const readyToComplete = detailsConfirmed && receiptSent;
   const actionLabel = lockedReadOnly
     ? null
     : primaryActionLabel(task, confirmation, receipt);
   const started = hasStartedWork(task);
   const gateReasons = completeGateReasons(task, confirmation, receipt);
-  const bookingLocked = !lockedReadOnly && started && !bothConfirmed;
+  const bookingLocked = !lockedReadOnly && started && !readyToComplete;
   const showCompleteHint =
     !lockedReadOnly &&
     started &&
@@ -318,8 +317,8 @@ export function TaskWorkspace({
 
   function confirmComplete() {
     if (isClosedTask(task)) return;
-    if (!isConfirmationConfirmed(confirmation) || !isReceiptAccepted(receipt)) {
-      toast("Wait for the user to accept the receipt before completing.", "error");
+    if (!isConfirmationConfirmed(confirmation) || !isReceiptSent(receipt)) {
+      toast("Send a document to the client before completing.", "error");
       setCompleteOpen(false);
       return;
     }
@@ -452,11 +451,9 @@ export function TaskWorkspace({
                       ? "The client declined the details. Send a new confirmation below."
                       : !detailsConfirmed
                         ? "Send the task details confirmation before you book."
-                        : isReceiptPending(receipt)
-                          ? "Waiting for the user to review the receipt."
-                          : isReceiptRejected(receipt)
-                            ? "The user rejected the receipt. Upload a new one below."
-                            : "Upload a receipt and wait for the user to accept it before you complete."
+                        : isReceiptRejected(receipt)
+                          ? "Upload a new document below, then you can complete."
+                          : "Upload a receipt or document and send it to the client, then you can complete."
                   : null}
               </p>
             ) : null}
@@ -500,14 +497,14 @@ export function TaskWorkspace({
                 markTaskReceiptKnown(task.id);
                 setReceipt(next);
                 ops?.setLiveReceipt(next);
-                if (next.status === "PENDING") {
+                if (isReceiptSent(next)) {
                   setTask({
-                    ...withBackendStatus(task, "WAITING_FOR_USER"),
-                    status: "waiting_for_payment",
+                    ...withBackendStatus(task, "IN_PROGRESS"),
+                    status: "in_progress",
                   });
                   ops?.patchLiveTask(
                     task.id,
-                    liveStatusPatch("WAITING_FOR_USER", "waiting_for_payment"),
+                    liveStatusPatch("IN_PROGRESS", "in_progress"),
                     task,
                   );
                 }
@@ -520,7 +517,7 @@ export function TaskWorkspace({
             task={task}
             displayStatus={viewTask.status}
             disabled={!canUpdateAgentStatus(task)}
-            blockComplete={!bothConfirmed}
+            blockComplete={!readyToComplete}
             onUpdated={(status) => {
               setTask(withBackendStatus(task, status));
               ops?.patchLiveTask(task.id, {
@@ -622,7 +619,7 @@ export function TaskWorkspace({
         title="Complete this booking?"
         description={
           gateReasons.length === 0
-            ? "The user accepted the receipt. Mark this booking complete?"
+            ? "Document is on file. Mark this booking complete?"
             : `Still open: ${gateReasons.join("; ")}`
         }
         confirmLabel="Complete booking"

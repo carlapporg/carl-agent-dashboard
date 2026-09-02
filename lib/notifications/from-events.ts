@@ -232,12 +232,12 @@ export function parseReceiptNotification(
     kind,
     title:
       kind === "receipt_accepted"
-        ? "User accepted the receipt"
-        : "User rejected the receipt",
+        ? "Document update"
+        : "Document needs a replace",
     body:
       kind === "receipt_accepted"
-        ? "You can complete the task now."
-        : truncatedReason || "Upload a new receipt.",
+        ? "You can complete the task when ready."
+        : truncatedReason || "Upload a new document.",
     createdAt:
       parsed?.decidedAt ?? parsed?.updatedAt ?? new Date().toISOString(),
     taskId,

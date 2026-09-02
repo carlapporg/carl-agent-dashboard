@@ -41,8 +41,8 @@ export const receiptApi = {
   },
 
   /**
-   * Upload one receipt file. Previous PENDING receipt becomes SUPERSEDED.
-   * Task status becomes WAITING_FOR_USER.
+   * Upload one receipt/document. Previous active receipt becomes SUPERSEDED.
+   * Client approval is not required; agent may complete after upload.
    */
   async upload(
     taskId: string,

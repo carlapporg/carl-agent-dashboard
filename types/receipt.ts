@@ -81,20 +81,29 @@ export function isReceiptRejected(
 }
 
 /**
+ * Document has been uploaded and sent to the client.
+ * Client approval is not required — PENDING or ACCEPTED both count as sent.
+ */
+export function isReceiptSent(
+  receipt?: Pick<TaskReceipt, "status"> | null,
+): boolean {
+  return isReceiptPending(receipt) || isReceiptAccepted(receipt);
+}
+
+/**
  * GET receipt only after Task Details are approved and a receipt may exist.
  * Never probe when confirmation is still missing / pending — that stage is
- * Task Details Confirmation, not Payment Proof.
+ * Task Details Confirmation, not the document upload step.
  */
 export function shouldFetchTaskReceipt(
   confirmationStatus?: string | null,
   taskStatus?: string | null,
 ): boolean {
   if (confirmationStatus !== "CONFIRMED") return false;
-  // Only when Nest implies the customer may still be waiting, or the task is done.
-  // Do not probe on a blind IN_PROGRESS without a confirmed details stage loaded.
   return (
     taskStatus === "WAITING_FOR_USER" ||
     taskStatus === "WAITING_FOR_AGENT" ||
+    taskStatus === "IN_PROGRESS" ||
     taskStatus === "COMPLETED"
   );
 }
@@ -102,13 +111,13 @@ export function shouldFetchTaskReceipt(
 export function receiptStatusLabel(status: TaskReceiptStatus): string {
   switch (status) {
     case "PENDING":
-      return "Waiting for user to review receipt";
+      return "Document sent to the client";
     case "ACCEPTED":
-      return "User accepted the receipt";
+      return "Document on file";
     case "REJECTED":
-      return "User rejected the receipt";
+      return "Previous document was rejected — upload a new one";
     case "SUPERSEDED":
-      return "Replaced by a newer receipt";
+      return "Replaced by a newer document";
   }
 }
 
