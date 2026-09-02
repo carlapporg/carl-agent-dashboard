@@ -18,6 +18,8 @@ export const USER_MESSAGES = {
     "Unable to connect to server. Please check your internet connection and try again.",
   serverUnavailable: "Server is temporarily unavailable. Please try again later.",
   unknown: "Something went wrong. Please try again.",
+  apiNotConfigured:
+    "This deployment is missing API_BASE_URL. Add it in Vercel → Settings → Environment Variables, then redeploy.",
   rateLimited: "Too many attempts. Please wait a moment and try again.",
   sessionExpired: "Your session expired. Please sign in again.",
   wrongPassword: "Current password is incorrect.",
@@ -83,6 +85,11 @@ export function classifyAuthError(
     if (context === "login") return "credentials";
     if (context === "password") return "wrong_password";
     return "session";
+  }
+
+  // Nest validation / bad request during login → treat as credentials
+  if (status === 400 && context === "login") {
+    return "credentials";
   }
 
   return "unknown";

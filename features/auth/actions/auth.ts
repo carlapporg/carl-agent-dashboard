@@ -20,6 +20,7 @@ import {
   getSession,
   updateSessionUser,
 } from "@/lib/auth/session";
+import { env } from "@/lib/config/env";
 import { ROUTES } from "@/lib/constants/routes";
 import { parseLoginFormData } from "@/features/auth/schemas/login";
 import { parseRegisterFormData } from "@/features/auth/schemas/register";
@@ -55,6 +56,12 @@ export async function loginAction(
   const email = validated.data.email;
   const key = await clientKey(email);
 
+  // .env.staging / .env.production are gitignored — Vercel must set API_BASE_URL.
+  if (!env.isApiConfigured) {
+    logAuthEvent("login_failed", { email, reason: "api_not_configured" });
+    return { message: USER_MESSAGES.apiNotConfigured };
+  }
+
   try {
     assertLoginAllowed(key);
   } catch (error) {
@@ -78,12 +85,30 @@ export async function loginAction(
     }
 
     await destroySession();
-    await createSession({
-      accessToken: result.accessToken,
-      refreshToken: result.refreshToken,
-      user: result.user,
-      rememberMe: Boolean(validated.data.rememberMe),
-    });
+    try {
+      await createSession({
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+        user: result.user,
+        rememberMe: Boolean(validated.data.rememberMe),
+      });
+    } catch (sessionError) {
+      recordLoginFailure(key);
+      logAuthEvent("login_failed", {
+        email,
+        reason: "session_cookie",
+        status: undefined,
+      });
+      const detail =
+        sessionError instanceof Error ? sessionError.message : "";
+      if (/cookie|size|large/i.test(detail)) {
+        return {
+          message:
+            "Sign-in succeeded but the session cookie is too large for the browser. Contact support.",
+        };
+      }
+      return { message: USER_MESSAGES.unknown };
+    }
 
     try {
       const profile = await apiRequest(API_ENDPOINTS.agents.me, {

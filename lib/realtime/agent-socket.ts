@@ -42,6 +42,34 @@ function extraHeadersFor(origin: string): Record<string, string> {
     : {};
 }
 
+/**
+ * HTTPS page + HTTP Nest would be blocked (mixed content).
+ * Connect to this app's origin instead; next.config rewrites /socket.io → Nest.
+ */
+export function resolveBrowserSocketUrl(configuredOrigin: string): {
+  url: string;
+  viaSameOriginProxy: boolean;
+} {
+  const trimmed = configuredOrigin.trim().replace(/\/$/, "");
+  if (!trimmed || typeof window === "undefined") {
+    return { url: trimmed, viaSameOriginProxy: false };
+  }
+
+  let targetIsHttp = false;
+  try {
+    targetIsHttp = new URL(trimmed).protocol === "http:";
+  } catch {
+    return { url: trimmed, viaSameOriginProxy: false };
+  }
+
+  const pageIsHttps = window.location.protocol === "https:";
+  if (pageIsHttps && targetIsHttp) {
+    return { url: window.location.origin, viaSameOriginProxy: true };
+  }
+
+  return { url: trimmed, viaSameOriginProxy: false };
+}
+
 function applyAuth(token: string) {
   latestToken = token;
   if (!current) return;
@@ -76,7 +104,10 @@ export function connectAgentSocket(origin: string, token: string): Socket {
     clearTimeout(releaseTimer);
     releaseTimer = null;
   }
-  if (current && currentOrigin === origin) {
+
+  const { url, viaSameOriginProxy } = resolveBrowserSocketUrl(origin);
+
+  if (current && currentOrigin === url) {
     applyAuth(token);
     ensureAgentSocketConnected();
     return current;
@@ -86,12 +117,21 @@ export function connectAgentSocket(origin: string, token: string): Socket {
     current.disconnect();
     current = null;
   }
-  current = io(origin, {
+
+  // Proxy mode: polling first — more reliable through Vercel HTTP rewrites.
+  // Direct mode: prefer websocket as before.
+  const transports: ("websocket" | "polling")[] = viaSameOriginProxy
+    ? ["polling", "websocket"]
+    : ["websocket", "polling"];
+
+  current = io(url, {
     auth: handshakeAuth,
     query: { token },
-    extraHeaders: extraHeadersFor(origin),
-    transports: ["websocket", "polling"],
-    rememberUpgrade: true,
+    path: "/socket.io",
+    extraHeaders: extraHeadersFor(url),
+    transports,
+    rememberUpgrade: !viaSameOriginProxy,
+    upgrade: true,
     reconnection: true,
     reconnectionAttempts: Infinity,
     reconnectionDelay: 1_000,
@@ -100,7 +140,7 @@ export function connectAgentSocket(origin: string, token: string): Socket {
     timeout: 20_000,
     autoConnect: true,
   });
-  currentOrigin = origin;
+  currentOrigin = url;
   applyAuth(token);
   return current;
 }
