@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PasswordField } from "@/components/ui/password-field";
 import { ROUTES } from "@/lib/constants/routes";
+import { clearManualPresence } from "@/lib/agent/presence";
 import { cn } from "@/lib/utils/cn";
 import type { LoginFormState } from "@/types/auth";
 
@@ -88,6 +89,7 @@ export function LoginForm({ demoMode = false }: LoginFormProps) {
   useEffect(() => {
     if (!state?.success) return;
 
+    clearManualPresence();
     setShowSuccess(true);
     const destination =
       nextPath &&

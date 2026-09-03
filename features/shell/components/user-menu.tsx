@@ -15,6 +15,7 @@ import { ConfirmDialog } from "@/components/ui/dialog";
 import { AgentAvatar } from "@/components/ui/agent-avatar";
 import { logoutAction } from "@/features/auth/actions/auth";
 import { useClearAppCache } from "@/features/agents/hooks";
+import { clearManualPresence } from "@/lib/agent/presence";
 import { ROUTES } from "@/lib/constants/routes";
 import { cn } from "@/lib/utils/cn";
 import { getAgentDisplayName, type BackendUser } from "@/types/user";
@@ -298,6 +299,7 @@ export function UserMenu({
         loading={pending}
         onConfirm={() => {
           clearCache();
+          clearManualPresence();
           startTransition(() => {
             void logoutAction();
           });

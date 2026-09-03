@@ -11,6 +11,7 @@ import {
   normalizePresence,
   presenceToUi,
   uiToPresence,
+  writeManualPresence,
 } from "@/lib/agent/presence";
 import { cn } from "@/lib/utils/cn";
 import type { AgentPresence } from "@/types/agent";
@@ -74,6 +75,7 @@ export function AvailabilityToggle({
     void setAvailabilityAction(nextWrite)
       .then((row) => {
         const synced = normalizePresence(row.status);
+        writeManualPresence(synced);
         ops?.setPresence(synced);
         emitAgentAvailability(synced);
       })

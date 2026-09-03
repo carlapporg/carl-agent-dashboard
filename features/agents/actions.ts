@@ -15,8 +15,11 @@ export async function getPresenceHintAction(): Promise<AgentPresence> {
   return row.status;
 }
 
-export async function setAvailabilityAction(status: AgentPresenceWrite) {
-  return agentsApi.setAvailability(status);
+export async function setAvailabilityAction(
+  status: AgentPresenceWrite,
+  token?: string | null,
+) {
+  return agentsApi.setAvailability(status, token);
 }
 
 export async function saveSkillsAction(

@@ -27,6 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PasswordField } from "@/components/ui/password-field";
 import { ROUTES } from "@/lib/constants/routes";
+import { clearManualPresence } from "@/lib/agent/presence";
 import { cn } from "@/lib/utils/cn";
 import type { RegisterFormState } from "@/types/auth";
 
@@ -99,6 +100,7 @@ export function RegisterForm({ demoMode = false }: RegisterFormProps) {
   useEffect(() => {
     if (!state?.success) return;
 
+    clearManualPresence();
     setShowSuccess(true);
     toast("Account created. Welcome to Carl!", "success");
     const timer = window.setTimeout(() => {

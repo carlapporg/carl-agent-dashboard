@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { authApi } from "@/lib/api/auth";
+import { agentsApi } from "@/lib/api/agents";
 import { apiRequest, clearServerAccessTokenMemory } from "@/lib/api/client";
 import { API_ENDPOINTS } from "@/lib/api/endpoints";
 import { toUserMessage, USER_MESSAGES } from "@/lib/api/error-handler";
@@ -134,6 +135,13 @@ export async function loginAction(
       // Login payload user is already from Backend.
     }
 
+    // Agents start Available so Nest can offer tasks as soon as the socket connects.
+    try {
+      await agentsApi.setAvailability("AVAILABLE", result.accessToken);
+    } catch {
+      // Socket connect will re-assert presence; do not block login.
+    }
+
     recordLoginSuccess(key);
     logAuthEvent("login_success", { email });
   } catch (error) {
@@ -228,6 +236,12 @@ export async function registerAction(
       }
     } catch {
       // Registered user payload is sufficient.
+    }
+
+    try {
+      await agentsApi.setAvailability("AVAILABLE", result.accessToken);
+    } catch {
+      // Socket connect will re-assert presence.
     }
 
     recordLoginSuccess(key);

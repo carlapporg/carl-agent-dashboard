@@ -16,6 +16,7 @@ import {
   setAvailabilityAction,
 } from "@/features/agents/actions";
 import {
+  desiredPresenceForSession,
   normalizePresence,
 } from "@/lib/agent/presence";
 import { offerWasAccepted, isRejectingOrRejected } from "@/features/ops/auto-accept-offer";
@@ -308,7 +309,20 @@ export function AgentOpsProvider({
     try {
       const row = await getAvailabilityAction();
       if (Date.now() < pausePresenceSyncUntil.current) return;
-      setPresenceState(normalizePresence(row.status));
+      const fromBackend = normalizePresence(row.status);
+      const desired = desiredPresenceForSession(fromBackend);
+      if (desired !== fromBackend) {
+        // Nest often flips to OFFLINE when the socket drops (refresh / blip).
+        pausePresenceSyncUntil.current = Date.now() + 4_000;
+        setPresenceState(desired);
+        void setAvailabilityAction(desired)
+          .then((next) => {
+            setPresenceState(normalizePresence(next.status));
+          })
+          .catch(() => undefined);
+        return;
+      }
+      setPresenceState(fromBackend);
     } catch {
       // Keep the last known value when the API is unreachable.
     }
@@ -316,6 +330,14 @@ export function AgentOpsProvider({
 
   const syncPresenceRef = useRef(syncPresenceFromBackend);
   syncPresenceRef.current = syncPresenceFromBackend;
+
+  useEffect(() => {
+    // Prefer Available on dashboard entry; Nest OFFLINE from a dropped socket is restored.
+    const desired = desiredPresenceForSession(
+      normalizePresence(initialPresence ?? "AVAILABLE"),
+    );
+    setPresenceState(desired);
+  }, [initialPresence]);
 
   useEffect(() => {
     void syncPresenceFromBackend();
@@ -635,15 +657,18 @@ export function AgentOpsProvider({
     }
 
     function registerPresenceWithNest() {
-      const status = normalizePresence(presenceRef.current);
+      const status = desiredPresenceForSession(presenceRef.current);
+      setPresenceState(status);
+      presenceRef.current = status;
       emitAgentAvailability(status);
       // Nest dispatch needs AVAILABLE/BUSY + an active socketId.
-      // Re-assert HTTP presence after connect so this socket is bound.
       void setAvailabilityAction(status)
         .then((row) => {
           if (cancelled) return;
           pausePresenceSyncUntil.current = Date.now() + 4_000;
-          setPresenceState(normalizePresence(row.status));
+          const synced = normalizePresence(row.status);
+          setPresenceState(synced);
+          presenceRef.current = synced;
         })
         .catch(() => undefined);
     }

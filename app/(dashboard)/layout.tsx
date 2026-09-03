@@ -32,7 +32,10 @@ export default async function DashboardLayout({
   let initialPresence = normalizePresence("AVAILABLE");
   try {
     const row = await agentsApi.getAvailability();
-    initialPresence = normalizePresence(row.status);
+    const status = normalizePresence(row.status);
+    // Nest often reports OFFLINE after the previous tab's socket closed (refresh).
+    // Client restores Available on connect unless the agent chose Busy/Offline.
+    initialPresence = status === "OFFLINE" ? "AVAILABLE" : status;
   } catch {
     // Client syncs again after mount.
   }

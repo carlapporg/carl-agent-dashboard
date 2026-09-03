@@ -109,13 +109,17 @@ export const agentsApi = {
     });
   },
 
-  async setAvailability(status: AgentPresenceWrite): Promise<AgentPresenceState> {
+  async setAvailability(
+    status: AgentPresenceWrite,
+    token?: string | null,
+  ): Promise<AgentPresenceState> {
     return apiRequest(API_ENDPOINTS.agents.availability, {
       method: "PATCH",
       body: { status },
       schema: agentPresenceStateSchema,
       dedupe: false,
       looseEnvelope: true,
+      token: token ?? undefined,
     });
   },
 

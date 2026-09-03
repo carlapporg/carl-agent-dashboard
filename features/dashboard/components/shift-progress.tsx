@@ -239,12 +239,17 @@ export function TasksPerHourPanel({ className }: { className?: string }) {
   const deltaLabel =
     delta == null ? null : `${delta > 0 ? "+" : ""}${delta.toFixed(1)}%`;
   const trendingUp = delta == null || delta >= 0;
+  // Graph draws all 24 hourly buckets for today. The badge must not only show
+  // the current hour (often 0) or it looks empty while the curve still peaks.
+  const hourIndex = new Date().getUTCHours();
+  const thisHourCount = Math.round(hourly.points[hourIndex] ?? 0);
+  const todayTotal = Math.round(
+    hourly.points.reduce((sum, value) => sum + value, 0),
+  );
   const subtitle =
     hourly.label && hourly.label !== "Today"
       ? hourly.label
-      : trendingUp
-        ? "Trending up this hour"
-        : "Trending down this hour";
+      : `${thisHourCount} this hour · ${todayTotal} today`;
 
   return (
     <div
@@ -263,18 +268,27 @@ export function TasksPerHourPanel({ className }: { className?: string }) {
             Keep the streak going
           </p>
         </div>
-        {deltaLabel ? (
+        <div className="flex shrink-0 flex-col items-end gap-1">
           <span
-            className={cn(
-              "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums",
-              trendingUp
-                ? "bg-success-soft text-success-foreground"
-                : "bg-destructive/10 text-destructive",
-            )}
+            className="rounded-full bg-accent-soft px-2.5 py-0.5 text-sm font-bold tabular-nums text-accent"
+            title="Total tasks today (all hours on the graph)"
           >
-            {deltaLabel}
+            {todayTotal}
           </span>
-        ) : null}
+          {deltaLabel ? (
+            <span
+              className={cn(
+                "rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums",
+                trendingUp
+                  ? "bg-success-soft text-success-foreground"
+                  : "bg-destructive/10 text-destructive",
+              )}
+              title="Change vs previous period"
+            >
+              {deltaLabel}
+            </span>
+          ) : null}
+        </div>
       </div>
 
       <div className="relative mt-2.5">
@@ -282,7 +296,7 @@ export function TasksPerHourPanel({ className }: { className?: string }) {
           viewBox={`0 0 ${chart.w} ${chart.h}`}
           className="h-[6.5rem] w-full overflow-visible sm:h-[7rem]"
           role="img"
-          aria-label="Tasks per hour"
+          aria-label={`Tasks per hour. ${thisHourCount} this hour, ${todayTotal} today.`}
           preserveAspectRatio="none"
         >
           <defs>
