@@ -2,11 +2,12 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { updateTaskAgentStatusAction } from "@/features/tasks/actions/task-actions";
+import { CompleteTaskReceiptDialog } from "@/features/tasks/components/complete-task-receipt-dialog";
 import { formatStatus } from "@/features/tasks/components/status-badge";
-import { ConfirmDialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/providers/toast-provider";
 import { isClosedTask } from "@/features/tasks/lib/workflow";
+import type { TaskReceipt } from "@/types/receipt";
 import type { Task, TaskStatus } from "@/types/task";
 
 const STATUS_OPTIONS = [
@@ -25,13 +26,13 @@ const STATUS_OPTIONS = [
   {
     value: "WAITING_FOR_PAYMENT" as const,
     label: "Waiting for Payment",
-    hint: "Shown after Task Details are approved, until you upload a document.",
+    hint: "Shown after Task Details are approved, until you complete with a document.",
     selectable: false,
   },
   {
     value: "COMPLETED" as const,
     label: "Completed",
-    hint: "Available after you send a document to the client.",
+    hint: "Available after the client confirms task details. You upload the receipt when completing.",
     selectable: true,
   },
   {
@@ -53,7 +54,10 @@ type TaskStatusFormProps = {
   task: Task;
   displayStatus?: TaskStatus;
   disabled?: boolean;
+  /** True when Complete must wait (e.g. task details not confirmed yet). */
   blockComplete?: boolean;
+  receipt?: TaskReceipt | null;
+  onReceiptChanged?: (receipt: TaskReceipt) => void;
   onUpdated?: (status: "IN_PROGRESS" | "COMPLETED" | "FAILED" | "WAITING_FOR_USER") => void;
 };
 
@@ -71,6 +75,8 @@ export function TaskStatusForm({
   displayStatus,
   disabled,
   blockComplete = false,
+  receipt = null,
+  onReceiptChanged,
   onUpdated,
 }: TaskStatusFormProps) {
   const { toast } = useToast();
@@ -80,7 +86,7 @@ export function TaskStatusForm({
     current ?? "IN_PROGRESS",
   );
   const [pending, startTransition] = useTransition();
-  const [confirmComplete, setConfirmComplete] = useState(false);
+  const [completeOpen, setCompleteOpen] = useState(false);
 
   useEffect(() => {
     if (current) setStatus(current);
@@ -104,17 +110,21 @@ export function TaskStatusForm({
     if (!canSubmit) return;
     if (status === "COMPLETED") {
       if (blockComplete) {
-        toast("Wait for both confirmations before completing.", "error");
+        toast("Wait for the client to confirm task details first.", "error");
         return;
       }
-      setConfirmComplete(true);
+      setCompleteOpen(true);
       return;
     }
-    apply();
+    applyNonComplete();
   }
 
-  function apply() {
-    if (status === "WAITING_FOR_USER" || status === "WAITING_FOR_PAYMENT") {
+  function applyNonComplete() {
+    if (
+      status === "WAITING_FOR_USER" ||
+      status === "WAITING_FOR_PAYMENT" ||
+      status === "COMPLETED"
+    ) {
       return;
     }
     startTransition(async () => {
@@ -126,7 +136,6 @@ export function TaskStatusForm({
         }
         onUpdated?.(status);
         toast("Status updated.", "success");
-        setConfirmComplete(false);
       } catch (error) {
         toast(
           error instanceof Error ? error.message : "Could not update status.",
@@ -187,12 +196,12 @@ export function TaskStatusForm({
                 </span>
                 <span className="text-xs text-muted">
                   {option.value === "COMPLETED" && blockComplete
-                    ? "Locked until you send a document to the client."
+                    ? "Locked until the client confirms the task details."
                     : option.value === "IN_PROGRESS" && current === "WAITING_FOR_USER"
                       ? "Goes back to In Progress if the customer rejects Task Details."
                       : option.value === "IN_PROGRESS" &&
                           current === "WAITING_FOR_PAYMENT"
-                        ? "Available again after you upload a document."
+                        ? "Available again after you upload a document at Complete."
                         : option.hint}
                 </span>
               </span>
@@ -212,14 +221,16 @@ export function TaskStatusForm({
         </Button>
       </div>
 
-      <ConfirmDialog
-        open={confirmComplete}
-        onClose={() => setConfirmComplete(false)}
-        onConfirm={apply}
-        title="Mark this task completed?"
-        description="Nest will notify the client."
-        confirmLabel="Complete task"
-        loading={pending}
+      <CompleteTaskReceiptDialog
+        open={completeOpen}
+        taskId={task.id}
+        receipt={receipt}
+        onClose={() => setCompleteOpen(false)}
+        onCompleted={(nextReceipt) => {
+          if (nextReceipt) onReceiptChanged?.(nextReceipt);
+          setCompleteOpen(false);
+          onUpdated?.("COMPLETED");
+        }}
       />
     </section>
   );

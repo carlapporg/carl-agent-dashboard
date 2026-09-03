@@ -48,7 +48,7 @@ function statusHelp(status: TaskConfirmation["status"]): string {
     return "Waiting for the customer to approve or reject the details.";
   }
   if (status === "CONFIRMED") {
-    return "The client approved the details. Send payment proof next.";
+    return "The client approved the details. Click Complete Task to upload the receipt and finish.";
   }
   if (status === "DECLINED") {
     return "The client declined. Update the details and send a new confirmation.";

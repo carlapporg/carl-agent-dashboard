@@ -189,8 +189,8 @@ export function PaymentProofPanel({
       }
       toast(
         receipt
-          ? "Document replaced. You can complete the task now."
-          : "Document sent. You can complete the task now.",
+          ? "Document replaced."
+          : "Document sent. You can complete the task when ready.",
         "success",
       );
       setShowForm(false);
@@ -210,8 +210,8 @@ export function PaymentProofPanel({
             Upload document
           </h2>
           <p className="mt-1 text-sm text-muted">
-            Send a receipt or any relevant file to the client. You can replace
-            it before completing the task — no client approval needed.
+            Optional early upload. You can also upload when you click Complete
+            Task — the file is sent to the client, then the task is completed.
           </p>
         </div>
         {receipt ? (

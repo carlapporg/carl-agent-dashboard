@@ -24,7 +24,6 @@ import {
   type TaskChatThreadHandle,
 } from "@/features/tasks/components/task-chat-thread";
 import { TaskConfirmationPanel } from "@/features/tasks/components/task-confirmation-panel";
-import { PaymentProofPanel } from "@/features/tasks/components/payment-proof-panel";
 import { TaskCustomerSnippet } from "@/features/tasks/components/task-customer-snippet";
 import { TaskFacts } from "@/features/tasks/components/task-facts";
 import { PageChromeSetter } from "@/features/shell/page-chrome";
@@ -37,6 +36,7 @@ import {
 import { TaskStatusStepper } from "@/features/tasks/components/task-status-stepper";
 import { formatStatus } from "@/features/tasks/components/status-badge";
 import { TaskStatusForm } from "@/features/tasks/components/task-status-form";
+import { CompleteTaskReceiptDialog } from "@/features/tasks/components/complete-task-receipt-dialog";
 import { TaskSubtasks } from "@/features/tasks/components/task-subtasks";
 import {
   canCompleteTask,
@@ -52,7 +52,6 @@ import {
   messageClientHint,
   primaryActionLabel,
 } from "@/features/tasks/lib/workflow";
-import { ConfirmDialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/providers/toast-provider";
 import { useOps } from "@/features/ops/ops-provider";
@@ -64,11 +63,7 @@ import { cn } from "@/lib/utils/cn";
 import { offerWindowEnd } from "@/types/agent";
 import type { TaskConfirmation } from "@/types/confirmation";
 import { isConfirmationConfirmed } from "@/types/confirmation";
-import {
-  isReceiptRejected,
-  isReceiptSent,
-  type TaskReceipt,
-} from "@/types/receipt";
+import type { TaskReceipt } from "@/types/receipt";
 import type { CustomerHistoryItem, CustomerProfile } from "@/types/customer";
 import type { Itinerary } from "@/types/itinerary";
 import type { TimelineEvent } from "@/types/message";
@@ -250,8 +245,7 @@ export function TaskWorkspace({
   const closed = isClosedTask(task);
   const lockedReadOnly = readOnly || closed;
   const detailsConfirmed = isConfirmationConfirmed(confirmation);
-  const receiptSent = isReceiptSent(receipt);
-  const readyToComplete = detailsConfirmed && receiptSent;
+  const readyToComplete = detailsConfirmed;
   const actionLabel = lockedReadOnly
     ? null
     : primaryActionLabel(task, confirmation, receipt);
@@ -280,18 +274,15 @@ export function TaskWorkspace({
         behavior: "smooth",
         block: "start",
       });
-      return;
-    }
-    if (panel === "receipt") {
-      document.getElementById("panel-receipt")?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
     }
   }, [searchParams]);
 
   function runPrimary() {
     if (actionLabel === "Complete task" || actionLabel === "Complete booking") {
+      if (!isConfirmationConfirmed(confirmation)) {
+        toast("Wait for the client to confirm the task details first.", "error");
+        return;
+      }
       setCompleteOpen(true);
       return;
     }
@@ -315,28 +306,20 @@ export function TaskWorkspace({
     });
   }
 
-  function confirmComplete() {
-    if (isClosedTask(task)) return;
-    if (!isConfirmationConfirmed(confirmation) || !isReceiptSent(receipt)) {
-      toast("Send a document to the client before completing.", "error");
-      setCompleteOpen(false);
-      return;
+  function onTaskCompleted(nextReceipt: TaskReceipt | null) {
+    if (nextReceipt) {
+      markTaskReceiptKnown(task.id);
+      setReceipt(nextReceipt);
+      ops?.setLiveReceipt(nextReceipt);
     }
-    startTransition(async () => {
-      const snapshot = task;
-      setTask(withBackendStatus(task, "COMPLETED"));
-      ops?.patchLiveTask(
-        task.id,
-        liveStatusPatch("COMPLETED", "completed"),
-        task,
-      );
-      setCompleteOpen(false);
-      const result = await updateTaskAgentStatusAction(task.id, "COMPLETED");
-      if (!result.ok) {
-        setTask(snapshot);
-        toast(result.message, "error");
-      }
-    });
+    setTask(withBackendStatus(task, "COMPLETED"));
+    ops?.patchLiveTask(
+      task.id,
+      liveStatusPatch("COMPLETED", "completed"),
+      task,
+    );
+    setCompleteOpen(false);
+    router.refresh();
   }
 
   function rejectOffer() {
@@ -450,10 +433,8 @@ export function TaskWorkspace({
                     : confirmation?.status === "DECLINED"
                       ? "The client declined the details. Send a new confirmation below."
                       : !detailsConfirmed
-                        ? "Send the task details confirmation before you book."
-                        : isReceiptRejected(receipt)
-                          ? "Upload a new document below, then you can complete."
-                          : "Upload a receipt or document and send it to the client, then you can complete."
+                        ? "Send the task details confirmation before you can complete."
+                        : gateReasons[0] ?? null
                   : null}
               </p>
             ) : null}
@@ -487,37 +468,17 @@ export function TaskWorkspace({
             }}
           />
 
-          {detailsConfirmed ? (
-            <PaymentProofPanel
-              taskId={task.id}
-              taskStatus={task.backendStatus}
-              receipt={receipt}
-              disabled={lockedReadOnly}
-              onChanged={(next) => {
-                markTaskReceiptKnown(task.id);
-                setReceipt(next);
-                ops?.setLiveReceipt(next);
-                if (isReceiptSent(next)) {
-                  setTask({
-                    ...withBackendStatus(task, "IN_PROGRESS"),
-                    status: "in_progress",
-                  });
-                  ops?.patchLiveTask(
-                    task.id,
-                    liveStatusPatch("IN_PROGRESS", "in_progress"),
-                    task,
-                  );
-                }
-                router.refresh();
-              }}
-            />
-          ) : null}
-
           <TaskStatusForm
             task={task}
             displayStatus={viewTask.status}
             disabled={!canUpdateAgentStatus(task)}
-            blockComplete={!readyToComplete}
+            blockComplete={!detailsConfirmed}
+            receipt={receipt}
+            onReceiptChanged={(next) => {
+              markTaskReceiptKnown(task.id);
+              setReceipt(next);
+              ops?.setLiveReceipt(next);
+            }}
             onUpdated={(status) => {
               setTask(withBackendStatus(task, status));
               ops?.patchLiveTask(task.id, {
@@ -525,6 +486,7 @@ export function TaskWorkspace({
                 status: uiStatusFromAgent(status),
                 updatedAt: new Date().toISOString(),
               }, task);
+              if (status === "COMPLETED") router.refresh();
             }}
           />
 
@@ -612,18 +574,12 @@ export function TaskWorkspace({
         </div>
       </div>
 
-      <ConfirmDialog
+      <CompleteTaskReceiptDialog
         open={completeOpen}
+        taskId={task.id}
+        receipt={receipt}
         onClose={() => setCompleteOpen(false)}
-        onConfirm={confirmComplete}
-        title="Complete this booking?"
-        description={
-          gateReasons.length === 0
-            ? "Document is on file. Mark this booking complete?"
-            : `Still open: ${gateReasons.join("; ")}`
-        }
-        confirmLabel="Complete booking"
-        loading={pending}
+        onCompleted={onTaskCompleted}
       />
     </div>
     </>

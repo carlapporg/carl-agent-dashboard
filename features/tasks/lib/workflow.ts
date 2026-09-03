@@ -428,13 +428,42 @@ export function checklistProgressPercent(task: Task): number {
   return Math.round((done / steps.length) * 100);
 }
 
-/** 0% until Start; then checklist %; 100% when completed. */
+/**
+ * Status-based progress for the task header bar.
+ * Checklist % is separate (subtasks / checklist UI only).
+ */
 export function overallProgressPercent(task: Task): number {
   if (task.backendStatus === "COMPLETED" || task.status === "completed") {
     return 100;
   }
-  if (isClosedTask(task) || !hasStartedWork(task)) return 0;
-  return checklistProgressPercent(task);
+  if (
+    task.backendStatus === "FAILED" ||
+    task.backendStatus === "CANCELLED" ||
+    task.backendStatus === "REJECTED" ||
+    task.status === "failed" ||
+    task.status === "cancelled"
+  ) {
+    return 0;
+  }
+
+  if (task.status === "waiting_for_payment") {
+    return 75;
+  }
+  if (
+    task.backendStatus === "WAITING_FOR_USER" ||
+    task.status === "waiting_for_customer"
+  ) {
+    return 50;
+  }
+  if (
+    task.backendStatus === "IN_PROGRESS" ||
+    task.backendStatus === "WAITING_FOR_AGENT" ||
+    task.status === "in_progress"
+  ) {
+    return 25;
+  }
+  // OFFERED / ASSIGNED / queued — not started
+  return 0;
 }
 
 export type PrimaryActionLabel = "Start task" | "Complete task" | "Complete booking";
@@ -447,17 +476,17 @@ export function primaryActionLabel(
   if (isClosedTask(task) || isOfferOpen(task)) return null;
   if (canStartTask(task)) return "Start task";
   if (!canCompleteTask(task, confirmation, receipt)) return null;
-  return "Complete booking";
+  return "Complete task";
 }
 
 export function canCompleteTask(
   task: Task,
   confirmation?: TaskConfirmation | null,
-  receipt?: TaskReceipt | null,
+  _receipt?: TaskReceipt | null,
 ): boolean {
   if (isClosedTask(task) || !hasStartedWork(task)) return false;
   if (!isConfirmationConfirmed(confirmation)) return false;
-  if (!isReceiptSent(receipt)) return false;
+  // Receipt/document is collected in the Complete Task modal — not a pre-gate.
   return true;
 }
 
@@ -481,13 +510,8 @@ export function completeGateReasons(
       reasons.push("Send task details and wait for confirmation");
     }
   }
-  if (!isReceiptSent(receipt)) {
-    if (isReceiptRejected(receipt)) {
-      reasons.push("Upload a new document to replace the previous one");
-    } else if (isConfirmationConfirmed(confirmation)) {
-      reasons.push("Upload a receipt or document and send it to the client");
-    }
-  }
+  // Receipt is uploaded during Complete Task — do not block the Complete button.
+  void receipt;
   return reasons;
 }
 
