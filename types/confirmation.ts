@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const taskConfirmationStatusSchema = z.enum([
+  "DRAFT",
   "PENDING",
   "CONFIRMED",
   "DECLINED",
@@ -16,6 +17,29 @@ export const taskConfirmationRowSchema = z.object({
 
 export type TaskConfirmationRow = z.infer<typeof taskConfirmationRowSchema>;
 
+/** One field in Nest's confirmationSchema.fields[] */
+export const confirmationSchemaFieldSchema = z.object({
+  key: z.string().min(1),
+  label: z.string().min(1),
+  required: z.boolean().optional().default(false),
+  prefillFrom: z.array(z.string()).optional(),
+});
+
+export type ConfirmationSchemaField = z.infer<
+  typeof confirmationSchemaFieldSchema
+>;
+
+/** Task-type confirmation form definition from Nest */
+export const confirmationFormSchemaSchema = z.object({
+  taskType: z.string().optional(),
+  costRequired: z.boolean().optional().default(true),
+  fields: z.array(confirmationSchemaFieldSchema).default([]),
+});
+
+export type ConfirmationFormSchema = z.infer<
+  typeof confirmationFormSchemaSchema
+>;
+
 export const taskConfirmationSchema = z
   .object({
     id: z.union([z.string(), z.number()]).transform(String),
@@ -24,6 +48,8 @@ export const taskConfirmationSchema = z
     /** Client user id — do not show this as PII in UI. */
     userId: z.union([z.string(), z.number()]).transform(String).optional(),
     status: taskConfirmationStatusSchema,
+    taskType: z.string().optional(),
+    confirmationSchema: confirmationFormSchemaSchema.optional(),
     title: z.string().nullable().optional(),
     summary: z.string().nullable().optional(),
     rows: z.array(taskConfirmationRowSchema).default([]),
@@ -40,15 +66,32 @@ export const taskConfirmationSchema = z
 
 export type TaskConfirmation = z.infer<typeof taskConfirmationSchema>;
 
-export const sendTaskConfirmationBodySchema = z.object({
-  notes: z.string().trim().min(1).max(5000),
+/** Body for POST .../confirmation/draft (and legacy one-shot). */
+export const draftTaskConfirmationBodySchema = z.object({
+  notes: z.string().trim().max(5000).optional().default(""),
   cost: z.string().trim().min(1).max(40),
   currency: z.string().trim().max(10).optional(),
+  /**
+   * Optional until Nest accepts agent-authored rows.
+   * When supported, these should become the confirmation preview (not AI dump).
+   */
+  rows: z
+    .array(
+      z.object({
+        label: z.string().min(1),
+        value: z.string().min(1),
+      }),
+    )
+    .optional(),
 });
 
-export type SendTaskConfirmationBody = z.infer<
-  typeof sendTaskConfirmationBodySchema
+export type DraftTaskConfirmationBody = z.infer<
+  typeof draftTaskConfirmationBodySchema
 >;
+
+/** @deprecated Prefer draft + send. Same body shape as draft. */
+export const sendTaskConfirmationBodySchema = draftTaskConfirmationBodySchema;
+export type SendTaskConfirmationBody = DraftTaskConfirmationBody;
 
 const CONFIRM_SEND_STATUSES = new Set([
   "IN_PROGRESS",
@@ -76,6 +119,7 @@ export function canSendTaskConfirmation(status?: string | null): boolean {
  * Do **not** probe on fresh IN_PROGRESS — Nest returns 404 when none exists.
  * After a decline Nest returns to IN_PROGRESS; the workspace hydrates via
  * session presence + socket instead of a blind GET.
+ * DRAFT confirmations are hydrated the same way after create.
  */
 export function shouldFetchTaskConfirmation(status?: string | null): boolean {
   return (
@@ -83,6 +127,12 @@ export function shouldFetchTaskConfirmation(status?: string | null): boolean {
     status === "WAITING_FOR_AGENT" ||
     status === "COMPLETED"
   );
+}
+
+export function isConfirmationDraft(
+  confirmation?: Pick<TaskConfirmation, "status"> | null,
+): boolean {
+  return confirmation?.status === "DRAFT";
 }
 
 export function isConfirmationPending(
@@ -99,6 +149,8 @@ export function isConfirmationConfirmed(
 
 export function confirmationStatusLabel(status: TaskConfirmationStatus): string {
   switch (status) {
+    case "DRAFT":
+      return "Draft preview";
     case "PENDING":
       return "Waiting for Customer";
     case "CONFIRMED":
@@ -120,4 +172,65 @@ export function parseTaskConfirmationPayload(
     if (parsed.success) return parsed.data;
   }
   return null;
+}
+
+export function parseConfirmationFormSchema(
+  value: unknown,
+): ConfirmationFormSchema | null {
+  const parsed = confirmationFormSchemaSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
+export function parseConfirmationPrefill(
+  value: unknown,
+): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const out: Record<string, string> = {};
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (raw == null) continue;
+    if (typeof raw === "object") continue;
+    const text = String(raw).trim();
+    if (text) out[key] = text;
+  }
+  return out;
+}
+
+/**
+ * Build draft `notes` from field values so Nest can merge agent edits.
+ * Uses field labels from the form (schema labels when available).
+ */
+export function buildConfirmationDraftNotes(
+  fields: ConfirmationSchemaField[],
+  values: Record<string, string>,
+): string {
+  const lines: string[] = [];
+  let freeNotes = "";
+
+  for (const field of fields) {
+    const value = (values[field.key] ?? "").trim();
+    if (!value) continue;
+    if (field.key === "notes" || field.key === "details") {
+      freeNotes = value;
+      continue;
+    }
+    lines.push(`${field.label}: ${value}`);
+  }
+
+  if (freeNotes) lines.push(freeNotes);
+  return lines.join("\n").trim();
+}
+
+/** Agent-authored confirmation rows for draft body when Nest accepts `rows`. */
+export function buildConfirmationDraftRows(
+  fields: ConfirmationSchemaField[],
+  values: Record<string, string>,
+): { label: string; value: string }[] {
+  const rows: { label: string; value: string }[] = [];
+  for (const field of fields) {
+    if (field.key === "notes" || field.key === "details") continue;
+    const value = (values[field.key] ?? "").trim();
+    if (!value) continue;
+    rows.push({ label: field.label, value });
+  }
+  return rows;
 }

@@ -51,12 +51,18 @@ export const API_ENDPOINTS = {
     taskStatus: (taskId: string) =>
       `/agents/me/tasks/${taskId}/status` as const,
     /**
-     * GET latest confirmation (any status).
-     * POST { notes, cost, currency? } — AI formats a table for the user.
-     * 404 on GET means none sent yet.
+     * GET latest confirmation (prefers DRAFT, else latest).
+     * POST { notes?, cost, currency? } — legacy one-shot (draft + send). Prefer draft → send.
+     * 404 on GET means none yet.
      */
     taskConfirmation: (taskId: string) =>
       `/agents/me/tasks/${taskId}/confirmation` as const,
+    /** POST { notes?, cost, currency? } → DRAFT with backend preview rows. */
+    taskConfirmationDraft: (taskId: string) =>
+      `/agents/me/tasks/${taskId}/confirmation/draft` as const,
+    /** POST — DRAFT → PENDING; notifies user; task → WAITING_FOR_USER. */
+    taskConfirmationSend: (taskId: string, confirmationId: string) =>
+      `/agents/me/tasks/${taskId}/confirmation/${confirmationId}/send` as const,
     /**
      * GET latest receipt/document (any status). 404 if none.
      * POST multipart { file, note? } — booking confirmation must be CONFIRMED.
@@ -117,6 +123,12 @@ export const API_ENDPOINTS = {
     /** Settings placeholders. */
     appSettings: "/agents/me/settings",
     revokeSessions: "/agents/me/revoke-sessions",
+  },
+
+  /** Canonical task types + confirmation schemas (optional catalog). */
+  tasks: {
+    types: "/tasks/types",
+    confirmationSchemas: "/tasks/confirmation-schemas",
   },
 
   notifications: {

@@ -26,6 +26,34 @@ export const taskNoteSchema = z.object({
   authorName: z.string(),
 });
 
+/** Loyalty membership when the user consented to use a saved program on this task. */
+export const taskMembershipSchema = z.object({
+  brand: z.string().min(1),
+  membershipId: z.string().min(1),
+});
+
+export type TaskMembership = z.infer<typeof taskMembershipSchema>;
+
+/** Nested on Task for confirmation UI — mirrors Nest confirmationSchema. */
+export const taskConfirmationFormSchema = z.object({
+  taskType: z.string().optional(),
+  costRequired: z.boolean().optional().default(true),
+  fields: z
+    .array(
+      z.object({
+        key: z.string().min(1),
+        label: z.string().min(1),
+        required: z.boolean().optional().default(false),
+        prefillFrom: z.array(z.string()).optional(),
+      }),
+    )
+    .default([]),
+});
+
+export type TaskConfirmationFormSchema = z.infer<
+  typeof taskConfirmationFormSchema
+>;
+
 export const taskSchema = z.object({
   id: z.string(),
   number: z.number().int(),
@@ -46,6 +74,7 @@ export const taskSchema = z.object({
   requiresPayment: z.boolean().optional(),
   /** Server-authoritative assignment SLA (ISO). Optional until Backend ships. */
   expiresAt: z.string().optional(),
+  /** Nest `taskType` / `type` — drive confirmation form; do not hardcode. */
   taskType: z.string().optional(),
   tier: z.enum(["standard", "vip", "family"]).optional(),
   createdAt: z.string(),
@@ -68,6 +97,15 @@ export const taskSchema = z.object({
     .optional(),
   clientAlias: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).nullable().optional(),
+  /**
+   * Loyalty membership the user agreed to use for this booking.
+   * Top-level `membership` only — never metadata.membershipBrand / membershipId.
+   */
+  membership: taskMembershipSchema.nullable().optional(),
+  /** Nest confirmationSchema from task detail — drives dynamic form fields. */
+  confirmationSchema: taskConfirmationFormSchema.nullable().optional(),
+  /** Nest confirmationPrefill — initial values keyed by schema field key. */
+  confirmationPrefill: z.record(z.string(), z.string()).optional(),
   canReject: z.boolean().optional(),
   rejectUntil: z.string().nullable().optional(),
 });

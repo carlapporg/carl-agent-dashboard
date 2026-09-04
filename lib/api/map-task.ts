@@ -9,6 +9,10 @@ import {
 } from "@/types/agent";
 import type { ChatMediaKind, TimelineEvent } from "@/types/message";
 import type { Task, TaskStatus } from "@/types/task";
+import {
+  parseConfirmationFormSchema,
+  parseConfirmationPrefill,
+} from "@/types/confirmation";
 
 export function uiStatusFromAgent(status: AgentTaskStatus): TaskStatus {
   switch (status) {
@@ -96,6 +100,38 @@ function offerExpiresAt(task: AgentTask, status: AgentTaskStatus): string | unde
   return new Date(Date.now() + REJECT_WINDOW_MS).toISOString();
 }
 
+/** Prefer top-level membership only. Never use metadata membership fields. */
+function resolveMembership(task: AgentTask): Task["membership"] {
+  const top = task.membership;
+  if (!top || typeof top !== "object") return null;
+  const brand = typeof top.brand === "string" ? top.brand.trim() : "";
+  const membershipId =
+    typeof top.membershipId === "string" ? top.membershipId.trim() : "";
+  if (brand && membershipId) return { brand, membershipId };
+  return null;
+}
+
+function resolveTaskType(task: AgentTask): string {
+  const fromTaskType =
+    typeof task.taskType === "string" ? task.taskType.trim() : "";
+  if (fromTaskType) return fromTaskType;
+  const fromType = typeof task.type === "string" ? task.type.trim() : "";
+  return fromType || "TASK";
+}
+
+function resolveConfirmationSchema(
+  task: AgentTask,
+): Task["confirmationSchema"] {
+  return parseConfirmationFormSchema(task.confirmationSchema);
+}
+
+function resolveConfirmationPrefill(
+  task: AgentTask,
+): Task["confirmationPrefill"] {
+  const prefill = parseConfirmationPrefill(task.confirmationPrefill);
+  return Object.keys(prefill).length > 0 ? prefill : undefined;
+}
+
 export function mapAgentTaskToUi(task: AgentTask): Task {
   const backendStatus = inferBackendStatus(task);
   const summary = task.description?.trim() ?? "";
@@ -105,15 +141,11 @@ export function mapAgentTaskToUi(task: AgentTask): Task {
   const stamp = Number.isNaN(created.getTime())
     ? "000000"
     : created.toISOString().slice(2, 10).replaceAll("-", "");
-  const typeKey = task.type.toUpperCase();
-  const prefix = typeKey.includes("CAB")
-    ? "CAB"
-    : typeKey.includes("HOTEL")
-      ? "HTL"
-      : typeKey.includes("RESTAURANT")
-        ? "RST"
-        : typeKey.replace(/[^A-Z]/g, "").slice(0, 3) || "TSK";
+  const taskType = resolveTaskType(task);
+  const typeKey = taskType.toUpperCase();
+  const prefix = typeKey.replace(/[^A-Z]/g, "").slice(0, 3) || "TSK";
   const code = `${prefix}-${stamp}-${task.id.replaceAll("-", "").slice(-4).toUpperCase()}`;
+  const prefill = resolveConfirmationPrefill(task);
 
   return {
     id: task.id,
@@ -135,7 +167,7 @@ export function mapAgentTaskToUi(task: AgentTask): Task {
     },
     notes: [],
     suggestedStepsDone: [],
-    taskType: task.type,
+    taskType,
     expiresAt: offerExpiresAt(task, backendStatus),
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
@@ -148,6 +180,9 @@ export function mapAgentTaskToUi(task: AgentTask): Task {
       !Array.isArray(task.metadata)
         ? (task.metadata as Record<string, unknown>)
         : null,
+    membership: resolveMembership(task),
+    confirmationSchema: resolveConfirmationSchema(task),
+    confirmationPrefill: prefill,
     canReject: task.canReject,
     rejectUntil:
       backendStatus === "OFFERED" || backendStatus === "QUEUED"

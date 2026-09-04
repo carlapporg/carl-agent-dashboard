@@ -504,6 +504,8 @@ export function completeGateReasons(
   if (!isConfirmationConfirmed(confirmation)) {
     if (confirmation?.status === "PENDING") {
       reasons.push("Wait for the client to confirm the task details");
+    } else if (confirmation?.status === "DRAFT") {
+      reasons.push("Send the draft confirmation to the customer");
     } else if (confirmation?.status === "DECLINED") {
       reasons.push("Client declined the details. Send a new confirmation");
     } else {

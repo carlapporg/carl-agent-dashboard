@@ -203,6 +203,17 @@ export const agentTaskSchema = z
         canReject: z.boolean().optional(),
         rejectUntil: z.string().nullable().optional(),
         client: agentClientSchema.nullable().optional(),
+        /** Prefer over `type` when present. */
+        taskType: z.string().optional(),
+        membership: z
+          .object({
+            brand: z.string(),
+            membershipId: z.string(),
+          })
+          .nullable()
+          .optional(),
+        confirmationSchema: z.unknown().nullable().optional(),
+        confirmationPrefill: z.unknown().nullable().optional(),
       })
       .passthrough(),
   );

@@ -24,7 +24,18 @@ const KEY_LABELS: Record<string, string> = {
   guests: "Guests",
   hotel: "Hotel",
   restaurant: "Restaurant",
+  membership: "Membership",
+  membershipBrand: "Membership brand",
+  membershipId: "Membership ID",
 };
+
+const SKIP_METADATA_KEYS = new Set([
+  "membershipBrand",
+  "membershipId",
+  "pendingMembershipBrand",
+  "pendingMembershipId",
+  "membershipConfirmed",
+]);
 
 function titleCase(value: string): string {
   return value
@@ -47,18 +58,11 @@ function humanizeKey(key: string): string {
 
 function typePrefix(taskType?: string): string {
   const type = (taskType ?? "TASK").toUpperCase();
-  if (type.includes("CAB") || type.includes("RIDE")) return "CAB";
-  if (type.includes("HOTEL")) return "HTL";
-  if (type.includes("RESTAURANT") || type.includes("FOOD")) return "RST";
   const letters = type.replace(/[^A-Z]/g, "");
   return letters.slice(0, 3) || "TSK";
 }
 
 function typeLabel(taskType?: string): string {
-  const type = (taskType ?? "").toUpperCase();
-  if (type.includes("CAB") || type.includes("RIDE")) return "Cab booking";
-  if (type.includes("HOTEL")) return "Hotel booking";
-  if (type.includes("RESTAURANT")) return "Restaurant reservation";
   if (!taskType) return "Task";
   return titleCase(taskType.replaceAll("_", " ").toLowerCase());
 }
@@ -94,17 +98,32 @@ export function taskFacts(task: Task): TaskFact[] {
   const facts: TaskFact[] = [];
   const seen = new Set<string>();
 
-  function add(key: string, raw: unknown) {
+  function add(key: string, raw: unknown, options?: { titleCaseValue?: boolean }) {
     if (raw == null) return;
     const value = String(raw).trim();
     if (!value || seen.has(key)) return;
     seen.add(key);
-    facts.push({ key, label: humanizeKey(key), value: titleCase(value) });
+    facts.push({
+      key,
+      label: humanizeKey(key),
+      value: options?.titleCaseValue === false ? value : titleCase(value),
+    });
+  }
+
+  // Top-level membership only (user consented). Format matches Nest confirmation rows.
+  const membership = task.membership;
+  if (membership?.brand?.trim() && membership.membershipId?.trim()) {
+    add(
+      "membership",
+      `${membership.brand.trim()} — ${membership.membershipId.trim()}`,
+      { titleCaseValue: false },
+    );
   }
 
   const metadata = task.metadata;
   if (metadata && typeof metadata === "object") {
     for (const [key, value] of Object.entries(metadata)) {
+      if (SKIP_METADATA_KEYS.has(key)) continue;
       if (typeof value === "object" && value != null) continue;
       add(key, value);
     }

@@ -180,6 +180,25 @@ function stubIncomingTask(
   const serverDeadline = extractOfferDeadline(payload);
   const backendStatus = extractStatus(payload) ?? fallbackStatus;
   const isOffer = backendStatus === "OFFERED" || backendStatus === "QUEUED";
+  const membershipRaw =
+    data.membership && typeof data.membership === "object"
+      ? (data.membership as Record<string, unknown>)
+      : null;
+  const meta =
+    data.metadata && typeof data.metadata === "object" && !Array.isArray(data.metadata)
+      ? (data.metadata as Record<string, unknown>)
+      : null;
+  const brand =
+    typeof membershipRaw?.brand === "string" ? membershipRaw.brand.trim() : "";
+  const membershipId =
+    typeof membershipRaw?.membershipId === "string"
+      ? membershipRaw.membershipId.trim()
+      : "";
+  const taskType =
+    (typeof data.taskType === "string" && data.taskType.trim()) ||
+    (typeof data.type === "string" && data.type.trim()) ||
+    undefined;
+
   return {
     id: taskId,
     number: 0,
@@ -195,6 +214,9 @@ function stubIncomingTask(
     createdAt: now,
     updatedAt: now,
     backendStatus,
+    taskType,
+    metadata: meta,
+    membership: brand && membershipId ? { brand, membershipId } : null,
     expiresAt: isOffer
       ? (serverDeadline ?? new Date(Date.now() + 30_000).toISOString())
       : undefined,

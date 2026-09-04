@@ -29,7 +29,6 @@ import { TaskFacts } from "@/features/tasks/components/task-facts";
 import { PageChromeSetter } from "@/features/shell/page-chrome";
 import { taskDisplayCode, taskDisplayTitle } from "@/lib/tasks/details";
 import {
-  isTaskConfirmationKnown,
   markTaskConfirmationKnown,
   markTaskReceiptKnown,
 } from "@/lib/tasks/confirmation-presence";
@@ -151,8 +150,8 @@ export function TaskWorkspace({
 
   /**
    * After customer declines, Nest returns the task to IN_PROGRESS.
-   * SSR skips confirmation GET on IN_PROGRESS (avoids 404). Reload the
-   * known confirmation only when we already created one this session.
+   * Also restores an unsent DRAFT after refresh. SSR skips confirmation GET
+   * on fresh IN_PROGRESS (404); client hydrates when a confirmation may exist.
    */
   useEffect(() => {
     if (confirmationProp) return;
@@ -162,7 +161,7 @@ export function TaskWorkspace({
     ) {
       return;
     }
-    if (!isTaskConfirmationKnown(taskProp.id)) return;
+    // Always probe once for DRAFT / declined confirmations; 404 → null.
     let cancelled = false;
     void getTaskConfirmationAction(taskProp.id).then((result) => {
       if (cancelled || !result.ok || !result.confirmation) return;
@@ -430,11 +429,13 @@ export function TaskWorkspace({
                 {bookingLocked
                   ? confirmation?.status === "PENDING"
                     ? "Waiting for the client to confirm the task details."
-                    : confirmation?.status === "DECLINED"
-                      ? "The client declined the details. Send a new confirmation below."
-                      : !detailsConfirmed
-                        ? "Send the task details confirmation before you can complete."
-                        : gateReasons[0] ?? null
+                    : confirmation?.status === "DRAFT"
+                      ? "Review the draft preview, then send it to the customer."
+                      : confirmation?.status === "DECLINED"
+                        ? "The client declined the details. Send a new confirmation below."
+                        : !detailsConfirmed
+                          ? "Send the task details confirmation before you can complete."
+                          : gateReasons[0] ?? null
                   : null}
               </p>
             ) : null}
@@ -443,10 +444,15 @@ export function TaskWorkspace({
           <TaskFacts task={task} />
 
           <TaskConfirmationPanel
-            taskId={task.id}
+            task={task}
             taskStatus={task.backendStatus}
             confirmation={confirmation}
             disabled={lockedReadOnly}
+            onDraft={(next) => {
+              markTaskConfirmationKnown(task.id);
+              setConfirmation(next);
+              ops?.setLiveConfirmation(next);
+            }}
             onSent={(next) => {
               markTaskConfirmationKnown(task.id);
               setConfirmation(next);

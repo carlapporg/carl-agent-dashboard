@@ -10,7 +10,7 @@ import { confirmationApi } from "@/lib/api/confirmation";
 import { receiptApi } from "@/lib/api/receipt";
 import { tasksApi } from "@/lib/api/tasks";
 import { ROUTES } from "@/lib/constants/routes";
-import type { SendTaskConfirmationBody, TaskConfirmation } from "@/types/confirmation";
+import type { DraftTaskConfirmationBody, TaskConfirmation } from "@/types/confirmation";
 import type { TimelineEvent } from "@/types/message";
 
 export type OfferLiveState = "offered" | "accepted" | "rejected" | "gone";
@@ -285,9 +285,41 @@ export type ConfirmationActionResult =
   | { ok: true; confirmation: TaskConfirmation }
   | { ok: false; message: string };
 
+export async function createTaskConfirmationDraftAction(
+  taskId: string,
+  body: DraftTaskConfirmationBody,
+): Promise<ConfirmationActionResult> {
+  try {
+    const confirmation = await confirmationApi.createDraft(taskId, body);
+    revalidateWorkQueues();
+    revalidateTaskPage(taskId);
+    return { ok: true, confirmation };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function sendTaskConfirmationDraftAction(
+  taskId: string,
+  confirmationId: string,
+): Promise<ConfirmationActionResult> {
+  try {
+    const confirmation = await confirmationApi.sendDraft(
+      taskId,
+      confirmationId,
+    );
+    revalidateWorkQueues();
+    revalidateTaskPage(taskId);
+    return { ok: true, confirmation };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/** @deprecated Prefer createTaskConfirmationDraftAction + sendTaskConfirmationDraftAction. */
 export async function sendTaskConfirmationAction(
   taskId: string,
-  body: SendTaskConfirmationBody,
+  body: DraftTaskConfirmationBody,
 ): Promise<ConfirmationActionResult> {
   try {
     const confirmation = await confirmationApi.send(taskId, body);
