@@ -35,6 +35,14 @@ const SKIP_METADATA_KEYS = new Set([
   "pendingMembershipBrand",
   "pendingMembershipId",
   "membershipConfirmed",
+  "assignmentSearchStartedAt",
+  "assignmentStartedAt",
+  "assignedAt",
+  "offeredAt",
+  "queuedAt",
+  "socketId",
+  "agentId",
+  "userId",
 ]);
 
 function titleCase(value: string): string {

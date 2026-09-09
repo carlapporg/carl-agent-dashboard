@@ -16,15 +16,21 @@ import {
   buildConfirmationFormFields,
   buildConfirmationFormValues,
   membershipFormLine,
+  missingRequiredConfirmationFields,
 } from "@/lib/tasks/confirmation-form";
 import { cn } from "@/lib/utils/cn";
 import {
-  buildConfirmationDraftNotes,
+  buildConfirmationDraftBody,
   canSendTaskConfirmation,
+  computeLineItemsSubtotal,
+  computeSuggestedConfirmationCost,
   confirmationStatusLabel,
+  fieldInputType,
   isConfirmationConfirmed,
   isConfirmationDraft,
   isConfirmationPending,
+  type ConfirmationFieldValue,
+  type ConfirmationFormValues,
   type TaskConfirmation,
 } from "@/types/confirmation";
 import type { Task } from "@/types/task";
@@ -87,10 +93,9 @@ export function TaskConfirmationPanel({
     () => buildConfirmationFormFields(task, confirmation),
     [task, confirmation],
   );
-  const costRequired = task.confirmationSchema?.costRequired !== false;
   const membershipLine = membershipFormLine(task);
 
-  const [fieldValues, setFieldValues] = useState(() =>
+  const [fieldValues, setFieldValues] = useState<ConfirmationFormValues>(() =>
     buildConfirmationFormValues(task, fields, confirmation),
   );
   const [cost, setCost] = useState(confirmation?.cost ?? "");
@@ -118,19 +123,21 @@ export function TaskConfirmationPanel({
       confirmation.status === "SUPERSEDED" ||
       !waiting);
 
+  // Hydrate when the task or confirmation identity changes — not on every
+  // confirmation object refresh (that was wiping merchant/address edits).
+  const fieldKeySig = fields.map((field) => field.key).join("|");
   useEffect(() => {
     setFieldValues(buildConfirmationFormValues(task, fields, confirmation));
-  }, [task.id, fields, confirmation?.id]);
+    setCost(confirmation?.cost ?? "");
+    setCurrency(confirmation?.currency || DEFAULT_CURRENCY);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: avoid reset on live patches
+  }, [task.id, confirmation?.id, fieldKeySig]);
 
   useEffect(() => {
     if (!confirmation) {
       setForceEdit(false);
       return;
     }
-    setCost((current) => current.trim() || confirmation.cost || "");
-    setCurrency(
-      (current) => current.trim() || confirmation.currency || DEFAULT_CURRENCY,
-    );
     if (confirmation.status === "PENDING") setForceEdit(false);
     if (
       confirmation.status === "DECLINED" ||
@@ -139,24 +146,48 @@ export function TaskConfirmationPanel({
     ) {
       setForceEdit(true);
     }
-  }, [confirmation]);
+  }, [confirmation?.id, confirmation?.status]);
 
-  const missingRequired = useMemo(() => {
-    return fields.filter(
-      (field) => field.required && !(fieldValues[field.key] ?? "").trim(),
-    );
-  }, [fields, fieldValues]);
+  const suggestedCost = useMemo(
+    () => computeSuggestedConfirmationCost(fields, fieldValues),
+    [fields, fieldValues],
+  );
 
-  function updateField(key: string, value: string) {
-    setFieldValues((current) => ({ ...current, [key]: value }));
+  // Keep Total in sync with unitPrice × count or line-item totals.
+  useEffect(() => {
+    if (!suggestedCost) return;
+    setCost(suggestedCost);
+  }, [suggestedCost]);
+
+  const missingRequired = useMemo(
+    () => missingRequiredConfirmationFields(fields, fieldValues),
+    [fields, fieldValues],
+  );
+
+  function updateField(key: string, value: ConfirmationFieldValue) {
+    setFieldValues((current) => {
+      const next: ConfirmationFormValues = { ...current, [key]: value };
+      const lineField = fields.find(
+        (field) => fieldInputType(field) === "lineItems",
+      );
+      if (
+        lineField &&
+        key === lineField.key &&
+        fields.some((field) => field.key === "subtotal")
+      ) {
+        const subtotal = computeLineItemsSubtotal(next, lineField.key);
+        if (subtotal) next.subtotal = subtotal;
+      }
+      return next;
+    });
   }
-
   function buildBody() {
-    return {
-      notes: buildConfirmationDraftNotes(fields, fieldValues),
-      cost: cost.trim(),
-      currency: currency.trim() || DEFAULT_CURRENCY,
-    };
+    return buildConfirmationDraftBody(
+      fields,
+      fieldValues,
+      cost.trim() || suggestedCost || "",
+      currency.trim() || DEFAULT_CURRENCY,
+    );
   }
 
   function validate(): boolean {
@@ -167,8 +198,14 @@ export function TaskConfirmationPanel({
       );
       return false;
     }
-    if (costRequired && !cost.trim()) {
+    const nextCost = cost.trim() || suggestedCost || "";
+    // Nest always requires cost (+ currency), even when schema says costRequired false.
+    if (!nextCost) {
       toast("Enter the total amount before sending.", "error");
+      return false;
+    }
+    if (!currency.trim()) {
+      toast("Currency is required.", "error");
       return false;
     }
     return true;
@@ -323,10 +360,11 @@ export function TaskConfirmationPanel({
       {showEditableForm ? (
         <div className="mt-4 space-y-3 border-t border-border pt-4">
           <p className="text-sm font-medium text-foreground">
-            Editable confirmation details
+            Confirmation details
           </p>
           <p className="text-sm text-muted">
-            Update any field before sending. Optional empty fields are left out.
+            Edit confirmation details if the client asks to change them.
+            Changes are sent on the confirmation draft.
           </p>
 
           {membershipLine ? (
@@ -357,38 +395,43 @@ export function TaskConfirmationPanel({
             </p>
           )}
 
-          {costRequired ? (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <Label htmlFor="confirmation-cost">
-                  Total amount <span className="text-danger">*</span>
-                </Label>
-                <Input
-                  id="confirmation-cost"
-                  value={cost}
-                  onChange={(event) => setCost(event.target.value)}
-                  disabled={pending}
-                  placeholder="25.00"
-                  inputMode="decimal"
-                  maxLength={40}
-                />
-              </div>
-              <div>
-                <Label htmlFor="confirmation-currency">Currency</Label>
-                <Input
-                  id="confirmation-currency"
-                  value={currency}
-                  onChange={(event) => setCurrency(event.target.value)}
-                  disabled={pending}
-                  placeholder={DEFAULT_CURRENCY}
-                  maxLength={10}
-                />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <Label htmlFor="confirmation-cost">
+                Total amount <span className="text-danger">*</span>
+              </Label>
+              <Input
+                id="confirmation-cost"
+                value={cost}
+                onChange={(event) => setCost(event.target.value)}
+                disabled={pending}
+                placeholder={suggestedCost || "25.00"}
+                inputMode="decimal"
+                maxLength={40}
+              />
+              {suggestedCost ? (
                 <p className="mt-1 text-xs text-muted">
-                  Default is {DEFAULT_CURRENCY}. Change only if needed.
+                  Suggested from prices above: {suggestedCost}
                 </p>
-              </div>
+              ) : null}
             </div>
-          ) : null}
+            <div>
+              <Label htmlFor="confirmation-currency">
+                Currency <span className="text-danger">*</span>
+              </Label>
+              <Input
+                id="confirmation-currency"
+                value={currency}
+                onChange={(event) => setCurrency(event.target.value)}
+                disabled={pending}
+                placeholder={DEFAULT_CURRENCY}
+                maxLength={10}
+              />
+              <p className="mt-1 text-xs text-muted">
+                Always sent with the draft. Default is {DEFAULT_CURRENCY}.
+              </p>
+            </div>
+          </div>
 
           <div className="flex flex-wrap gap-2 pt-1">
             <Button

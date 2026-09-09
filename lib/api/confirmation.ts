@@ -9,6 +9,24 @@ import {
   type TaskConfirmation,
 } from "@/types/confirmation";
 
+function draftRequestBody(body: DraftTaskConfirmationBody): Record<string, unknown> {
+  const input = draftTaskConfirmationBodySchema.parse(body);
+  const payload: Record<string, unknown> = {
+    cost: input.cost,
+    currency: input.currency,
+  };
+
+  for (const [key, value] of Object.entries(input)) {
+    if (key === "cost" || key === "currency") continue;
+    if (value == null) continue;
+    if (typeof value === "string" && !value.trim()) continue;
+    if (Array.isArray(value) && value.length === 0) continue;
+    payload[key] = value;
+  }
+
+  return payload;
+}
+
 export const confirmationApi = {
   /** Latest confirmation on this task. Prefers DRAFT, else latest. `null` if none. */
   async get(taskId: string): Promise<TaskConfirmation | null> {
@@ -28,21 +46,16 @@ export const confirmationApi = {
     }
   },
 
-  /** Create DRAFT — Nest merges notes + metadata into preview rows. */
+  /** Create DRAFT — Nest merges structured field keys into preview rows. */
   async createDraft(
     taskId: string,
     body: DraftTaskConfirmationBody,
   ): Promise<TaskConfirmation> {
-    const input = draftTaskConfirmationBodySchema.parse(body);
     const data = await apiRequest(
       API_ENDPOINTS.agents.taskConfirmationDraft(taskId),
       {
         method: "POST",
-        body: {
-          cost: input.cost,
-          ...(input.notes ? { notes: input.notes } : {}),
-          ...(input.currency ? { currency: input.currency } : {}),
-        },
+        body: draftRequestBody(body),
         schema: z.unknown(),
         looseEnvelope: true,
         dedupe: false,
@@ -80,16 +93,11 @@ export const confirmationApi = {
     taskId: string,
     body: DraftTaskConfirmationBody,
   ): Promise<TaskConfirmation> {
-    const input = draftTaskConfirmationBodySchema.parse(body);
     const data = await apiRequest(
       API_ENDPOINTS.agents.taskConfirmation(taskId),
       {
         method: "POST",
-        body: {
-          cost: input.cost,
-          ...(input.notes ? { notes: input.notes } : {}),
-          ...(input.currency ? { currency: input.currency } : {}),
-        },
+        body: draftRequestBody(body),
         schema: z.unknown(),
         looseEnvelope: true,
         dedupe: false,

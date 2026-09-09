@@ -45,6 +45,7 @@ export const taskConfirmationFormSchema = z.object({
         label: z.string().min(1),
         required: z.boolean().optional().default(false),
         prefillFrom: z.array(z.string()).optional(),
+        inputType: z.enum(["text", "money", "lineItems"]).optional(),
       }),
     )
     .default([]),
@@ -104,8 +105,13 @@ export const taskSchema = z.object({
   membership: taskMembershipSchema.nullable().optional(),
   /** Nest confirmationSchema from task detail — drives dynamic form fields. */
   confirmationSchema: taskConfirmationFormSchema.nullable().optional(),
-  /** Nest confirmationPrefill — initial values keyed by schema field key. */
-  confirmationPrefill: z.record(z.string(), z.string()).optional(),
+  /**
+   * Nest confirmationPrefill — initial values keyed by schema field key.
+   * Scalars are strings; lineItems fields may be object arrays.
+   */
+  confirmationPrefill: z
+    .record(z.string(), z.unknown())
+    .optional(),
   canReject: z.boolean().optional(),
   rejectUntil: z.string().nullable().optional(),
 });
