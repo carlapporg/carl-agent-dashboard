@@ -352,9 +352,8 @@ export function missingRequiredConfirmationFields(
     if (!field.required) return false;
     if (!isDraftConfirmationEditableField(field)) return false;
     if (fieldInputType(field) === "lineItems") {
-      const items = isLineItemsValue(values[field.key])
-        ? values[field.key]
-        : [];
+      const raw = values[field.key];
+      const items = isLineItemsValue(raw) ? raw : [];
       return !items.some(
         (item) =>
           item.name.trim() &&
