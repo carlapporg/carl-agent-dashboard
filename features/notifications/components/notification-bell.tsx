@@ -40,19 +40,30 @@ export function NotificationBell() {
       <button
         type="button"
         className={cn(
-          "relative inline-flex size-11 items-center justify-center rounded-full border border-border bg-surface text-foreground-soft transition-colors",
-          "hover:bg-surface-hover hover:text-foreground",
+          "relative inline-flex size-10 items-center justify-center rounded-full border border-[#e7e7e7] bg-white text-[#667085] transition-colors",
+          "hover:bg-[#f6f6f6] hover:text-[#1f1f21]",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-          panelOpen && "border-accent/40 bg-accent-soft text-accent",
+          panelOpen && "bg-[#eefbff] text-[#377dff]",
         )}
         aria-label={label}
         aria-expanded={panelOpen}
         aria-haspopup="dialog"
         onClick={() => setPanelOpen(!panelOpen)}
       >
-        <BellIcon className="size-5" />
+        {/* Prefer Figma asset when present; SVG fallback keeps a11y shape */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/figma/dashboard/bell.svg"
+          alt=""
+          width={20}
+          height={20}
+          className="size-5"
+        />
+        <span className="sr-only">
+          <BellIcon className="size-5" />
+        </span>
         {unreadCount > 0 ? (
-          <span className="absolute -right-1 -top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-bold leading-none text-white">
+          <span className="absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[#fc4438] px-1 text-[10px] font-bold leading-none text-white">
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         ) : null}

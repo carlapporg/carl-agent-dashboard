@@ -3,6 +3,7 @@
 import { useEffect, useMemo, type CSSProperties } from "react";
 import { AvailabilityToggle } from "@/features/dashboard/components/availability-toggle";
 import { LiveTaskQueue } from "@/features/dashboard/components/live-task-queue";
+import { MonthFilterPill } from "@/features/dashboard/components/month-filter-pill";
 import { mergeTaskLists } from "@/lib/tasks/merge-live-task";
 import { MetricStatCard } from "@/features/dashboard/components/metric-stat-card";
 import {
@@ -15,7 +16,6 @@ import {
   useRejectedOfferTick,
   withoutRejectedOffers,
 } from "@/features/ops/rejected-offers";
-import { PageShell } from "@/components/ui/page-shell";
 import type { AgentPresence } from "@/types/agent";
 import type { Task } from "@/types/task";
 
@@ -25,61 +25,10 @@ type DashboardHomeProps = {
   presence?: AgentPresence;
 };
 
-function UsersIcon() {
+function MetricIcon({ src }: { src: string }) {
   return (
-    <svg viewBox="0 0 24 24" className="size-5" fill="none" aria-hidden>
-      <path
-        d="M16 11a3 3 0 1 0-2.8-4M8 11a3 3 0 1 1 2.8-4M4 19c.8-2.6 2.7-4 5-4s4.2 1.4 5 4M14 15c2.3 0 4.2 1.4 5 4"
-        stroke="currentColor"
-        strokeWidth="1.75"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-function HeartIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="size-5" fill="none" aria-hidden>
-      <path
-        d="M12 20s-7-4.4-7-9.2A3.8 3.8 0 0 1 12 7a3.8 3.8 0 0 1 7 3.8C19 15.6 12 20 12 20Z"
-        stroke="currentColor"
-        strokeWidth="1.75"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function FlagIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="size-5" fill="none" aria-hidden>
-      <path
-        d="M5 21V5m0 0h9l-1.5 3L14 11H5"
-        stroke="currentColor"
-        strokeWidth="1.75"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function DocIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="size-5" fill="none" aria-hidden>
-      <path
-        d="M8 3h6l4 4v13a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"
-        stroke="currentColor"
-        strokeWidth="1.75"
-      />
-      <path
-        d="M14 3v4h4M9 12h6M9 16h4"
-        stroke="currentColor"
-        strokeWidth="1.75"
-        strokeLinecap="round"
-      />
-    </svg>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={src} alt="" width={26} height={26} className="size-[26px]" />
   );
 }
 
@@ -134,7 +83,6 @@ export function DashboardHome({ tasks }: DashboardHomeProps) {
         offered += 1;
         continue;
       }
-      // ASSIGNED / other open tasks still sit in the queue ring
       queued += 1;
     }
 
@@ -142,12 +90,10 @@ export function DashboardHome({ tasks }: DashboardHomeProps) {
     const total = Math.max(roots.length, 1);
     const inMotionShare = completed + inProgress;
     const progressPct = Math.round((inMotionShare / total) * 100);
-    const inProgressPct = Math.round((inProgress / total) * 100);
 
     return {
       offered,
       inProgress,
-      inProgressPct,
       waitingCustomer,
       completed,
       stillInQueue,
@@ -158,77 +104,76 @@ export function DashboardHome({ tasks }: DashboardHomeProps) {
   }, [roots]);
 
   return (
-    <PageShell wide>
+    <div className="space-y-5">
       <WsConnectionBanner />
 
-      <div className="space-y-5">
-        <section className="flex flex-wrap items-center justify-between gap-4 rounded-[var(--radius-card)] border border-border bg-surface px-4 py-4 shadow-[var(--shadow-card)] md:px-5">
-          <div className="min-w-0">
-            <h2 className="text-base font-semibold text-foreground">
-              Agent Availability
-            </h2>
-            <p className="mt-0.5 text-sm text-muted">
-              Controls whether Nest can offer you new tasks. Busy and offline
-              pause new offers.
-            </p>
-          </div>
-          <AvailabilityToggle activeTaskCount={stats.activeTaskCount} />
-        </section>
-        {/*
-          Figma: left = 2×2 stats + Tasks/Hour; right = Shift Progress
-          spanning the full combined height. Bottoms of chart + shift align.
-        */}
-        <div className="grid gap-4 lg:min-h-[28rem] lg:grid-cols-[minmax(0,2.85fr)_minmax(0,2.15fr)] lg:items-stretch">
-          <div className="flex min-w-0 flex-col gap-4">
-            <div className="grid gap-4 sm:grid-cols-2 sm:auto-rows-[1fr]">
-              <MetricStatCard
-                label="Needs Attention"
-                value={stats.offered}
-                hint="OFFERED — accept or reject in 30 seconds."
-                icon={<UsersIcon />}
-                className="dash-slide-in h-full min-h-[7.75rem]"
-              />
-              <MetricStatCard
-                label="In Progress"
-                value={`${stats.inProgressPct}%`}
-                hint="Started work in motion."
-                icon={<HeartIcon />}
-                className="dash-slide-in h-full min-h-[7.75rem]"
-                style={{ animationDelay: "60ms" } as CSSProperties}
-              />
-              <MetricStatCard
-                label="Waiting on Customer"
-                value={stats.waitingCustomer}
-                hint="WAITING_FOR_USER from Nest."
-                icon={<FlagIcon />}
-                className="dash-slide-in h-full min-h-[7.75rem]"
-                style={{ animationDelay: "120ms" } as CSSProperties}
-              />
-              <MetricStatCard
-                label="Completed"
-                value={stats.completed}
-                hint="Finished in this list."
-                icon={<DocIcon />}
-                className="dash-slide-in h-full min-h-[7.75rem]"
-                style={{ animationDelay: "180ms" } as CSSProperties}
-              />
-            </div>
-
-            <TasksPerHourPanel className="dash-slide-in shrink-0" />
-          </div>
-
-          <ShiftProgress
-            completed={stats.completed}
-            inProgress={stats.inProgress}
-            total={stats.total}
-            waiting={stats.stillInQueue}
-            progressPercent={stats.progressPct}
-            className="dash-slide-in h-full min-h-0"
-          />
+      <section className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-[34px] font-semibold leading-none tracking-[-0.04em] text-[#1f1f21]">
+            Sales Overview
+          </h1>
+          <p className="mt-3 text-[16px] font-normal tracking-[-0.02em] text-[rgba(0,0,0,0.5)]">
+            Your current sales summary and activity
+          </p>
         </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <AvailabilityToggle activeTaskCount={stats.activeTaskCount} />
+          <MonthFilterPill />
+        </div>
+      </section>
 
-        <LiveTaskQueue seedTasks={roots} />
+      <div className="grid gap-[25px] sm:grid-cols-2 xl:grid-cols-4">
+        <MetricStatCard
+          label="Needs Attention"
+          value={stats.offered}
+          hint="Offered - Accept or reject in 30 seconds."
+          icon={<MetricIcon src="/figma/dashboard/alert-02.svg" />}
+          variant="featured"
+          className="dash-slide-in"
+        />
+        <MetricStatCard
+          label="In Progress"
+          value={stats.inProgress}
+          hint={`${stats.inProgress} tasks are currently being processed for customers.`}
+          icon={<MetricIcon src="/figma/dashboard/refresh-ccw.svg" />}
+          variant="plain"
+          className="dash-slide-in"
+          style={{ animationDelay: "60ms" } as CSSProperties}
+        />
+        <MetricStatCard
+          label="Waiting on Customer"
+          value={stats.waitingCustomer}
+          hint="Waiting for users from Nest."
+          icon={<MetricIcon src="/figma/dashboard/copy-03.svg" />}
+          variant="plainCyan"
+          className="dash-slide-in"
+          style={{ animationDelay: "120ms" } as CSSProperties}
+        />
+        <MetricStatCard
+          label="Completed"
+          value={stats.completed}
+          hint="Finished in this list."
+          icon={<MetricIcon src="/figma/dashboard/check-square-02.svg" />}
+          variant="plainGreen"
+          badge="4.9%"
+          className="dash-slide-in"
+          style={{ animationDelay: "180ms" } as CSSProperties}
+        />
       </div>
-    </PageShell>
+
+      <div className="grid gap-[25px] lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] lg:items-stretch">
+        <TasksPerHourPanel className="dash-slide-in min-h-[424px]" />
+        <ShiftProgress
+          completed={stats.completed}
+          inProgress={stats.inProgress}
+          total={stats.total}
+          waiting={stats.stillInQueue}
+          progressPercent={stats.progressPct}
+          className="dash-slide-in"
+        />
+      </div>
+
+      <LiveTaskQueue seedTasks={roots} />
+    </div>
   );
 }

@@ -9,6 +9,8 @@ import {
   useTransition,
   type CSSProperties,
 } from "react";
+import { AvailabilityToggle } from "@/features/dashboard/components/availability-toggle";
+import { FilterPill } from "@/features/dashboard/components/filter-pill";
 import { MissedTaskWatcher } from "@/features/tasks/components/missed-task-watcher";
 import { useOps } from "@/features/ops/ops-provider";
 import {
@@ -18,7 +20,6 @@ import {
 import { EmptyState } from "@/components/feedback/empty-state";
 import { Button } from "@/components/ui/button";
 import { ROUTES } from "@/lib/constants/routes";
-import { themeTokens } from "@/lib/theme/tokens";
 import { mergeTaskLists } from "@/lib/tasks/merge-live-task";
 import {
   matchesTaskHubFilter,
@@ -37,18 +38,24 @@ type HubFilter =
   | "completed"
   | "cancelled";
 
-const STATUS_FILTERS: Array<{
-  value: HubFilter;
-  label: string;
-}> = [
-  { value: "all", label: "All" },
+type DayFilter = "today" | "week" | "month" | "all";
+
+const STATUS_FILTERS: Array<{ value: HubFilter; label: string }> = [
+  { value: "all", label: "Status" },
   { value: "offered", label: "Offered" },
   { value: "assigned", label: "Assigned" },
   { value: "in_progress", label: "In Progress" },
   { value: "waiting_for_customer", label: "Waiting on customer" },
-  { value: "waiting_for_payment", label: "Waiting on payment" },
+  { value: "waiting_for_payment", label: "Pending Payment" },
   { value: "completed", label: "Completed" },
   { value: "cancelled", label: "Cancelled" },
+];
+
+const DAY_FILTERS: Array<{ value: DayFilter; label: string }> = [
+  { value: "today", label: "Today" },
+  { value: "week", label: "This week" },
+  { value: "month", label: "This month" },
+  { value: "all", label: "All time" },
 ];
 
 type TaskListProps = {
@@ -67,48 +74,79 @@ function matchesFilter(task: Task, filter: HubFilter): boolean {
   return matchesTaskHubFilter(task, filter);
 }
 
-function formatRelative(value: string): string {
-  const date = new Date(value);
+function startOfDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function matchesDayFilter(task: Task, filter: DayFilter): boolean {
+  if (filter === "all") return true;
+  const updated = new Date(task.updatedAt);
+  if (Number.isNaN(updated.getTime())) return true;
+  const now = new Date();
+  const today = startOfDay(now);
+  if (filter === "today") return updated >= today;
+  if (filter === "week") {
+    const weekAgo = new Date(today);
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    return updated >= weekAgo;
+  }
+  const monthAgo = new Date(today);
+  monthAgo.setMonth(monthAgo.getMonth() - 1);
+  return updated >= monthAgo;
+}
+
+function receivedTime(iso: string): string {
+  const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "—";
-  const diffMs = Date.now() - date.getTime();
-  const mins = Math.max(0, Math.floor(diffMs / 60_000));
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins} mins ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours === 1) return "1 hour ago";
-  if (hours < 24) return `${hours} hours ago`;
-  const days = Math.floor(hours / 24);
-  if (days === 1) return "1 day ago";
-  return `${days} days ago`;
+  return date.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
 }
 
-function taskIdLabel(task: Task): string {
-  if (task.code?.trim()) return task.code.startsWith("#") ? task.code : `#${task.code}`;
-  return `#T-${task.number}`;
+function receivedDate(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
-function categoryLabel(task: Task): string {
+function taskIdLabel(task: Task, index: number): string {
+  if (task.code?.trim()) {
+    return task.code.startsWith("#") ? task.code : `#${task.code}`;
+  }
+  if (task.number) return `#${task.number}`;
+  return `#${index + 1}`;
+}
+
+function titleLabel(task: Task): string {
   return (
     task.taskType?.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()) ??
-    "General"
+    task.title
   );
 }
 
-function statusVisual(task: Task): { label: string; className: string } {
-  return taskListStatusChip(task);
-}
-
-function priorityVisual(priority: Task["priority"]): {
-  label: string;
-  color: string;
-} {
-  if (priority === "high" || priority === "urgent") {
-    return { label: "High", color: themeTokens.priorityHigh };
+function placeLabel(task: Task): string {
+  const meta =
+    task.metadata && typeof task.metadata === "object"
+      ? (task.metadata as Record<string, unknown>)
+      : null;
+  const candidates = [
+    meta?.location,
+    meta?.destinationCity,
+    meta?.pickupCity,
+    meta?.deliveryCity,
+    meta?.city,
+    meta?.place,
+  ];
+  for (const value of candidates) {
+    if (typeof value === "string" && value.trim()) return value.trim();
   }
-  if (priority === "low") {
-    return { label: "Low", color: themeTokens.priorityLow };
-  }
-  return { label: "Medium", color: themeTokens.priorityMedium };
+  return task.customerName || "—";
 }
 
 export function TaskList({ tasks }: TaskListProps) {
@@ -119,8 +157,10 @@ export function TaskList({ tasks }: TaskListProps) {
   const [status, setStatus] = useState(() =>
     parseHubFilter(searchParams.get("status")),
   );
+  const [dayFilter, setDayFilter] = useState<DayFilter>("today");
   const search = searchParams.get("q") ?? "";
-  const hasFilters = status !== "all" || Boolean(search.trim());
+  const hasFilters =
+    status !== "all" || dayFilter !== "all" || Boolean(search.trim());
   const [motionKey, setMotionKey] = useState(0);
   const rejectedTick = useRejectedOfferTick();
   const hydrateOpenTasks = ops?.hydrateOpenTasks;
@@ -141,6 +181,7 @@ export function TaskList({ tasks }: TaskListProps) {
     const q = search.trim().toLowerCase();
     return allTasks.filter((task) => {
       if (!matchesFilter(task, status)) return false;
+      if (!matchesDayFilter(task, dayFilter)) return false;
       if (!q) return true;
       return (
         task.title.toLowerCase().includes(q) ||
@@ -150,11 +191,11 @@ export function TaskList({ tasks }: TaskListProps) {
         (task.taskType?.toLowerCase().includes(q) ?? false)
       );
     });
-  }, [allTasks, status, search]);
+  }, [allTasks, status, dayFilter, search]);
 
   useEffect(() => {
     setMotionKey((k) => k + 1);
-  }, [status, search]);
+  }, [status, dayFilter, search]);
 
   function updateParams(next: Record<string, string>) {
     if (next.status !== undefined) setStatus(parseHubFilter(next.status));
@@ -179,127 +220,145 @@ export function TaskList({ tasks }: TaskListProps) {
   }
 
   return (
-    <div className={cn("task-card-in space-y-5", pending && "opacity-90")}>
+    <div className={cn("space-y-6", pending && "opacity-90")}>
       <MissedTaskWatcher tasks={allTasks} />
 
-      <div className="flex flex-wrap gap-2">
-        {STATUS_FILTERS.map((filter) => {
-          const active = status === filter.value;
-          return (
-            <button
-              key={filter.value}
-              type="button"
-              onClick={() => updateParams({ status: filter.value })}
-              className={cn(
-                "rounded-[var(--radius-pill)] border px-3.5 py-1.5 text-sm font-medium transition-colors",
-                active
-                  ? "border-accent bg-accent-soft text-accent"
-                  : "border-border bg-surface text-foreground-soft hover:bg-surface-hover",
-              )}
-            >
-              {filter.label}
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      {/* Figma Task Overview header row */}
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-foreground">
-            Active Task Queue
+          <h2 className="text-[34px] font-semibold leading-none tracking-[-0.05em] text-[#1f1f21]">
+            Task Overview
           </h2>
-          <p className="mt-0.5 text-sm text-muted">
-            Showing {visible.length} primary agent assignment
-            {visible.length === 1 ? "" : "s"}
+          <p className="mt-3 text-[14px] tracking-[-0.02em] text-[rgba(0,0,0,0.5)]">
+            Your current sales summary and activity
           </p>
         </div>
+        <AvailabilityToggle />
       </div>
 
-      {visible.length === 0 ? (
-        <div className="rounded-[var(--radius-card)] border border-border bg-surface p-6 shadow-[var(--shadow-card)]">
-          <EmptyState
-            title={
-              hasFilters ? "No tasks match these filters" : "No tasks available"
-            }
-            description={
-              hasFilters
-                ? "Try another status or clear your search to see more work."
-                : "When customers send requests, they’ll appear in this list."
-            }
-            action={
-              hasFilters ? (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() =>
-                    updateParams({ status: "all", q: "", type: "all" })
-                  }
-                >
-                  Clear filters
-                </Button>
-              ) : null
-            }
-          />
-        </div>
-      ) : (
-        <div className="overflow-hidden rounded-[var(--radius-card)] border border-border bg-surface shadow-[var(--shadow-card)]">
-          <div className="hidden grid-cols-[7rem_minmax(0,1.6fr)_9rem_8.5rem_7rem_8rem] gap-3 border-b border-border px-4 py-3 text-[length:var(--font-size-table-head)] font-semibold uppercase tracking-[var(--letter-table)] text-muted md:grid">
-            <span>Task ID</span>
-            <span>Title</span>
-            <span>Category</span>
-            <span>Status</span>
-            <span>Priority</span>
-            <span>Timestamp</span>
+      {/* Figma Live Task Queue card */}
+      <section className="overflow-hidden rounded-[15px] border border-[#e7e7e7] bg-white">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-[15px] py-5">
+          <h3 className="text-[22px] font-semibold tracking-[-0.05em] text-[#1f1f21]">
+            Live Task Queue
+          </h3>
+          <div className="flex flex-wrap items-center gap-3">
+            <FilterPill
+              label="Status"
+              value={status}
+              options={STATUS_FILTERS}
+              compact
+              onChange={(next) => updateParams({ status: next })}
+            />
+            <FilterPill
+              label="Day range"
+              value={dayFilter}
+              options={DAY_FILTERS}
+              compact
+              onChange={setDayFilter}
+            />
           </div>
-
-          <ul key={motionKey} className="divide-y divide-border">
-            {visible.map((task, index) => {
-              const statusChip = statusVisual(task);
-              const priority = priorityVisual(task.priority);
-              return (
-                <li
-                  key={task.id}
-                  className="task-row-in"
-                  style={{ "--row-i": index } as CSSProperties}
-                >
-                  <Link
-                    href={ROUTES.task(task.id)}
-                    className="grid gap-2 px-4 py-3.5 transition-colors hover:bg-accent-soft/40 md:grid-cols-[7rem_minmax(0,1.6fr)_9rem_8.5rem_7rem_8rem] md:items-center md:gap-3"
-                  >
-                    <span className="text-sm font-semibold text-accent">
-                      {taskIdLabel(task)}
-                    </span>
-                    <span className="min-w-0 truncate text-sm font-semibold text-foreground">
-                      {task.title}
-                    </span>
-                    <span className="w-fit rounded-[var(--radius-pill)] bg-surface-hover px-2.5 py-1 text-xs font-medium text-foreground-soft">
-                      {categoryLabel(task)}
-                    </span>
-                    <span
-                      className={cn(
-                        "w-fit rounded-[var(--radius-pill)] px-2.5 py-1 text-xs font-semibold",
-                        statusChip.className,
-                      )}
-                    >
-                      {statusChip.label}
-                    </span>
-                    <span className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground-soft">
-                      <span
-                        className="size-2 rounded-full"
-                        style={{ background: priority.color }}
-                      />
-                      {priority.label}
-                    </span>
-                    <span className="text-sm text-muted">
-                      {formatRelative(task.updatedAt)}
-                    </span>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
         </div>
-      )}
+
+        {visible.length === 0 ? (
+          <div className="border-t border-[#e7e7e7] px-4 py-12">
+            <EmptyState
+              title={
+                hasFilters ? "No tasks match these filters" : "No tasks available"
+              }
+              description={
+                hasFilters
+                  ? "Try another status or clear your search to see more work."
+                  : "When customers send requests, they’ll appear in this list."
+              }
+              action={
+                hasFilters ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => {
+                      setDayFilter("all");
+                      updateParams({ status: "all", q: "", type: "all" });
+                    }}
+                  >
+                    Clear filters
+                  </Button>
+                ) : null
+              }
+            />
+          </div>
+        ) : (
+          <div className="overflow-x-auto px-[15px] pb-4">
+            <table className="min-w-[920px] w-full border-collapse text-left">
+              <thead>
+                <tr className="bg-[#f6f6f6] text-[14px] font-medium tracking-[-0.05em] text-[#666]">
+                  <th className="rounded-l-[5px] px-5 py-2.5">ID</th>
+                  <th className="px-3 py-2.5">Title</th>
+                  <th className="px-3 py-2.5">Place</th>
+                  <th className="px-3 py-2.5">Time</th>
+                  <th className="px-3 py-2.5">Status</th>
+                  <th className="px-3 py-2.5">Date</th>
+                  <th className="rounded-r-[5px] px-5 py-2.5">Actions</th>
+                </tr>
+              </thead>
+              <tbody key={motionKey}>
+                {visible.map((task, index) => {
+                  const statusChip = taskListStatusChip(task);
+                  return (
+                    <tr
+                      key={task.id}
+                      className="task-row-in border-t border-[#e7e7e7] text-[13px] font-medium tracking-[-0.03em] text-[rgba(0,16,44,0.5)] hover:bg-[#fafafa]"
+                      style={{ "--row-i": index } as CSSProperties}
+                    >
+                      <td className="px-5 py-5">
+                        {taskIdLabel(task, index)}
+                      </td>
+                      <td className="max-w-[200px] truncate px-3 py-5">
+                        {titleLabel(task)}
+                      </td>
+                      <td className="max-w-[180px] truncate px-3 py-5">
+                        {placeLabel(task)}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-5">
+                        {receivedTime(task.updatedAt)}
+                      </td>
+                      <td className="px-3 py-5">
+                        <span
+                          className={cn(
+                            "inline-flex rounded-[50px] px-3.5 py-1 text-[12px] font-medium tracking-[-0.03em]",
+                            statusChip.className,
+                          )}
+                        >
+                          {statusChip.label}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-5">
+                        {receivedDate(task.updatedAt)}
+                      </td>
+                      <td className="px-5 py-5">
+                        <Link
+                          href={ROUTES.task(task.id)}
+                          className="inline-flex size-4 items-center justify-center"
+                          aria-label={`Open ${task.title}`}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src="/figma/dashboard/eye.svg"
+                            alt=""
+                            width={15}
+                            height={8}
+                            className="h-[8px] w-[15px]"
+                          />
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

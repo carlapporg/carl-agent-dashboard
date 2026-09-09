@@ -182,10 +182,10 @@ export function UserMenu({
         ref={triggerRef}
         type="button"
         className={cn(
-          "flex max-w-64 cursor-pointer items-center gap-2.5 rounded-[var(--radius-pill)] px-2 py-1.5 text-left",
-          "transition-colors hover:bg-surface-hover",
+          "flex max-w-64 cursor-pointer items-center gap-2 text-left",
+          "rounded-[10px] px-1 py-1 transition-colors hover:bg-[#f6f6f6]",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-          open && "bg-surface-hover",
+          open && "bg-[#f6f6f6]",
         )}
         aria-haspopup="menu"
         aria-expanded={open}
@@ -195,18 +195,20 @@ export function UserMenu({
         onKeyDown={onTriggerKeyDown}
       >
         <AgentAvatar user={user} size="sm" />
-        <span className="hidden min-w-0 sm:block">
-          <span className="block truncate text-sm font-semibold leading-tight text-foreground">
+        <span className="hidden min-w-0 sm:flex sm:items-center sm:gap-1.5">
+          <span className="block max-w-[9rem] truncate text-[14px] font-medium leading-none tracking-[-0.02em] text-[#1f1f21]">
             {name}
           </span>
-          <span className="mt-0.5 inline-flex items-center gap-1.5 text-xs font-medium text-muted">
-            <span
-              className={cn(
-                "size-1.5 rounded-full",
-                online ? "bg-success" : "bg-muted-dim",
-              )}
-            />
-            {statusLabel}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/figma/dashboard/chevron-down.svg"
+            alt=""
+            width={16}
+            height={16}
+            className="size-4 shrink-0 opacity-70"
+          />
+          <span className="sr-only">
+            {online ? statusLabel : statusLabel}
           </span>
         </span>
       </button>

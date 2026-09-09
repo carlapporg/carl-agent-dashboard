@@ -13,6 +13,7 @@ import {
 } from "react";
 import { sendUpdateAction } from "@/features/tasks/actions/task-actions";
 import { ChatAudioPlayer } from "@/features/tasks/components/chat-audio-player";
+import { LiveVoiceWaveform } from "@/features/tasks/components/live-voice-waveform";
 import {
   ChatImageBubble,
   ChatImageLightbox,
@@ -97,6 +98,17 @@ function formatClock(value: string): string {
   });
 }
 
+/** Figma Chat Box timestamps — 24h `09:40`. */
+function formatInboxClock(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
 function calendarDay(date: Date): string {
   return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
 }
@@ -167,11 +179,37 @@ function importantTone(event: ChatItem): "ok" | "warn" | "bad" {
   return "warn";
 }
 
+function mediaLikelySame(server: TimelineEvent, opt: ChatItem): boolean {
+  if (server.kind !== "agent_message") return false;
+  if ((server.mediaKind ?? "text") !== (opt.mediaKind ?? "text")) return false;
+  if (opt.mediaKind !== "voice" && opt.mediaKind !== "image") return false;
+  if (opt.mediaKind === "voice") {
+    const serverMs = server.durationMs ?? 0;
+    const optMs = opt.durationMs ?? 0;
+    if (serverMs > 0 && optMs > 0 && Math.abs(serverMs - optMs) > 2000) {
+      return false;
+    }
+  }
+  const dt = Math.abs(
+    new Date(server.createdAt).getTime() - new Date(opt.createdAt).getTime(),
+  );
+  return dt < 120_000;
+}
+
 function mergeThread(server: TimelineEvent[], extras: ChatItem[]): ChatItem[] {
   const ids = new Set(server.map((item) => item.id));
   const extra: ChatItem[] = [];
   for (const item of extras) {
     if (ids.has(item.id)) continue;
+    // Optimistic upload still showing "8%" after the real message landed.
+    if (
+      (item.id.startsWith("opt-") || item.id.startsWith("local-")) &&
+      (item.delivery === "sending" || item.delivery === "failed") &&
+      (item.mediaKind === "voice" || item.mediaKind === "image") &&
+      server.some((row) => mediaLikelySame(row, item))
+    ) {
+      continue;
+    }
     ids.add(item.id);
     extra.push(item);
   }
@@ -347,44 +385,6 @@ function PaperclipIcon({ className }: { className?: string }) {
   );
 }
 
-function PersonIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden className={className}>
-      <circle cx="12" cy="8" r="3.25" stroke="currentColor" strokeWidth="1.6" />
-      <path
-        d="M6.5 19c.9-2.8 2.9-4.25 5.5-4.25s4.6 1.45 5.5 4.25"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-function ChatAvatar({
-  role,
-  appearance,
-}: {
-  role: "agent" | "client";
-  appearance: ChatAppearance;
-}) {
-  if (appearance !== "inbox") return null;
-  const fromAgent = role === "agent";
-  return (
-    <span
-      className={cn(
-        "flex size-9 shrink-0 items-center justify-center rounded-full",
-        fromAgent
-          ? "bg-accent-soft text-accent"
-          : "bg-surface-hover text-muted",
-      )}
-      aria-hidden
-    >
-      <PersonIcon className="size-4" />
-    </span>
-  );
-}
-
 /** Pending send — clock like WhatsApp / iMessage pending ticks. */
 function ClockIcon({ className }: { className?: string }) {
   return (
@@ -419,30 +419,38 @@ const ChatBubble = memo(function ChatBubble({
   const fromAgent = role === "agent";
   const mediaKind = event.mediaKind ?? "text";
   const inbox = appearance === "inbox";
+  const inboxAgentTone = inbox && fromAgent;
   return (
     <div
       style={{ contentVisibility: "auto", containIntrinsicSize: "0 40px" }}
       className={cn(
-        "w-fit max-w-[min(78%,22rem)]",
+        "w-fit",
+        inbox ? "max-w-[min(100%,480px)]" : "max-w-[min(78%,22rem)]",
         !inbox && fromAgent && "ml-auto",
         !inbox && !fromAgent && "mr-auto",
       )}
     >
       <div
         className={cn(
-          inbox ? "px-3.5 py-2.5 text-sm leading-relaxed" : "px-2.5 py-1.5 text-[13px] leading-snug",
+          inbox
+            ? "px-4 py-3 text-[14px] leading-[1.5] text-[#11142d]"
+            : "px-2.5 py-1.5 text-[13px] leading-snug",
           fromAgent
             ? inbox
-              ? "rounded-xl bg-accent text-accent-foreground"
+              ? mediaKind === "voice"
+                ? "rounded-bl-[16px] rounded-br-[16px] rounded-tl-[16px] rounded-tr-[4px] bg-[#f0f3f6]"
+                : "rounded-bl-[16px] rounded-br-[16px] rounded-tl-[16px] rounded-tr-[4px] bg-[rgba(84,149,253,0.2)]"
               : "rounded-2xl rounded-br-md bg-accent text-accent-foreground"
             : inbox
-              ? "rounded-xl bg-surface-hover text-foreground"
+              ? "rounded-bl-[16px] rounded-br-[16px] rounded-tl-[4px] rounded-tr-[16px] bg-[#f0f3f6]"
               : "rounded-2xl rounded-bl-md bg-[#eef0f3] text-foreground",
           grouped && fromAgent && !inbox && "rounded-tr-md",
           grouped && !fromAgent && !inbox && "rounded-tl-md",
           mediaKind === "image" && "overflow-hidden p-1.5",
-          mediaKind === "voice" && "min-w-52",
-          event.delivery === "failed" && "bg-red-600",
+          /* Figma voice bubble is 320px — waveform fills inside, not the whole chat */
+          mediaKind === "voice" &&
+            (inbox ? "w-[320px] max-w-[320px] px-4 py-3" : "min-w-52"),
+          event.delivery === "failed" && "bg-red-600 text-white",
         )}
       >
         {mediaKind === "voice" ? (
@@ -452,7 +460,8 @@ const ChatBubble = memo(function ChatBubble({
             messageId={event.id}
             durationMs={event.durationMs}
             previewUrl={event.previewUrl}
-            fromAgent={fromAgent}
+            fromAgent={inbox ? false : fromAgent}
+            appearance={inbox ? "inbox" : "workspace"}
           />
         ) : null}
         {mediaKind === "image" ? (
@@ -462,7 +471,7 @@ const ChatBubble = memo(function ChatBubble({
             messageId={event.id}
             previewUrl={event.previewUrl}
             caption={event.body}
-            fromAgent={fromAgent}
+            fromAgent={inbox ? false : fromAgent}
             onOpen={onOpenImage}
           />
         ) : null}
@@ -473,7 +482,7 @@ const ChatBubble = memo(function ChatBubble({
           <span
             className={cn(
               "mt-1 flex items-center justify-end gap-1",
-              fromAgent ? "text-white/70" : "text-muted",
+              inboxAgentTone || !fromAgent ? "text-[#b2b3bd]" : "text-white/70",
             )}
             title={
               typeof event.uploadProgress === "number"
@@ -498,7 +507,7 @@ const ChatBubble = memo(function ChatBubble({
           <p
             className={cn(
               "mt-0.5 text-[10px]",
-              fromAgent ? "text-white/75" : "text-muted",
+              fromAgent && !inbox ? "text-white/75" : "text-muted",
             )}
           >
             Couldn’t send
@@ -646,6 +655,14 @@ const TaskChatThreadBody = forwardRef<
   const recordTimerRef = useRef<number | null>(null);
   const skipPreviewRef = useRef(false);
   const recordingLockRef = useRef(false);
+  const mediaSendLockRef = useRef(false);
+  const voicePreviewRef = useRef<{
+    blob: Blob;
+    url: string;
+    durationMs: number;
+    mime: string;
+  } | null>(null);
+  voicePreviewRef.current = voicePreview;
 
   const stopStream = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -661,6 +678,7 @@ const TaskChatThreadBody = forwardRef<
 
   const discardVoicePreview = useCallback(() => {
     if (voicePreview?.url) URL.revokeObjectURL(voicePreview.url);
+    voicePreviewRef.current = null;
     setVoicePreview(null);
   }, [voicePreview]);
 
@@ -721,12 +739,39 @@ const TaskChatThreadBody = forwardRef<
   const prevCount = useRef(thread.length);
   const threadSigRef = useRef("");
 
+  // Drop optimistic / duplicate extras once the real server message is present.
+  useEffect(() => {
+    setExtras((prev) => {
+      const next = prev.filter((item) => {
+        if (timeline.some((row) => row.id === item.id)) return false;
+        if (
+          (item.id.startsWith("opt-") || item.id.startsWith("local-")) &&
+          (item.mediaKind === "voice" || item.mediaKind === "image") &&
+          timeline.some((row) => mediaLikelySame(row, item))
+        ) {
+          return false;
+        }
+        return true;
+      });
+      return next.length === prev.length ? prev : next;
+    });
+  }, [timeline]);
+
   useEffect(() => {
     if (!onThreadUpdate) return;
-    const sig = thread.map((event) => event.id).join("\u0001");
+    // Never persist in-flight optimistic uploads into parent timelines —
+    // that leaves a stuck "8%" bubble next to the real message.
+    const durable = thread.filter(
+      (event) =>
+        !(
+          (event.id.startsWith("opt-") || event.id.startsWith("local-")) &&
+          event.delivery === "sending"
+        ),
+    );
+    const sig = durable.map((event) => event.id).join("\u0001");
     if (sig === threadSigRef.current) return;
     threadSigRef.current = sig;
-    onThreadUpdate(thread);
+    onThreadUpdate(durable);
   }, [onThreadUpdate, thread]);
 
   const scrollToBottom = useCallback((smooth = false) => {
@@ -843,22 +888,32 @@ const TaskChatThreadBody = forwardRef<
           },
         });
         pendingMediaRef.current.delete(optimisticId);
-        const keepPreview =
-          event.id.startsWith("local-") || event.id.startsWith("opt-");
-        if (!keepPreview && pending.previewUrl.startsWith("blob:")) {
-          URL.revokeObjectURL(pending.previewUrl);
-        }
-        setExtras((prev) =>
-          prev.map((item) =>
-            item.id === optimisticId
-              ? {
-                  ...event,
-                  previewUrl: keepPreview ? pending.previewUrl : undefined,
-                  delivery: undefined,
-                }
-              : item,
-          ),
-        );
+        const keepBlobPreview = pending.previewUrl.startsWith("blob:");
+        setExtras((prev) => {
+          const withoutOpt = prev.filter((item) => item.id !== optimisticId);
+          // If timeline already has this message, don't keep a second copy.
+          if (timeline.some((row) => row.id === event.id)) {
+            return withoutOpt;
+          }
+          if (timeline.some((row) => mediaLikelySame(row, {
+            ...event,
+            durationMs: pending.durationMs ?? event.durationMs,
+            mediaKind: pending.kind,
+            delivery: undefined,
+          } as ChatItem))) {
+            return withoutOpt;
+          }
+          return [
+            ...withoutOpt,
+            {
+              ...event,
+              previewUrl: keepBlobPreview ? pending.previewUrl : undefined,
+              durationMs: pending.durationMs ?? event.durationMs,
+              delivery: undefined,
+              uploadProgress: undefined,
+            },
+          ];
+        });
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Couldn't send. Please try again.";
@@ -871,12 +926,14 @@ const TaskChatThreadBody = forwardRef<
         toast(message, "error");
       }
     },
-    [taskId, toast],
+    [taskId, timeline, toast],
   );
 
   const queueMedia = useCallback(
     (pending: PendingMedia) => {
-      const optimisticId = `opt-${Date.now()}`;
+      if (mediaSendLockRef.current) return;
+      mediaSendLockRef.current = true;
+      const optimisticId = `opt-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
       pendingMediaRef.current.set(optimisticId, pending);
       setExtras((prev) => [
         ...prev,
@@ -898,6 +955,11 @@ const TaskChatThreadBody = forwardRef<
       pinnedRef.current = true;
       setPinnedToBottom(true);
       void sendMediaNow(optimisticId, pending);
+      // Unlock after this turn so a double-click can't queue twice,
+      // but a later send can start while upload continues.
+      queueMicrotask(() => {
+        mediaSendLockRef.current = false;
+      });
     },
     [sendMediaNow, taskId],
   );
@@ -913,12 +975,14 @@ const TaskChatThreadBody = forwardRef<
         toast("That voice note is too large. Keep it under 2 minutes.", "error");
         return;
       }
-      setVoicePreview({
+      const next = {
         blob,
         url: URL.createObjectURL(blob),
         durationMs,
         mime: blob.type || mime,
-      });
+      };
+      voicePreviewRef.current = next;
+      setVoicePreview(next);
     },
     [toast],
   );
@@ -993,16 +1057,18 @@ const TaskChatThreadBody = forwardRef<
   ]);
 
   const sendVoicePreview = useCallback(() => {
-    if (!voicePreview) return;
+    const preview = voicePreviewRef.current;
+    if (!preview || mediaSendLockRef.current) return;
+    voicePreviewRef.current = null;
+    setVoicePreview(null);
     queueMedia({
       kind: "voice",
-      blob: voicePreview.blob,
-      filename: voiceFilename(voicePreview.mime),
-      durationMs: voicePreview.durationMs,
-      previewUrl: voicePreview.url,
+      blob: preview.blob,
+      filename: voiceFilename(preview.mime),
+      durationMs: preview.durationMs,
+      previewUrl: preview.url,
     });
-    setVoicePreview(null);
-  }, [queueMedia, voicePreview]);
+  }, [queueMedia]);
 
   const pickImage = useCallback(
     (file: File) => {
@@ -1134,7 +1200,7 @@ const TaskChatThreadBody = forwardRef<
               </p>
             </div>
           ) : (
-            <div className={cn("flex flex-col", inbox ? "gap-5" : "gap-2")}>
+            <div className={cn("flex flex-col", inbox ? "gap-[20px]" : "gap-2")}>
               {blocks.map((block) => {
                 if (block.type === "day") {
                   return (
@@ -1170,39 +1236,50 @@ const TaskChatThreadBody = forwardRef<
                 }
                 const first = block.items[0];
                 const fromAgent = block.role === "agent";
-                const speaker = fromAgent ? agentLabel : clientLabel;
                 if (inbox) {
+                  const last = block.items[block.items.length - 1] ?? first;
                   return (
                     <div
                       key={block.key}
                       className={cn(
-                        "flex gap-3",
-                        fromAgent ? "flex-row-reverse" : "flex-row",
+                        "flex w-full flex-col gap-1",
+                        fromAgent ? "items-end" : "items-start",
                       )}
                     >
-                      <ChatAvatar role={block.role} appearance={appearance} />
+                      {block.items.map((event, index) => (
+                        <ChatBubble
+                          key={event.id}
+                          event={event}
+                          role={block.role}
+                          grouped={index > 0}
+                          appearance={appearance}
+                          onRetry={
+                            event.delivery === "failed" ? onRetry : undefined
+                          }
+                          onOpenImage={setLightbox}
+                        />
+                      ))}
                       <div
                         className={cn(
-                          "flex min-w-0 max-w-[min(100%,36rem)] flex-col gap-1.5",
-                          fromAgent ? "items-end" : "items-start",
+                          "flex items-center gap-1 text-[11px] text-[#b2b3bd]",
+                          fromAgent && "justify-end",
                         )}
                       >
-                        {block.items.map((event, index) => (
-                          <ChatBubble
-                            key={event.id}
-                            event={event}
-                            role={block.role}
-                            grouped={index > 0}
-                            appearance={appearance}
-                            onRetry={
-                              event.delivery === "failed" ? onRetry : undefined
-                            }
-                            onOpenImage={setLightbox}
+                        <span className="tabular-nums">
+                          {formatInboxClock(last.createdAt)}
+                        </span>
+                        {fromAgent &&
+                        last.delivery !== "failed" &&
+                        last.delivery !== "sending" ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src="/figma/messages/icon-check-check.svg"
+                            alt=""
+                            width={14}
+                            height={14}
+                            className="size-3.5"
                           />
-                        ))}
-                        <p className="text-xs text-muted">
-                          {speaker} · {formatClock(first.createdAt)}
-                        </p>
+                        ) : null}
                       </div>
                     </div>
                   );
@@ -1262,7 +1339,12 @@ const TaskChatThreadBody = forwardRef<
         ) : null}
       </div>
 
-      <div className="shrink-0 border-t border-border bg-surface">
+      <div
+        className={cn(
+          "shrink-0 bg-surface",
+          inbox ? "border-t border-[#eef0f2]" : "border-t border-border",
+        )}
+      >
         {showQuickBar ? (
           <div className="flex gap-1.5 overflow-x-auto px-3 py-1.5 scrollbar-none">
             {showTemplates
@@ -1297,13 +1379,27 @@ const TaskChatThreadBody = forwardRef<
             event.preventDefault();
             submitComposer();
           }}
-          className={cn(inbox ? "px-5 py-4" : "px-3 pb-2.5 pt-1")}
+          className={cn(inbox ? "px-0 py-0" : "px-3 pb-2.5 pt-1")}
         >
           {disabledHint ? (
-            <p className="mb-1.5 text-[11px] text-muted">{disabledHint}</p>
+            <p
+              className={cn(
+                "mb-1.5 text-[11px] text-muted",
+                inbox && "px-6 pt-4",
+              )}
+            >
+              {disabledHint}
+            </p>
           ) : null}
           {error ? (
-            <p className="mb-1.5 text-[11px] font-medium text-red-700">{error}</p>
+            <p
+              className={cn(
+                "mb-1.5 text-[11px] font-medium text-red-700",
+                inbox && "px-6 pt-2",
+              )}
+            >
+              {error}
+            </p>
           ) : null}
           <input
             ref={fileRef}
@@ -1317,7 +1413,12 @@ const TaskChatThreadBody = forwardRef<
             }}
           />
           {imagePreview ? (
-            <div className="mb-2 flex items-center gap-2 rounded-lg border border-border bg-[#f8fafc] p-1.5">
+            <div
+              className={cn(
+                "mb-2 flex items-center gap-2 rounded-lg border border-border bg-[#f8fafc] p-1.5",
+                inbox && "mx-6 mt-4",
+              )}
+            >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={imagePreview.url}
@@ -1340,13 +1441,20 @@ const TaskChatThreadBody = forwardRef<
             </div>
           ) : null}
           {voicePreview ? (
-            <div className="mb-2 flex items-center gap-2 rounded-lg border border-border bg-[#f8fafc] px-2 py-1.5">
+            <div
+              className={cn(
+                "mb-2 flex items-center gap-3 rounded-lg border border-border bg-[#f8fafc] px-2 py-1.5",
+                inbox &&
+                  "mx-6 mt-4 mb-0 rounded-[12px] border-[#e7e7e7] bg-white px-3 py-2.5",
+              )}
+            >
               <ChatAudioPlayer
                 taskId={taskId}
                 messageId="preview"
                 durationMs={voicePreview.durationMs}
                 previewUrl={voicePreview.url}
                 fromAgent={false}
+                appearance={inbox ? "inbox-preview" : "workspace"}
               />
               <button
                 type="button"
@@ -1354,25 +1462,45 @@ const TaskChatThreadBody = forwardRef<
                   discardVoicePreview();
                   void startRecording();
                 }}
-                className="shrink-0 text-[11px] font-semibold text-muted hover:text-foreground"
+                className={cn(
+                  "shrink-0 text-[11px] font-semibold text-muted hover:text-foreground",
+                  inbox && "text-[12px] font-medium text-[rgba(0,0,0,0.45)]",
+                )}
               >
                 Redo
               </button>
               <button
                 type="button"
                 onClick={discardVoicePreview}
-                className="shrink-0 text-[11px] font-semibold text-muted hover:text-foreground"
+                className={cn(
+                  "shrink-0 text-[11px] font-semibold text-muted hover:text-foreground",
+                  inbox && "text-[12px] font-medium text-[rgba(0,0,0,0.45)]",
+                )}
               >
                 Cancel
               </button>
             </div>
           ) : null}
           {recording ? (
-            <div className="flex items-center gap-2 rounded-lg border border-accent/30 bg-accent/5 px-2.5 py-1.5">
+            <div
+              className={cn(
+                "flex items-center gap-2 rounded-lg border border-accent/30 bg-accent/5 px-2.5 py-1.5",
+                inbox && "mx-6 my-4",
+              )}
+            >
               <span className="size-2 shrink-0 animate-pulse rounded-full bg-red-500" />
-              <p className="flex-1 text-sm font-medium text-foreground">
-                Recording {formatClockMs(recordMs)}
-              </p>
+              <div className="flex min-w-0 flex-1 items-center gap-3">
+                <LiveVoiceWaveform
+                  active={recording}
+                  streamRef={streamRef}
+                  className="min-w-0 flex-1"
+                  barCount={inbox ? 40 : 32}
+                  maxHeight={24}
+                />
+                <p className="shrink-0 text-sm font-medium tabular-nums text-foreground">
+                  {formatClockMs(recordMs)}
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={stopRecording}
@@ -1397,34 +1525,30 @@ const TaskChatThreadBody = forwardRef<
               </button>
             </div>
           ) : inbox ? (
-            <div className="flex items-end gap-3">
-              <div className="flex shrink-0 items-center gap-2">
+            <div className="flex items-center gap-4 bg-white px-6 py-6">
+              <div
+                className={cn(
+                  "flex min-w-0 flex-1 items-center gap-3 rounded-full bg-[#f7f8fa] px-4 py-3",
+                  flash && "ring-2 ring-accent/20",
+                  disabled && "opacity-70",
+                )}
+              >
                 <button
                   type="button"
                   disabled={disabled}
                   aria-label="Attach image"
                   onClick={() => fileRef.current?.click()}
-                  className="inline-flex size-10 items-center justify-center rounded-[var(--radius-md)] border border-border bg-surface text-muted transition-colors hover:bg-surface-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex size-[18px] shrink-0 items-center justify-center disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <PaperclipIcon className="size-4.5" />
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/figma/messages/icon-paperclip.svg"
+                    alt=""
+                    width={18}
+                    height={18}
+                    className="size-[18px]"
+                  />
                 </button>
-                <button
-                  type="button"
-                  disabled={disabled}
-                  aria-label="Send a voice message"
-                  onClick={() => void startRecording()}
-                  className="inline-flex size-10 items-center justify-center rounded-[var(--radius-md)] border border-border bg-surface text-muted transition-colors hover:bg-surface-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <MicIcon className="size-4.5" />
-                </button>
-              </div>
-              <div
-                className={cn(
-                  "flex min-w-0 flex-1 items-end gap-2 rounded-[var(--radius-md)] bg-surface-hover px-3 py-2",
-                  flash && "ring-2 ring-accent/20",
-                  disabled && "opacity-70",
-                )}
-              >
                 <textarea
                   ref={inputRef}
                   name="body"
@@ -1443,22 +1567,38 @@ const TaskChatThreadBody = forwardRef<
                       ? "Messaging is paused"
                       : imagePreview
                         ? "Add a caption…"
-                        : "Type your response here..."
+                        : "Write message here..."
                   }
                   rows={1}
                   disabled={disabled}
-                  className="max-h-28 min-h-9 flex-1 resize-none bg-transparent py-1 text-sm leading-snug text-foreground outline-none placeholder:text-muted-dim"
+                  className="max-h-28 min-h-[17px] flex-1 resize-none bg-transparent py-0 text-[14px] leading-normal text-[#11142d] outline-none placeholder:text-[#b2b3bd]"
                 />
               </div>
               <button
-                type="submit"
-                disabled={
-                  disabled ||
-                  (!draft.trim() && !imagePreview && !voicePreview)
+                type="button"
+                disabled={disabled}
+                aria-label={
+                  draft.trim() || imagePreview || voicePreview
+                    ? "Send message"
+                    : "Send a voice message"
                 }
-                className="inline-flex h-10 shrink-0 items-center justify-center rounded-[var(--radius-md)] bg-accent px-5 text-sm font-semibold text-accent-foreground transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
+                onClick={() => {
+                  if (draft.trim() || imagePreview || voicePreview) {
+                    submitComposer();
+                    return;
+                  }
+                  void startRecording();
+                }}
+                className="inline-flex size-11 shrink-0 items-center justify-center rounded-[22px] bg-[#377dff] transition-colors hover:bg-[#2f6ae6] disabled:cursor-not-allowed disabled:opacity-40"
               >
-                Send
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/figma/messages/icon-mic.svg"
+                  alt=""
+                  width={18}
+                  height={18}
+                  className="size-[18px]"
+                />
               </button>
             </div>
           ) : (

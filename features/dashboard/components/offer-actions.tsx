@@ -4,9 +4,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import {
-  startTaskAction,
-} from "@/features/tasks/actions/task-actions";
-import {
   autoAcceptExpiredOffer,
   beginAcceptOffer,
   canShowRejectUi,
@@ -27,7 +24,6 @@ import { liveStatusPatch } from "@/lib/tasks/merge-live-task";
 import { ROUTES } from "@/lib/constants/routes";
 import {
   canRejectOffer,
-  isAssignedPendingStart,
   isOfferedTask,
   isOfferRejectWindowOpen,
   offerWindowEnd,
@@ -49,7 +45,6 @@ export function OfferActions({ task }: OfferActionsProps) {
   const rejecting = isRejectingOrRejected(task.id);
   const offered =
     (isOfferedTask(task) || hasOpenRejectUi(task.id)) && !isClosedTask(task);
-  const assigned = isAssignedPendingStart(task) && !isClosedTask(task);
   const windowOpen = isOfferRejectWindowOpen(task) && !decision.windowExpired;
   const showReject =
     canRejectOffer(task) &&
@@ -61,7 +56,8 @@ export function OfferActions({ task }: OfferActionsProps) {
     decision.settled !== "rejected" &&
     (showReject || decision.flight === "reject");
 
-  if (!offered && !assigned && !rejecting) {
+  // Offers only — assigned tasks open via the row / eye (no Start here).
+  if (!offered && !rejecting) {
     return null;
   }
 
@@ -118,25 +114,6 @@ export function OfferActions({ task }: OfferActionsProps) {
     });
   }
 
-  function start() {
-    startTransition(async () => {
-      try {
-        const result = await startTaskAction(task.id);
-        if (!result.ok) {
-          toast(result.message, "error");
-          return;
-        }
-        toast("Task started.", "success");
-        done(liveStatusPatch("IN_PROGRESS", "in_progress"));
-      } catch (error) {
-        toast(
-          error instanceof Error ? error.message : "Could not start this task.",
-          "error",
-        );
-      }
-    });
-  }
-
   return (
     <>
       <div className="flex flex-wrap gap-2">
@@ -144,7 +121,7 @@ export function OfferActions({ task }: OfferActionsProps) {
           <Button type="button" disabled>
             Rejecting…
           </Button>
-        ) : offered ? (
+        ) : (
           <Button
             type="button"
             loading={pending && decision.flight === "accept"}
@@ -154,10 +131,6 @@ export function OfferActions({ task }: OfferActionsProps) {
             {decision.flight === "accept" || decision.settled === "accepted"
               ? "Accepting…"
               : "Accept"}
-          </Button>
-        ) : (
-          <Button type="button" loading={pending} disabled={pending} onClick={start}>
-            Start
           </Button>
         )}
         {showReject ? (

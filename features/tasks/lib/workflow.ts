@@ -160,13 +160,13 @@ export type TaskListStatusChip = {
   className: string;
 };
 
-/** Backend-first status chip for the task hub table. */
+/** Backend-first status chip for the task hub table (Figma Task Overview colors). */
 export function taskListStatusChip(task: Task): TaskListStatusChip {
   const backend = task.backendStatus;
   if (backend === "COMPLETED" || task.status === "completed") {
     return {
       label: "Completed",
-      className: "bg-success-soft text-success-foreground",
+      className: "bg-[rgba(61,188,61,0.2)] text-[#3dbc3d]",
     };
   }
   if (
@@ -178,19 +178,19 @@ export function taskListStatusChip(task: Task): TaskListStatusChip {
   ) {
     return {
       label: "Cancelled",
-      className: "bg-surface-hover text-muted",
+      className: "bg-[#f2f4f7] text-[#667085]",
     };
   }
   if (backend === "WAITING_FOR_USER" || task.status === "waiting_for_customer") {
     return {
       label: "Waiting on Cust",
-      className: "bg-danger-soft text-danger-foreground",
+      className: "bg-[rgba(255,94,94,0.2)] text-[#ff5e5e]",
     };
   }
   if (task.status === "waiting_for_payment") {
     return {
-      label: "Waiting on Pay",
-      className: "bg-danger-soft text-danger-foreground",
+      label: "Pending Payment",
+      className: "bg-[rgba(255,94,94,0.2)] text-[#ff5e5e]",
     };
   }
   if (
@@ -200,24 +200,24 @@ export function taskListStatusChip(task: Task): TaskListStatusChip {
   ) {
     return {
       label: "In Progress",
-      className: "bg-accent-soft text-accent",
+      className: "bg-[rgba(84,149,253,0.2)] text-[#5072e8]",
     };
   }
   if (backend === "ASSIGNED" || task.status === "assigned") {
     return {
       label: "Assigned",
-      className: "bg-accent-soft text-info-foreground",
+      className: "bg-[rgba(111,186,0,0.2)] text-[#6fba00]",
     };
   }
   if (backend === "OFFERED" || backend === "QUEUED" || task.status === "queued") {
     return {
       label: "Pending",
-      className: "bg-warning-soft text-warning-foreground",
+      className: "bg-[rgba(245,158,11,0.18)] text-[#b45309]",
     };
   }
   return {
     label: String(task.status).replaceAll("_", " "),
-    className: "bg-surface-hover text-muted",
+    className: "bg-[#f2f4f7] text-[#667085]",
   };
 }
 
@@ -241,7 +241,7 @@ export function matchesTaskHubFilter(
   if (filter === "assigned") return chip.label === "Assigned";
   if (filter === "in_progress") return chip.label === "In Progress";
   if (filter === "waiting_for_customer") return chip.label === "Waiting on Cust";
-  if (filter === "waiting_for_payment") return chip.label === "Waiting on Pay";
+  if (filter === "waiting_for_payment") return chip.label === "Pending Payment";
   if (filter === "completed") return chip.label === "Completed";
   if (filter === "cancelled") return chip.label === "Cancelled";
   return true;

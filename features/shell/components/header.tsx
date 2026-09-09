@@ -17,8 +17,8 @@ type DashboardHeaderProps = {
 function defaultChrome(pathname: string, name: string, email: string) {
   if (isTaskHubPath(pathname)) {
     return {
-      title: "Task Hub",
-      subtitle: "Accept a first offer, or open an assigned task and Start.",
+      title: "Task",
+      subtitle: "",
     };
   }
   if (isTaskDetailPath(pathname)) {
@@ -29,47 +29,44 @@ function defaultChrome(pathname: string, name: string, email: string) {
   }
   if (pathname.startsWith(ROUTES.messages)) {
     return {
-      title: "Agent Chat",
-      subtitle: "Respond directly to waiting customer inquiries",
+      title: "Chat",
+      subtitle: "",
     };
   }
   if (pathname.startsWith(ROUTES.payments)) {
     return {
       title: "Payments",
-      subtitle: "Track transaction volume, pending payouts, and refunds",
+      subtitle: "",
     };
   }
   if (pathname.startsWith(ROUTES.history)) {
     return {
-      title: "Activity Logs",
-      subtitle: "Review chronological agent workspace events and audit trails",
+      title: "History",
+      subtitle: "",
     };
   }
   if (pathname.startsWith(ROUTES.notifications)) {
     return {
-      title: "Notification Center",
-      subtitle:
-        "Monitor active agent requests, channel notifications, and core platform messages",
+      title: "Notification",
+      subtitle: "",
     };
   }
   if (pathname.startsWith(ROUTES.profileEdit)) {
     return {
       title: "Edit Profile",
-      subtitle: "Update your display name and account password.",
+      subtitle: "",
     };
   }
   if (pathname.startsWith(ROUTES.profile)) {
     return {
-      title: "User Profile",
-      subtitle:
-        "Manage your contact coordinates, observe dispatch ratings, and view workspace stats.",
+      title: "Profile",
+      subtitle: "",
     };
   }
   if (pathname.startsWith(ROUTES.settings)) {
     return {
-      title: "App Settings",
-      subtitle:
-        "Configure system parameters, alert settings, verification thresholds, and connected channels.",
+      title: "Settings",
+      subtitle: "",
     };
   }
   if (pathname.startsWith(ROUTES.adminChat)) {
@@ -87,8 +84,8 @@ function defaultChrome(pathname: string, name: string, email: string) {
   }
   if (pathname === ROUTES.dashboard) {
     return {
-      title: `Welcome ${name}`,
-      subtitle: `Signed in as ${email}`,
+      title: "Dashboard",
+      subtitle: "",
     };
   }
   return {
@@ -128,9 +125,9 @@ export function DashboardHeader({ user }: DashboardHeaderProps) {
   }
 
   return (
-    <header className="flex min-h-[length:var(--header-height)] items-center justify-between gap-4 border-b border-border bg-surface px-4 py-3 md:px-6 lg:px-8">
+    <header className="flex h-[68px] items-center justify-between gap-4 border-b border-[#e7e7e7] bg-white px-5 md:px-6">
       <div className="min-w-0 flex-1">
-        <h1 className="truncate text-xl font-bold tracking-tight text-foreground md:text-2xl">
+        <h1 className="truncate text-[15px] font-normal leading-6 tracking-normal text-[#1f1f21]">
           {title}
         </h1>
         {subtitle ? (
@@ -138,37 +135,46 @@ export function DashboardHeader({ user }: DashboardHeaderProps) {
         ) : null}
       </div>
 
-      <div className="flex shrink-0 items-center gap-2.5 md:gap-3">
-        <form
-          onSubmit={onWorkspaceSearch}
-          className="relative hidden w-[min(100%,17.5rem)] lg:block xl:w-72"
-        >
-          <span
-            className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-muted-dim"
-            aria-hidden
+      <div className="flex shrink-0 items-center gap-6">
+        {pathname !== ROUTES.dashboard &&
+        !isTaskHubPath(pathname) &&
+        !pathname.startsWith(ROUTES.messages) &&
+        !pathname.startsWith(ROUTES.payments) &&
+        !pathname.startsWith(ROUTES.history) &&
+        !pathname.startsWith(ROUTES.profile) &&
+        !pathname.startsWith(ROUTES.settings) &&
+        !pathname.startsWith(ROUTES.notifications) ? (
+          <form
+            onSubmit={onWorkspaceSearch}
+            className="relative hidden w-[min(100%,17.5rem)] lg:block xl:w-72"
           >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+            <span
+              className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-muted-dim"
+              aria-hidden
             >
-              <circle cx="11" cy="11" r="7" />
-              <path d="m20 20-3.5-3.5" />
-            </svg>
-          </span>
-          <input
-            value={workspaceQuery}
-            onChange={(event) => setWorkspaceQuery(event.target.value)}
-            placeholder="Search workspace..."
-            aria-label="Search workspace"
-            className="h-11 w-full rounded-[var(--radius-pill)] border border-border bg-surface pl-11 pr-4 text-sm text-foreground outline-none placeholder:text-muted-dim focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/20"
-          />
-        </form>
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-3.5-3.5" />
+              </svg>
+            </span>
+            <input
+              value={workspaceQuery}
+              onChange={(event) => setWorkspaceQuery(event.target.value)}
+              placeholder="Search workspace..."
+              aria-label="Search workspace"
+              className="h-11 w-full rounded-[var(--radius-pill)] border border-border bg-surface pl-11 pr-4 text-sm text-foreground outline-none placeholder:text-muted-dim focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/20"
+            />
+          </form>
+        ) : null}
 
         <NotificationBell />
 

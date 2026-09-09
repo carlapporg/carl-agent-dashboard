@@ -6,7 +6,7 @@ import { taskToConversation } from "@/lib/api/dashboard";
 import { tasksApi } from "@/lib/api/tasks";
 
 export const metadata: Metadata = {
-  title: "Agent Chat",
+  title: "Chat Box",
 };
 
 export default async function MessagesPage() {
@@ -15,7 +15,7 @@ export default async function MessagesPage() {
     openTasks = await tasksApi.listOpen();
   } catch {
     return (
-      <PageShell wide>
+      <PageShell wide className="max-w-none">
         <EmptyState
           title="Can't reach the server"
           description="Your login is still saved. The API tunnel may be down. Wait a moment and refresh."
@@ -35,7 +35,7 @@ export default async function MessagesPage() {
   const tasks = Object.fromEntries(roots.map((task) => [task.id, task]));
 
   return (
-    <PageShell wide>
+    <PageShell wide className="max-w-none">
       <MessagesView conversations={conversations} tasks={tasks} />
     </PageShell>
   );

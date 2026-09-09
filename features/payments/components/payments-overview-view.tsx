@@ -1,14 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { useToast } from "@/components/providers/toast-provider";
 import { Button } from "@/components/ui/button";
+import { AvailabilityToggle } from "@/features/dashboard/components/availability-toggle";
+import { MetricStatCard } from "@/features/dashboard/components/metric-stat-card";
+import {
+  MonthFilterPill,
+  type MonthFilterValue,
+} from "@/features/dashboard/components/month-filter-pill";
 import {
   downloadTransactionsCsv,
   filterTransactionsByDate,
 } from "@/features/payments/lib/transaction-export";
+import { useOps } from "@/features/ops/ops-provider";
 import { ROUTES } from "@/lib/constants/routes";
 import { cn } from "@/lib/utils/cn";
 import type {
@@ -21,61 +28,109 @@ type PaymentsOverviewViewProps = {
   transactions: PaymentTransactionRow[];
 };
 
-function money(amount: number, currency = "USD"): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency,
-  }).format(amount);
+const METRIC_UI: Record<
+  string,
+  {
+    label: string;
+    hint: string;
+    icon: string;
+    variant: "plain" | "plainCyan" | "plainGreen";
+  }
+> = {
+  revenue: {
+    label: "Total Revenue",
+    hint: "Offered - Accept or reject in 30 seconds.",
+    icon: "/figma/payments/coin-dollar.svg",
+    variant: "plainCyan",
+  },
+  pending: {
+    label: "Pending payouts",
+    hint: "13 tasks are currently being processed for customers.",
+    icon: "/figma/dashboard/copy-03.svg",
+    variant: "plain",
+  },
+  refunds: {
+    label: "Refund triggered",
+    hint: "Waiting for users from Nest.",
+    icon: "/figma/payments/refresh-04.svg",
+    variant: "plainCyan",
+  },
+  escrows: {
+    label: "Completed escrows",
+    hint: "Finished in this list.",
+    icon: "/figma/payments/wallet-01.svg",
+    variant: "plainGreen",
+  },
+};
+
+function MetricIcon({ src }: { src: string }) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={src} alt="" width={26} height={26} className="size-[26px]" />
+  );
+}
+
+/** Figma money: `2,500 $` */
+function figmaMoney(amount: number): string {
+  return `${Math.round(amount).toLocaleString("en-US")} $`;
 }
 
 function formatTxnDate(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "—";
-  const now = new Date();
-  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const startYesterday = new Date(startToday);
-  startYesterday.setDate(startYesterday.getDate() - 1);
-  const time = date.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-  if (date >= startToday) return `Today, ${time}`;
-  if (date >= startYesterday) return `Yesterday, ${time}`;
   return date.toLocaleDateString("en-US", {
-    month: "short",
+    month: "long",
     day: "numeric",
     year: "numeric",
   });
 }
 
-function statusChip(status: PaymentTransactionRow["status"]) {
-  if (status === "completed") {
-    return "bg-success-soft text-success-foreground";
-  }
-  if (status === "pending") {
-    return "bg-warning-soft text-warning-foreground";
-  }
-  return "bg-danger-soft text-danger-foreground";
+function statusLabel(status: PaymentTransactionRow["status"]): string {
+  if (status === "completed") return "Completed";
+  if (status === "pending") return "Pending Payment";
+  return "Refunded";
 }
 
-function deltaChip(delta: number | null) {
-  if (delta == null) return null;
-  const positive = delta >= 0;
-  return (
-    <span
-      className={cn(
-        "rounded-full px-2 py-0.5 text-xs font-semibold",
-        positive
-          ? "bg-success-soft text-success-foreground"
-          : delta > -10
-            ? "bg-warning-soft text-warning-foreground"
-            : "bg-danger-soft text-danger-foreground",
-      )}
-    >
-      {positive ? "+" : ""}
-      {delta.toFixed(1)}%
-    </span>
-  );
+function statusChip(status: PaymentTransactionRow["status"]) {
+  if (status === "completed") {
+    return "bg-[rgba(61,188,61,0.2)] text-[#3dbc3d]";
+  }
+  if (status === "pending") {
+    return "bg-[rgba(255,94,94,0.2)] text-[#ff5e5e]";
+  }
+  return "bg-[rgba(84,149,253,0.2)] text-[#5072e8]";
+}
+
+function rangeForMonthFilter(value: MonthFilterValue): {
+  from: string | null;
+  to: string | null;
+} {
+  const now = new Date();
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const to = end.toISOString().slice(0, 10);
+  const start = new Date(end);
+
+  if (value === "This week") {
+    const day = start.getDay();
+    const diff = day === 0 ? 6 : day - 1;
+    start.setDate(start.getDate() - diff);
+  } else if (value === "This month") {
+    start.setDate(1);
+  } else if (value === "Last month") {
+    start.setMonth(start.getMonth() - 1, 1);
+    const lastEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+    return {
+      from: start.toISOString().slice(0, 10),
+      to: lastEnd.toISOString().slice(0, 10),
+    };
+  } else if (value === "This quarter") {
+    const q = Math.floor(start.getMonth() / 3) * 3;
+    start.setMonth(q, 1);
+  } else if (value === "This year") {
+    start.setMonth(0, 1);
+  }
+
+  return { from: start.toISOString().slice(0, 10), to };
 }
 
 export function PaymentsOverviewView({
@@ -83,12 +138,14 @@ export function PaymentsOverviewView({
   transactions,
 }: PaymentsOverviewViewProps) {
   const { toast } = useToast();
+  const ops = useOps();
   const filterRef = useRef<HTMLDivElement>(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const [draftFrom, setDraftFrom] = useState("");
   const [draftTo, setDraftTo] = useState("");
   const [appliedFrom, setAppliedFrom] = useState<string | null>(null);
   const [appliedTo, setAppliedTo] = useState<string | null>(null);
+  const [monthFilter, setMonthFilter] = useState<MonthFilterValue>("This month");
 
   const filteredTransactions = useMemo(
     () => filterTransactionsByDate(transactions, appliedFrom, appliedTo),
@@ -96,6 +153,18 @@ export function PaymentsOverviewView({
   );
 
   const filterActive = appliedFrom != null || appliedTo != null;
+  const activeTaskCount = useMemo(() => {
+    const live = ops?.liveTasks ?? [];
+    return live.filter(
+      (t) =>
+        !t.parentId &&
+        (t.backendStatus === "OFFERED" ||
+          t.backendStatus === "ASSIGNED" ||
+          t.backendStatus === "IN_PROGRESS" ||
+          t.backendStatus === "WAITING_FOR_USER" ||
+          t.backendStatus === "WAITING_FOR_AGENT"),
+    ).length;
+  }, [ops?.liveTasks]);
 
   useEffect(() => {
     if (!filterOpen) return;
@@ -128,6 +197,15 @@ export function PaymentsOverviewView({
     setFilterOpen(false);
   }
 
+  function handleMonthChange(value: MonthFilterValue) {
+    setMonthFilter(value);
+    const range = rangeForMonthFilter(value);
+    setAppliedFrom(range.from);
+    setAppliedTo(range.to);
+    setDraftFrom(range.from ?? "");
+    setDraftTo(range.to ?? "");
+  }
+
   function handleExportCsv() {
     if (filteredTransactions.length === 0) {
       toast("No transactions to export for the current filter.", "error");
@@ -140,105 +218,163 @@ export function PaymentsOverviewView({
     );
   }
 
+  const orderedMetrics = useMemo(() => {
+    const order = ["revenue", "pending", "refunds", "escrows"];
+    const byId = new Map(summary.map((m) => [m.id, m]));
+    return order
+      .map((id) => byId.get(id))
+      .filter((m): m is PaymentSummaryMetric => Boolean(m));
+  }, [summary]);
+
   return (
-    <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {summary.map((metric) => (
-          <div
-            key={metric.id}
-            className="rounded-[var(--radius-card)] border border-border bg-surface p-5 shadow-[var(--shadow-card)]"
-          >
-            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
-              {metric.label}
-            </p>
-            <div className="mt-3 flex items-end justify-between gap-2">
-              <p className="text-2xl font-bold tabular-nums tracking-tight text-foreground">
-                {money(metric.amount, metric.currency)}
-              </p>
-              {deltaChip(metric.deltaPercent)}
-            </div>
-          </div>
-        ))}
+    <div className="space-y-5">
+      <section className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-[34px] font-semibold leading-none tracking-[-0.04em] text-[#1f1f21]">
+            Payments Overview
+          </h1>
+          <p className="mt-3 text-[16px] font-normal tracking-[-0.02em] text-[rgba(0,0,0,0.5)]">
+            Your current sales summary and activity
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <AvailabilityToggle activeTaskCount={activeTaskCount} />
+          <MonthFilterPill value={monthFilter} onChange={handleMonthChange} />
+        </div>
+      </section>
+
+      <div className="grid gap-[25px] sm:grid-cols-2 xl:grid-cols-4">
+        {orderedMetrics.map((metric, index) => {
+          const ui = METRIC_UI[metric.id] ?? {
+            label: metric.label,
+            hint: metric.label,
+            icon: "/figma/payments/coin-dollar.svg",
+            variant: "plain" as const,
+          };
+          const delta = metric.deltaPercent;
+          const badge =
+            delta == null ? null : `${Math.abs(delta).toFixed(1)}%`;
+          const badgeTrend =
+            delta == null ? "up" : delta >= 0 ? "up" : "down";
+
+          return (
+            <MetricStatCard
+              key={metric.id}
+              label={ui.label}
+              value={figmaMoney(metric.amount)}
+              hint={ui.hint}
+              icon={<MetricIcon src={ui.icon} />}
+              variant={ui.variant}
+              badge={badge}
+              badgeTrend={badgeTrend}
+              className="dash-slide-in"
+              style={{ animationDelay: `${index * 60}ms` } as CSSProperties}
+            />
+          );
+        })}
       </div>
 
-      <div className="overflow-hidden rounded-[var(--radius-card)] border border-border bg-surface shadow-[var(--shadow-card)]">
-        <div className="relative border-b border-border px-4 py-3 md:px-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-base font-semibold text-foreground">
-              Transaction History
+      <section className="overflow-hidden rounded-[15px] border border-[#e7e7e7] bg-white">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-5 md:px-5">
+          <div className="flex flex-wrap items-center gap-3">
+            <h2 className="text-[22px] font-semibold tracking-[-0.05em] text-[#1f1f21]">
+              Live Task Queue
             </h2>
-            <div ref={filterRef} className="relative flex flex-wrap gap-2">
-              <Button
+            <span className="relative inline-flex items-center gap-2 rounded-[50px] bg-[rgba(61,188,61,0.2)] py-1 pl-6 pr-4 text-[12px] font-medium tracking-[-0.03em] text-[#3dbc3d]">
+              <span className="absolute left-3.5 top-1/2 size-[5px] -translate-y-1/2 rounded-full bg-[#3dbc3d]" />
+              {filteredTransactions.length} Live Task
+            </span>
+          </div>
+          <div ref={filterRef} className="relative flex flex-wrap items-center gap-3">
+            <MonthFilterPill value={monthFilter} onChange={handleMonthChange} />
+            <div className="relative">
+              <button
                 type="button"
-                variant="secondary"
                 aria-expanded={filterOpen}
                 aria-haspopup="dialog"
                 onClick={() => setFilterOpen((open) => !open)}
-                className={cn(filterActive && "border-accent/40 bg-accent-soft text-accent")}
+                className={cn(
+                  "inline-flex h-[35px] items-center rounded-[40px] bg-[#f6f6f6] px-4 text-[12px] font-medium tracking-[-0.05em] text-black",
+                  filterActive && "ring-1 ring-[#377dff]/40",
+                )}
               >
                 Filter Date
                 {filterActive ? (
-                  <span className="ml-1.5 size-1.5 rounded-full bg-accent" aria-hidden />
+                  <span className="ml-1.5 size-1.5 rounded-full bg-[#377dff]" aria-hidden />
                 ) : null}
-              </Button>
-              <Button type="button" variant="secondary" onClick={handleExportCsv}>
-                Export CSV
-              </Button>
-
-              {filterOpen ? (
-                <div
-                  role="dialog"
-                  aria-label="Filter by date"
-                  className="absolute right-0 top-full z-20 mt-2 w-72 rounded-[var(--radius-lg)] border border-border bg-surface p-4 shadow-[var(--shadow-dropdown)]"
-                >
-                  <p className="text-sm font-semibold text-foreground">
-                    Filter by date
-                  </p>
-                  <div className="mt-3 space-y-3">
-                    <label className="block space-y-1">
-                      <span className="text-xs font-medium text-muted">From</span>
-                      <input
-                        type="date"
-                        value={draftFrom}
-                        onChange={(event) => setDraftFrom(event.target.value)}
-                        className="h-10 w-full rounded-[var(--radius-md)] border border-border bg-surface px-3 text-sm outline-none focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/20"
-                      />
-                    </label>
-                    <label className="block space-y-1">
-                      <span className="text-xs font-medium text-muted">To</span>
-                      <input
-                        type="date"
-                        value={draftTo}
-                        onChange={(event) => setDraftTo(event.target.value)}
-                        className="h-10 w-full rounded-[var(--radius-md)] border border-border bg-surface px-3 text-sm outline-none focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/20"
-                      />
-                    </label>
-                  </div>
-                  <div className="mt-4 flex justify-end gap-2">
-                    <Button type="button" variant="ghost" onClick={clearDateFilter}>
-                      Clear
-                    </Button>
-                    <Button type="button" onClick={applyDateFilter}>
-                      Apply
-                    </Button>
-                  </div>
-                </div>
-              ) : null}
+              </button>
             </div>
-          </div>
+            <button
+              type="button"
+              onClick={handleExportCsv}
+              className="inline-flex h-[35px] items-center rounded-[40px] bg-[#eefbff] px-5 text-[12px] font-medium tracking-[-0.05em] text-[#377dff]"
+            >
+              Export CSV
+            </button>
+            <Link
+              href={ROUTES.tasks}
+              className="inline-flex h-[35px] items-center rounded-[40px] bg-[#eefbff] px-6 text-[12px] font-medium tracking-[-0.05em] text-[#377dff]"
+            >
+              Open full queue
+            </Link>
 
-          {filterActive ? (
-            <p className="mt-2 text-xs text-muted">
-              Showing {filteredTransactions.length} of {transactions.length}{" "}
-              transactions
-              {appliedFrom ? ` from ${appliedFrom}` : ""}
-              {appliedTo ? ` to ${appliedTo}` : ""}
-            </p>
-          ) : null}
+            {filterOpen ? (
+              <div
+                role="dialog"
+                aria-label="Filter by date"
+                className="absolute right-0 top-full z-20 mt-2 w-72 rounded-[12px] border border-[#e7e7e7] bg-white p-4 shadow-[0_12px_32px_rgba(15,23,42,0.12)]"
+              >
+                <p className="text-sm font-semibold text-[#1f1f21]">
+                  Filter by date
+                </p>
+                <div className="mt-3 space-y-3">
+                  <label className="block space-y-1">
+                    <span className="text-xs font-medium text-[rgba(0,0,0,0.5)]">
+                      From
+                    </span>
+                    <input
+                      type="date"
+                      value={draftFrom}
+                      onChange={(event) => setDraftFrom(event.target.value)}
+                      className="h-10 w-full rounded-[10px] border border-[#e7e7e7] bg-white px-3 text-sm outline-none focus-visible:border-[#377dff] focus-visible:ring-2 focus-visible:ring-[#377dff]/20"
+                    />
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-xs font-medium text-[rgba(0,0,0,0.5)]">
+                      To
+                    </span>
+                    <input
+                      type="date"
+                      value={draftTo}
+                      onChange={(event) => setDraftTo(event.target.value)}
+                      className="h-10 w-full rounded-[10px] border border-[#e7e7e7] bg-white px-3 text-sm outline-none focus-visible:border-[#377dff] focus-visible:ring-2 focus-visible:ring-[#377dff]/20"
+                    />
+                  </label>
+                </div>
+                <div className="mt-4 flex justify-end gap-2">
+                  <Button type="button" variant="ghost" onClick={clearDateFilter}>
+                    Clear
+                  </Button>
+                  <Button type="button" onClick={applyDateFilter}>
+                    Apply
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+          </div>
         </div>
 
+        {filterActive ? (
+          <p className="border-t border-[#e7e7e7] px-4 py-2 text-xs text-[rgba(0,0,0,0.5)] md:px-5">
+            Showing {filteredTransactions.length} of {transactions.length}{" "}
+            transactions
+            {appliedFrom ? ` from ${appliedFrom}` : ""}
+            {appliedTo ? ` to ${appliedTo}` : ""}
+          </p>
+        ) : null}
+
         {filteredTransactions.length === 0 ? (
-          <div className="p-6">
+          <div className="border-t border-[#e7e7e7] px-4 py-12 md:px-5">
             <EmptyState
               title={filterActive ? "No matches" : "No transactions"}
               description={
@@ -257,50 +393,55 @@ export function PaymentsOverviewView({
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
+            <table className="min-w-[920px] w-full border-collapse text-left">
               <thead>
-                <tr className="border-b border-border text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
-                  <th className="px-4 py-3 font-semibold md:px-5">Txn ID</th>
-                  <th className="px-4 py-3 font-semibold">Customer</th>
-                  <th className="px-4 py-3 font-semibold">Amount</th>
-                  <th className="px-4 py-3 font-semibold">Payment Method</th>
-                  <th className="px-4 py-3 font-semibold">Status</th>
-                  <th className="px-4 py-3 font-semibold md:px-5">Date</th>
+                <tr className="bg-[#f6f6f6] text-[14px] font-medium tracking-[-0.05em] text-[#666]">
+                  <th className="px-5 py-2.5 first:rounded-l-[5px]">TRX ID</th>
+                  <th className="px-3 py-2.5">Customer</th>
+                  <th className="px-3 py-2.5">Amount</th>
+                  <th className="px-3 py-2.5">Payment Method</th>
+                  <th className="px-3 py-2.5">Status</th>
+                  <th className="px-5 py-2.5 last:rounded-r-[5px]">Date</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
+              <tbody>
                 {filteredTransactions.map((row) => {
                   const href = row.taskId
                     ? ROUTES.taskPanel(row.taskId, "payment")
                     : ROUTES.payments;
                   return (
-                    <tr key={row.id} className="hover:bg-accent-soft/30">
-                      <td className="px-4 py-3.5 md:px-5">
+                    <tr
+                      key={row.id}
+                      className="border-t border-[#e7e7e7] text-[13px] font-medium tracking-[-0.03em] text-[rgba(0,16,44,0.5)] hover:bg-[#fafafa]"
+                    >
+                      <td className="px-5 py-5">
                         <Link
                           href={href}
-                          className="font-semibold text-accent hover:text-accent-hover"
+                          className="font-medium text-[rgba(0,16,44,0.5)] hover:text-[#377dff]"
                         >
                           {row.txnId}
                         </Link>
                       </td>
-                      <td className="px-4 py-3.5 font-semibold text-foreground">
+                      <td className="max-w-[160px] truncate px-3 py-5">
                         {row.customer}
                       </td>
-                      <td className="px-4 py-3.5 font-semibold tabular-nums text-foreground">
-                        {money(row.amount, row.currency)}
+                      <td className="whitespace-nowrap px-3 py-5 tabular-nums">
+                        {figmaMoney(row.amount)}
                       </td>
-                      <td className="px-4 py-3.5 text-muted">{row.method}</td>
-                      <td className="px-4 py-3.5">
+                      <td className="max-w-[160px] truncate px-3 py-5">
+                        {row.method}
+                      </td>
+                      <td className="px-3 py-5">
                         <span
                           className={cn(
-                            "inline-flex rounded-full px-2.5 py-1 text-xs font-semibold capitalize",
+                            "inline-flex rounded-[50px] px-3.5 py-1 text-[12px] font-medium tracking-[-0.03em]",
                             statusChip(row.status),
                           )}
                         >
-                          {row.status}
+                          {statusLabel(row.status)}
                         </span>
                       </td>
-                      <td className="px-4 py-3.5 text-muted md:px-5">
+                      <td className="whitespace-nowrap px-5 py-5">
                         {formatTxnDate(row.at)}
                       </td>
                     </tr>
@@ -310,7 +451,7 @@ export function PaymentsOverviewView({
             </table>
           </div>
         )}
-      </div>
+      </section>
     </div>
   );
 }
