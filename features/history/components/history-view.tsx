@@ -12,6 +12,10 @@ import {
   type ActivityLogKind,
 } from "@/lib/activity/parse-api";
 import {
+  hideActivityId,
+  readHiddenActivityIds,
+} from "@/lib/activity/hidden-store";
+import {
   formatNotificationTime,
   hrefForNotification,
   kindLabel,
@@ -191,12 +195,36 @@ type AllFeedRow =
   | { key: string; at: string; source: "log"; log: ActivityLogItem }
   | { key: string; at: string; source: "notif"; notif: NotificationItem };
 
+function RemoveButton({
+  label,
+  onClick,
+}: {
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="inline-flex size-7 items-center justify-center rounded-md text-muted hover:bg-surface-hover hover:text-foreground"
+      aria-label={label}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
+    >
+      ×
+    </button>
+  );
+}
+
 function LogRow({
   item,
   onOpen,
+  onRemove,
 }: {
   item: ActivityLogItem;
   onOpen: (href: string) => void;
+  onRemove: (id: string) => void;
 }) {
   const href = item.taskId ? ROUTES.task(item.taskId) : null;
   const visual = kindVisual(item.kind);
@@ -249,6 +277,12 @@ function LogRow({
       <td className="whitespace-nowrap px-5 py-5 text-[12px] font-normal tracking-[-0.03em] text-muted">
         <time dateTime={item.at}>{formatLogTime(item.at)}</time>
       </td>
+      <td className="px-3 py-5 text-right">
+        <RemoveButton
+          label="Remove from history"
+          onClick={() => onRemove(item.id)}
+        />
+      </td>
     </tr>
   );
 }
@@ -256,9 +290,11 @@ function LogRow({
 function AllNotifRow({
   item,
   onOpen,
+  onRemove,
 }: {
   item: NotificationItem;
   onOpen: (item: NotificationItem) => void;
+  onRemove: (id: string) => void;
 }) {
   return (
     <tr
@@ -300,6 +336,12 @@ function AllNotifRow({
       <td className="whitespace-nowrap px-5 py-5 text-[12px] font-normal tracking-[-0.03em] text-muted">
         <time dateTime={item.createdAt}>{formatLogTime(item.createdAt)}</time>
       </td>
+      <td className="px-3 py-5 text-right">
+        <RemoveButton
+          label="Remove from history"
+          onClick={() => onRemove(item.id)}
+        />
+      </td>
     </tr>
   );
 }
@@ -307,21 +349,27 @@ function AllNotifRow({
 export function HistoryView({ logs }: HistoryViewProps) {
   const router = useRouter();
   const ops = useOps();
-  const { items: notifications, markRead } = useNotifications();
+  const {
+    items: notifications,
+    markRead,
+    removeFromHistory,
+  } = useNotifications();
   const [tab, setTab] = useState<HistoryTab>("all");
+  const [hiddenActivityIds, setHiddenActivityIds] = useState(() =>
+    readHiddenActivityIds(),
+  );
 
   const mergedLogs = useMemo(() => {
     const live = ops?.liveActivities ?? [];
-    if (live.length === 0) return logs;
     const byId = new Map<string, ActivityLogItem>();
     for (const row of live) byId.set(row.id, row);
     for (const row of logs) {
       if (!byId.has(row.id)) byId.set(row.id, row);
     }
-    return [...byId.values()].sort(
-      (a, b) => new Date(b.at).getTime() - new Date(a.at).getTime(),
-    );
-  }, [logs, ops?.liveActivities]);
+    return [...byId.values()]
+      .filter((row) => !hiddenActivityIds.has(row.id))
+      .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+  }, [hiddenActivityIds, logs, ops?.liveActivities]);
 
   const visibleLogs = useMemo(() => {
     if (tab === "notifications" || tab === "all") return [];
@@ -376,6 +424,10 @@ export function HistoryView({ logs }: HistoryViewProps) {
   function openNotification(item: NotificationItem) {
     if (!item.read) markRead(item.id);
     router.push(hrefForNotification(item));
+  }
+
+  function removeActivity(id: string) {
+    setHiddenActivityIds(hideActivityId(id));
   }
 
   return (
@@ -439,7 +491,10 @@ export function HistoryView({ logs }: HistoryViewProps) {
                     </th>
                     <th className="px-3 py-2.5">Type</th>
                     <th className="px-3 py-2.5">Status</th>
-                    <th className="px-5 py-2.5 last:rounded-r-[5px]">Date</th>
+                    <th className="px-5 py-2.5">Date</th>
+                    <th className="px-3 py-2.5 last:rounded-r-[5px]">
+                      <span className="sr-only">Remove</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -486,6 +541,12 @@ export function HistoryView({ logs }: HistoryViewProps) {
                           {formatNotificationTime(item.createdAt)}
                         </time>
                       </td>
+                      <td className="px-3 py-5 text-right">
+                        <RemoveButton
+                          label="Remove from history"
+                          onClick={() => removeFromHistory(item.id)}
+                        />
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -508,7 +569,10 @@ export function HistoryView({ logs }: HistoryViewProps) {
                     <th className="px-5 py-2.5 first:rounded-l-[5px]">Event</th>
                     <th className="px-3 py-2.5">Task</th>
                     <th className="px-3 py-2.5">User</th>
-                    <th className="px-5 py-2.5 last:rounded-r-[5px]">Date</th>
+                    <th className="px-5 py-2.5">Date</th>
+                    <th className="px-3 py-2.5 last:rounded-r-[5px]">
+                      <span className="sr-only">Remove</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -518,12 +582,14 @@ export function HistoryView({ logs }: HistoryViewProps) {
                         key={row.key}
                         item={row.log}
                         onOpen={(href) => router.push(href)}
+                        onRemove={removeActivity}
                       />
                     ) : (
                       <AllNotifRow
                         key={row.key}
                         item={row.notif}
                         onOpen={openNotification}
+                        onRemove={removeFromHistory}
                       />
                     ),
                   )}
@@ -546,7 +612,10 @@ export function HistoryView({ logs }: HistoryViewProps) {
                   <th className="px-5 py-2.5 first:rounded-l-[5px]">Event</th>
                   <th className="px-3 py-2.5">Task</th>
                   <th className="px-3 py-2.5">User</th>
-                  <th className="px-5 py-2.5 last:rounded-r-[5px]">Date</th>
+                  <th className="px-5 py-2.5">Date</th>
+                  <th className="px-3 py-2.5 last:rounded-r-[5px]">
+                    <span className="sr-only">Remove</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -555,6 +624,7 @@ export function HistoryView({ logs }: HistoryViewProps) {
                     key={item.id}
                     item={item}
                     onOpen={(href) => router.push(href)}
+                    onRemove={removeActivity}
                   />
                 ))}
               </tbody>

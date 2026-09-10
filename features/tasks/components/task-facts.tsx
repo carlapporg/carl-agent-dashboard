@@ -1,6 +1,7 @@
 import { taskFacts } from "@/lib/tasks/details";
 import type { Task } from "@/types/task";
 
+/** Read-only trip / task fields — Figma “Task Details Confirmation” card. */
 export function TaskFacts({ task }: { task: Task }) {
   const facts = taskFacts(task);
   const membership = task.membership;
@@ -15,11 +16,13 @@ export function TaskFacts({ task }: { task: Task }) {
     : "";
 
   return (
-    <section className="rounded-[var(--radius-card)] border border-border bg-surface p-4 shadow-[var(--shadow-card)]">
-      <h2 className="text-sm font-semibold text-foreground">Trip details</h2>
+    <section className="overflow-hidden rounded-[15px] border border-border bg-surface p-5 shadow-(--shadow-card)">
+      <h2 className="text-[24px] font-semibold tracking-[-0.05em] text-foreground">
+        Task Details Confirmation
+      </h2>
 
       {hasMembership ? (
-        <div className="mt-3 rounded-lg border border-accent/25 bg-accent/[0.06] px-3 py-2.5">
+        <div className="mt-4 rounded-[10px] border border-accent/25 bg-accent/[0.06] px-3 py-2.5">
           <p className="text-xs font-semibold uppercase tracking-wide text-accent">
             Membership
           </p>
@@ -33,18 +36,20 @@ export function TaskFacts({ task }: { task: Task }) {
       ) : null}
 
       {facts.length > 0 ? (
-        <dl className="mt-3 divide-y divide-border">
+        <dl className="mt-5 divide-y divide-border">
           {facts
             .filter((fact) => fact.key !== "membership")
             .map((fact) => (
               <div
                 key={fact.key}
-                className="flex flex-col gap-0.5 py-2 first:pt-0 last:pb-0 sm:flex-row sm:gap-4"
+                className="grid grid-cols-1 gap-1 py-3.5 first:pt-0 last:pb-0 sm:grid-cols-[minmax(120px,0.4fr)_1fr] sm:gap-4"
               >
-                <dt className="w-40 shrink-0 text-sm font-medium text-muted">
+                <dt className="text-[16px] font-medium tracking-[-0.04em] text-muted">
                   {fact.label}
                 </dt>
-                <dd className="text-sm text-foreground">{fact.value}</dd>
+                <dd className="text-[16px] font-normal tracking-[-0.04em] text-foreground">
+                  {fact.value}
+                </dd>
               </div>
             ))}
         </dl>

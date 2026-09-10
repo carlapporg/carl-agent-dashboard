@@ -17,7 +17,6 @@ import {
 } from "@/features/ops/auto-accept-offer";
 import { markOfferRejected } from "@/features/ops/rejected-offers";
 import { ItineraryPanel } from "@/features/itinerary/components/itinerary-panel";
-import { TaskActionLog } from "@/features/tasks/components/task-action-log";
 import { TaskAgentNotes } from "@/features/tasks/components/task-agent-notes";
 import {
   TaskChatThread,
@@ -32,9 +31,9 @@ import {
   markTaskConfirmationKnown,
   markTaskReceiptKnown,
 } from "@/lib/tasks/confirmation-presence";
-import { TaskStatusStepper } from "@/features/tasks/components/task-status-stepper";
 import { formatStatus } from "@/features/tasks/components/status-badge";
 import { TaskStatusForm } from "@/features/tasks/components/task-status-form";
+import { stageProgressPercent } from "@/features/tasks/components/stage-progress";
 import { CompleteTaskReceiptDialog } from "@/features/tasks/components/complete-task-receipt-dialog";
 import { TaskSubtasks } from "@/features/tasks/components/task-subtasks";
 import {
@@ -81,7 +80,7 @@ type TaskWorkspaceProps = {
   readOnly?: boolean;
 };
 
-type ExtraTab = "customer" | "itinerary" | "log";
+type ExtraTab = "customer" | "itinerary";
 
 function phaseLabel(
   task: Task,
@@ -260,7 +259,6 @@ export function TaskWorkspace({
   useEffect(() => {
     const panel = searchParams.get("panel");
     if (!panel) return;
-    if (panel === "log") setExtraTab("log");
     if (panel === "chat") {
       document.getElementById("panel-chat")?.scrollIntoView({
         behavior: "smooth",
@@ -354,54 +352,34 @@ export function TaskWorkspace({
   return (
     <>
       <PageChromeSetter
-        title={taskDisplayTitle(task)}
+        title="Task detail"
         subtitle={`${taskDisplayCode(task)} · ${task.customerName}`}
       />
-      <div className="flex flex-col gap-3 lg:h-[calc(100dvh-7.5rem)] lg:min-h-0 lg:overflow-hidden">
-      <Link
-        href={lockedReadOnly ? ROUTES.history : ROUTES.tasks}
-        className="inline-flex shrink-0 items-center gap-1.5 text-sm font-semibold text-accent hover:text-accent-hover"
-      >
-        ← Back to {lockedReadOnly ? "history" : "tasks"}
-      </Link>
-
-      <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.95fr)] lg:items-stretch">
-        {/* Work column */}
-        <div className="min-h-0 space-y-3 lg:overflow-y-auto lg:pr-1">
-          <section className="rounded-[var(--radius-card)] border border-border bg-surface p-4 shadow-[var(--shadow-card)] md:p-5">
-            <div className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="rounded-[var(--radius-sm)] bg-surface-hover px-2.5 py-0.5 font-semibold text-muted">
-                {taskDisplayCode(task)}
-              </span>
-              <span className="rounded-[var(--radius-sm)] border border-border px-2.5 py-0.5 font-medium text-foreground-soft">
-                {phaseLabel(task, confirmation, receipt, rejecting)}
-              </span>
-              {task.tier === "vip" || task.tier === "family" ? (
-                <span className="rounded-full bg-accent-soft px-2.5 py-0.5 text-xs font-semibold text-accent">
-                  {task.tier.toUpperCase()}
-                </span>
-              ) : null}
-              {lockedReadOnly ? (
-                <span className="rounded-[var(--radius-sm)] bg-warning-soft px-2.5 py-0.5 text-xs font-semibold text-warning-foreground">
-                  Read-only
-                </span>
-              ) : null}
-            </div>
-
-            <h1 className="mt-2.5 text-xl font-semibold tracking-tight text-foreground md:text-2xl">
-              {taskDisplayTitle(task)}
+      <div className="space-y-5">
+        <section className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="text-[34px] font-semibold leading-none tracking-[-0.04em] text-foreground">
+              Task detail
             </h1>
+            <p className="mt-3 text-[16px] font-normal tracking-[-0.02em] text-muted">
+              Your current sales summary and activity
+            </p>
+          </div>
+          <Link
+            href={lockedReadOnly ? ROUTES.history : ROUTES.tasks}
+            className="inline-flex shrink-0 items-center gap-1.5 text-sm font-semibold text-accent hover:text-accent-hover"
+          >
+            ← Back to {lockedReadOnly ? "history" : "tasks"}
+          </Link>
+        </section>
 
-            <div className="mt-4 border-t border-border pt-3">
-              <TaskStatusStepper
-                task={viewTask}
-                parent={parentTask}
-                compact
-              />
-            </div>
-
+        {(task.backendStatus === "OFFERED" && !lockedReadOnly) ||
+        actionLabel ||
+        showCompleteHint ||
+        closed ? (
+          <section className="overflow-hidden rounded-[15px] border border-border bg-surface p-4 shadow-(--shadow-card)">
             {task.backendStatus === "OFFERED" && !lockedReadOnly ? (
-              <div className="mt-4 flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <OfferCountdown
                   expiresAt={offerWindowEnd(task)}
                   taskId={task.id}
@@ -411,20 +389,21 @@ export function TaskWorkspace({
                 <OfferActions task={task} />
               </div>
             ) : closed ? (
-              <p className="mt-4 text-sm text-muted">{closedTaskMessage(task)}</p>
+              <p className="text-sm text-muted">{closedTaskMessage(task)}</p>
             ) : actionLabel ? (
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
                   loading={pending}
                   disabled={pending}
                   onClick={runPrimary}
+                  className="h-[43px] rounded-[35px] px-6"
                 >
                   {actionLabel}
                 </Button>
               </div>
             ) : showCompleteHint ? (
-              <p className="mt-4 text-sm text-muted">
+              <p className="text-sm text-muted">
                 {bookingLocked
                   ? confirmation?.status === "PENDING"
                     ? "Waiting for the client to confirm the task details."
@@ -439,154 +418,213 @@ export function TaskWorkspace({
               </p>
             ) : null}
           </section>
+        ) : null}
 
-          <TaskFacts task={task} />
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,455px)_minmax(0,1fr)] xl:items-start">
+          {/* Left — Figma: confirmation summary + editable task details */}
+          <div className="space-y-5">
+            <TaskFacts task={task} />
 
-          <TaskConfirmationPanel
-            task={task}
-            taskStatus={task.backendStatus}
-            confirmation={confirmation}
-            disabled={lockedReadOnly}
-            onDraft={(next) => {
-              markTaskConfirmationKnown(task.id);
-              setConfirmation(next);
-              ops?.setLiveConfirmation(next);
-            }}
-            onSent={(next) => {
-              markTaskConfirmationKnown(task.id);
-              setConfirmation(next);
-              ops?.setLiveConfirmation(next);
-              setTask({
-                ...withBackendStatus(task, "WAITING_FOR_USER"),
-                status: "waiting_for_customer",
-              });
-              ops?.patchLiveTask(
-                task.id,
-                liveStatusPatch("WAITING_FOR_USER", "waiting_for_customer"),
-                task,
-              );
-              // Waiting for Customer is set only when Task Details Confirmation is sent.
-              if (task.backendStatus !== "WAITING_FOR_USER") {
-                void updateTaskAgentStatusAction(task.id, "WAITING_FOR_USER");
-              }
-              router.refresh();
-            }}
-          />
+            <TaskConfirmationPanel
+              task={task}
+              taskStatus={task.backendStatus}
+              confirmation={confirmation}
+              disabled={lockedReadOnly}
+              onDraft={(next) => {
+                markTaskConfirmationKnown(task.id);
+                setConfirmation(next);
+                ops?.setLiveConfirmation(next);
+              }}
+              onSent={(next) => {
+                markTaskConfirmationKnown(task.id);
+                setConfirmation(next);
+                ops?.setLiveConfirmation(next);
+                setTask({
+                  ...withBackendStatus(task, "WAITING_FOR_USER"),
+                  status: "waiting_for_customer",
+                });
+                ops?.patchLiveTask(
+                  task.id,
+                  liveStatusPatch("WAITING_FOR_USER", "waiting_for_customer"),
+                  task,
+                );
+                if (task.backendStatus !== "WAITING_FOR_USER") {
+                  void updateTaskAgentStatusAction(task.id, "WAITING_FOR_USER");
+                }
+                router.refresh();
+              }}
+            />
 
-          <TaskStatusForm
-            task={task}
-            displayStatus={viewTask.status}
-            disabled={!canUpdateAgentStatus(task)}
-            blockComplete={!detailsConfirmed}
-            receipt={receipt}
-            onReceiptChanged={(next) => {
-              markTaskReceiptKnown(task.id);
-              setReceipt(next);
-              ops?.setLiveReceipt(next);
-            }}
-            onUpdated={(status) => {
-              setTask(withBackendStatus(task, status));
-              ops?.patchLiveTask(task.id, {
-                backendStatus: status,
-                status: uiStatusFromAgent(status),
-                updatedAt: new Date().toISOString(),
-              }, task);
-              if (status === "COMPLETED") router.refresh();
-            }}
-          />
+            <TaskAgentNotes taskId={task.id} disabled={lockedReadOnly} />
 
-          <TaskAgentNotes taskId={task.id} disabled={lockedReadOnly} />
+            {childTasks.length > 0 ? (
+              <TaskSubtasks parent={task} childTasks={childTasks} />
+            ) : null}
 
-          {childTasks.length > 0 ? (
-            <TaskSubtasks parent={task} childTasks={childTasks} />
-          ) : null}
+            {customer || showItinerary ? (
+              <section className="overflow-hidden rounded-[15px] border border-border bg-surface p-4 shadow-(--shadow-card)">
+                <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-muted">
+                  More details
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {(
+                    [
+                      customer ? ("customer" as const) : null,
+                      showItinerary ? ("itinerary" as const) : null,
+                    ].filter(Boolean) as ExtraTab[]
+                  ).map((tab) => (
+                    <button
+                      key={tab}
+                      type="button"
+                      onClick={() =>
+                        setExtraTab((cur) => (cur === tab ? null : tab))
+                      }
+                      className={cn(
+                        "rounded-full border px-3 py-1.5 text-sm font-medium transition-colors",
+                        extraTab === tab
+                          ? "border-accent bg-accent/10 text-accent"
+                          : "border-border text-foreground-soft hover:border-accent/35",
+                      )}
+                    >
+                      {tab === "customer" ? "Customer" : "Itinerary"}
+                    </button>
+                  ))}
+                </div>
 
-          {/* Secondary details — collapsed by default */}
-          <section className="rounded-[var(--radius-card)] border border-border bg-surface p-3 shadow-[var(--shadow-card)]">
-            <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-muted">
-              More details
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {(
-                [
-                  customer ? ("customer" as const) : null,
-                  showItinerary ? ("itinerary" as const) : null,
-                  "log" as const,
-                ].filter(Boolean) as ExtraTab[]
-              ).map((tab) => (
-                <button
-                  key={tab}
-                  type="button"
-                  onClick={() =>
-                    setExtraTab((cur) => (cur === tab ? null : tab))
-                  }
-                  className={cn(
-                    "rounded-full border px-3 py-1.5 text-sm font-medium transition-colors",
-                    extraTab === tab
-                      ? "border-accent bg-accent/10 text-accent"
-                      : "border-border text-foreground-soft hover:border-accent/35",
-                  )}
-                >
-                  {tab === "customer"
-                    ? "Customer"
-                    : tab === "itinerary"
-                      ? "Itinerary"
-                      : "Action log"}
-                </button>
-              ))}
+                {extraTab === "customer" && customer ? (
+                  <div className="mt-3 border-t border-border pt-3">
+                    <TaskCustomerSnippet
+                      profile={customer}
+                      history={customerHistory}
+                      readOnly={readOnly}
+                    />
+                  </div>
+                ) : null}
+                {extraTab === "itinerary" && showItinerary ? (
+                  <div className="mt-3 border-t border-border pt-3">
+                    <ItineraryPanel
+                      parent={task}
+                      childTasks={childTasks}
+                      itinerary={itinerary}
+                    />
+                  </div>
+                ) : null}
+              </section>
+            ) : null}
+          </div>
+
+          {/* Right — Figma: progress + status update + chat */}
+          <div className="flex min-h-0 flex-col gap-5">
+            <section
+              id="panel-brief"
+              className="overflow-hidden rounded-[15px] border border-border bg-surface p-5 shadow-(--shadow-card)"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <h2 className="min-w-0 text-[24px] font-semibold tracking-[-0.05em] text-foreground">
+                  {taskDisplayTitle(task)}
+                </h2>
+                <div className="flex flex-wrap items-center gap-2 text-[14px]">
+                  <span className="text-muted">Status:</span>
+                  <span className="inline-flex h-[25px] items-center rounded-[8px] bg-surface-muted px-3 text-[12px] font-medium text-foreground">
+                    {phaseLabel(task, confirmation, receipt, rejecting)}
+                  </span>
+                </div>
+              </div>
+
+              {(() => {
+                const pct = stageProgressPercent(viewTask.status);
+                return (
+                  <div className="mt-5">
+                    <div className="flex items-center justify-between gap-3 text-[16px] font-medium tracking-[-0.03em] text-foreground">
+                      <span>Progress:</span>
+                      <span className="tabular-nums">{pct}%</span>
+                    </div>
+                    <div className="mt-3 h-[5px] overflow-hidden rounded-full bg-surface-muted">
+                      <div
+                        className="h-full rounded-full bg-accent transition-[width] duration-300"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <p className="mt-2 text-[12px] text-muted">
+                      {bookingLocked
+                        ? confirmation?.status === "PENDING"
+                          ? "Waiting for the client to confirm the task details."
+                          : confirmation?.status === "DRAFT"
+                            ? "Review the draft preview, then send it to the customer."
+                            : confirmation?.status === "DECLINED"
+                              ? "The client declined the details. Send a new confirmation."
+                              : !detailsConfirmed
+                                ? "Send the task details confirmation before you can complete."
+                                : gateReasons[0] ?? phaseLabel(task, confirmation, receipt, rejecting)
+                        : phaseLabel(task, confirmation, receipt, rejecting)}
+                    </p>
+                  </div>
+                );
+              })()}
+
+              {task.tier === "vip" || task.tier === "family" ? (
+                <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-accent">
+                  {task.tier} · {taskDisplayCode(task)}
+                </p>
+              ) : (
+                <p className="mt-3 text-xs text-muted">{taskDisplayCode(task)}</p>
+              )}
+            </section>
+
+            <TaskStatusForm
+              task={task}
+              displayStatus={viewTask.status}
+              disabled={!canUpdateAgentStatus(task)}
+              blockComplete={!detailsConfirmed}
+              receipt={receipt}
+              onReceiptChanged={(next) => {
+                markTaskReceiptKnown(task.id);
+                setReceipt(next);
+                ops?.setLiveReceipt(next);
+              }}
+              onUpdated={(status) => {
+                setTask(withBackendStatus(task, status));
+                ops?.patchLiveTask(
+                  task.id,
+                  {
+                    backendStatus: status,
+                    status: uiStatusFromAgent(status),
+                    updatedAt: new Date().toISOString(),
+                  },
+                  task,
+                );
+                if (status === "COMPLETED") router.refresh();
+              }}
+            />
+
+            <div className="min-h-[520px] flex-1 overflow-hidden rounded-[15px] border border-border bg-surface shadow-(--shadow-card) lg:min-h-[544px]">
+              <TaskChatThread
+                ref={chatRef}
+                className="h-full min-h-[520px] border-0 shadow-none lg:min-h-[544px]"
+                taskId={task.id}
+                timeline={timeline}
+                quickActions={task.aiBrief?.missingInfo ?? []}
+                showTemplates={
+                  canMessageClient(task) && !isFailedOrCancelled(task)
+                }
+                title={task.customerName}
+                subtitle="Online"
+                clientLabel={task.customerName}
+                disabled={!canMessageClient(task)}
+                disabledHint={messageClientHint(task)}
+              />
             </div>
-
-            {extraTab === "customer" && customer ? (
-              <div className="mt-3 border-t border-border pt-3">
-                <TaskCustomerSnippet
-                  profile={customer}
-                  history={customerHistory}
-                  readOnly={readOnly}
-                />
-              </div>
-            ) : null}
-            {extraTab === "itinerary" && showItinerary ? (
-              <div className="mt-3 border-t border-border pt-3">
-                <ItineraryPanel
-                  parent={task}
-                  childTasks={childTasks}
-                  itinerary={itinerary}
-                />
-              </div>
-            ) : null}
-            {extraTab === "log" ? (
-              <div className="mt-3 border-t border-border pt-3" id="panel-log">
-                <TaskActionLog timeline={timeline} />
-              </div>
-            ) : null}
-          </section>
+          </div>
         </div>
 
-        <div className="flex h-[calc(100dvh-10rem)] min-h-0 flex-col overflow-hidden lg:h-full">
-          <TaskChatThread
-            ref={chatRef}
-            className="h-full min-h-0"
-            taskId={task.id}
-            timeline={timeline}
-            quickActions={task.aiBrief?.missingInfo ?? []}
-            showTemplates={canMessageClient(task) && !isFailedOrCancelled(task)}
-            title="Conversation"
-            subtitle={`With ${task.customerName}`}
-            clientLabel={task.customerName}
-            disabled={!canMessageClient(task)}
-            disabledHint={messageClientHint(task)}
-          />
-        </div>
+        <CompleteTaskReceiptDialog
+          open={completeOpen}
+          taskId={task.id}
+          receipt={receipt}
+          onClose={() => setCompleteOpen(false)}
+          onCompleted={onTaskCompleted}
+        />
       </div>
-
-      <CompleteTaskReceiptDialog
-        open={completeOpen}
-        taskId={task.id}
-        receipt={receipt}
-        onClose={() => setCompleteOpen(false)}
-        onCompleted={onTaskCompleted}
-      />
-    </div>
     </>
   );
 }

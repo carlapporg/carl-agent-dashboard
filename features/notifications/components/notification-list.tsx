@@ -86,7 +86,7 @@ export function NotificationList({
               <button
                 type="button"
                 className="mt-0.5 size-7 shrink-0 rounded-md text-muted hover:bg-surface-hover hover:text-foreground"
-                aria-label="Dismiss notification"
+                aria-label="Clear from tray"
                 onClick={() => dismiss(item.id)}
               >
                 ×

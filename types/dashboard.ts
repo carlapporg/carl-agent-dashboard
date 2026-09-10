@@ -90,6 +90,8 @@ export type NotificationItem = {
   read: boolean;
   taskId?: string;
   panel?: "payment" | "chat" | "brief" | "log" | "receipt";
+  /** Cleared from the bell tray; still shown in History until removed there. */
+  hiddenFromBell?: boolean;
 };
 
 export type NotificationPrefs = {

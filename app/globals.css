@@ -1,6 +1,9 @@
 @import "tailwindcss";
 @import "../styles/theme.css";
 
+/* App theme uses html.dark — not OS prefers-color-scheme */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* Lock root scale so localhost and Vercel render the same on all screen widths. */
 html {
   font-size: 16px;

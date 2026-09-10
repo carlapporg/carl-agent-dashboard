@@ -114,6 +114,39 @@ function emptyValueForField(
   return fieldInputType(field) === "lineItems" ? [emptyLineItem()] : "";
 }
 
+/** Date/time must be filled before send (Nest schema often marks them optional). */
+function isDateOrTimeField(
+  field: Pick<ConfirmationSchemaField, "key" | "label">,
+): boolean {
+  const key = field.key.trim().toLowerCase();
+  const label = field.label?.trim().toLowerCase() ?? "";
+  if (
+    key === "date" ||
+    key === "time" ||
+    key === "pickuptime" ||
+    key === "departuredate" ||
+    key === "departuretime"
+  ) {
+    return true;
+  }
+  return (
+    label === "date" ||
+    label === "time" ||
+    label === "pickup time" ||
+    label === "departure date" ||
+    label === "departure time"
+  );
+}
+
+function withRequiredFlags(
+  field: ConfirmationSchemaField,
+): ConfirmationSchemaField {
+  if (isDateOrTimeField(field)) {
+    return { ...field, required: true };
+  }
+  return field;
+}
+
 /**
  * Build the full editable confirmation field list.
  * Prefer Nest schema fields; only fall back to prefill/metadata when schema is empty.
@@ -130,13 +163,16 @@ export function buildConfirmationFormFields(
 
   for (const field of schemaFields) {
     if (!field.key || isSkippableKey(field.key)) continue;
-    byKey.set(field.key, {
-      key: field.key,
-      label: field.label,
-      required: field.required ?? false,
-      prefillFrom: field.prefillFrom,
-      inputType: field.inputType,
-    });
+    byKey.set(
+      field.key,
+      withRequiredFlags({
+        key: field.key,
+        label: field.label,
+        required: field.required ?? false,
+        prefillFrom: field.prefillFrom,
+        inputType: field.inputType,
+      }),
+    );
   }
 
   // When Nest did not send a schema, recover editable keys from prefill/metadata.
@@ -145,12 +181,15 @@ export function buildConfirmationFormFields(
     for (const key of Object.keys(prefill)) {
       if (isSkippableKey(key) || byKey.has(key)) continue;
       const raw = prefill[key];
-      byKey.set(key, {
+      byKey.set(
         key,
-        label: humanizeKey(key),
-        required: false,
-        inputType: Array.isArray(raw) ? "lineItems" : "text",
-      });
+        withRequiredFlags({
+          key,
+          label: humanizeKey(key),
+          required: false,
+          inputType: Array.isArray(raw) ? "lineItems" : "text",
+        }),
+      );
     }
 
     const metadata = task.metadata;
@@ -159,21 +198,27 @@ export function buildConfirmationFormFields(
         if (isSkippableKey(key) || byKey.has(key)) continue;
         if (Array.isArray(value)) {
           if (lineItemsFromUnknown(value)) {
-            byKey.set(key, {
+            byKey.set(
               key,
-              label: humanizeKey(key),
-              required: false,
-              inputType: "lineItems",
-            });
+              withRequiredFlags({
+                key,
+                label: humanizeKey(key),
+                required: false,
+                inputType: "lineItems",
+              }),
+            );
           }
           continue;
         }
         if (scalarString(value) == null) continue;
-        byKey.set(key, {
+        byKey.set(
           key,
-          label: humanizeKey(key),
-          required: false,
-        });
+          withRequiredFlags({
+            key,
+            label: humanizeKey(key),
+            required: false,
+          }),
+        );
       }
     }
   }

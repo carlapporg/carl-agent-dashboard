@@ -48,6 +48,7 @@ function parseItem(value: unknown): NotificationItem | null {
       row.panel === "receipt"
         ? row.panel
         : undefined,
+    hiddenFromBell: row.hiddenFromBell === true,
   };
 }
 

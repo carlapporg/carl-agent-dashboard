@@ -43,7 +43,10 @@ type PushOptions = {
 };
 
 type NotificationContextValue = {
+  /** Full list for History (includes bell-cleared items). */
   items: NotificationItem[];
+  /** Bell tray only — excludes items cleared with × on the icon. */
+  bellItems: NotificationItem[];
   unreadCount: number;
   prefs: NotificationPrefs;
   panelOpen: boolean;
@@ -54,7 +57,10 @@ type NotificationContextValue = {
   ) => void;
   markRead: (id: string) => void;
   markAllRead: () => void;
+  /** Clear from bell tray only — stays in History. */
   dismiss: (id: string) => void;
+  /** Permanent remove from History (and bell). */
+  removeFromHistory: (id: string) => void;
   setPrefs: (next: NotificationPrefs) => void;
   isViewingTaskInbox: (taskId: string) => boolean;
 };
@@ -101,8 +107,19 @@ function mergeRemoteWithLocal(
   remote: NotificationItem[],
   local: NotificationItem[],
 ): NotificationItem[] {
+  const localById = new Map(local.map((row) => [row.id, row]));
   const byId = new Map<string, NotificationItem>();
-  for (const row of remote) byId.set(row.id, row);
+  for (const row of remote) {
+    const prev = localById.get(row.id);
+    byId.set(
+      row.id,
+      prev?.hiddenFromBell
+        ? { ...row, hiddenFromBell: true, read: true }
+        : prev
+          ? { ...row, read: row.read || prev.read }
+          : row,
+    );
+  }
   for (const row of local) {
     if (!byId.has(row.id)) byId.set(row.id, row);
   }
@@ -271,6 +288,18 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const dismiss = useCallback((id: string) => {
+    // Bell × only clears the tray — History keeps the row.
+    setItems((prev) =>
+      prev.map((item) =>
+        item.id === id
+          ? { ...item, hiddenFromBell: true, read: true }
+          : item,
+      ),
+    );
+    void markNotificationReadAction(id).catch(() => {});
+  }, []);
+
+  const removeFromHistory = useCallback((id: string) => {
     setItems((prev) => prev.filter((item) => item.id !== id));
   }, []);
 
@@ -284,14 +313,20 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     if (next.sound) unlockNotificationAudio();
   }, []);
 
-  const unreadCount = useMemo(
-    () => items.filter((item) => !item.read).length,
+  const bellItems = useMemo(
+    () => items.filter((item) => !item.hiddenFromBell),
     [items],
+  );
+
+  const unreadCount = useMemo(
+    () => bellItems.filter((item) => !item.read).length,
+    [bellItems],
   );
 
   const value = useMemo<NotificationContextValue>(
     () => ({
       items,
+      bellItems,
       unreadCount,
       prefs,
       panelOpen,
@@ -300,10 +335,12 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       markRead,
       markAllRead,
       dismiss,
+      removeFromHistory,
       setPrefs,
       isViewingTaskInbox,
     }),
     [
+      bellItems,
       dismiss,
       isViewingTaskInbox,
       items,
@@ -312,6 +349,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       panelOpen,
       prefs,
       push,
+      removeFromHistory,
       setPrefs,
       unreadCount,
     ],

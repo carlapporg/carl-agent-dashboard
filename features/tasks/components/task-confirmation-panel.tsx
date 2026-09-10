@@ -42,8 +42,9 @@ const CLOSED_STATUSES = new Set([
   "REJECTED",
 ]);
 
-/** Agent UI default currency. */
-const DEFAULT_CURRENCY = "USD";
+/** Always send USD to Nest; UI always shows $. */
+const API_CURRENCY = "USD";
+const DISPLAY_CURRENCY = "$";
 
 type TaskConfirmationPanelProps = {
   task: Task;
@@ -99,9 +100,6 @@ export function TaskConfirmationPanel({
     buildConfirmationFormValues(task, fields, confirmation),
   );
   const [cost, setCost] = useState(confirmation?.cost ?? "");
-  const [currency, setCurrency] = useState(
-    confirmation?.currency || DEFAULT_CURRENCY,
-  );
   const [forceEdit, setForceEdit] = useState(false);
   const [pending, startTransition] = useTransition();
 
@@ -129,7 +127,6 @@ export function TaskConfirmationPanel({
   useEffect(() => {
     setFieldValues(buildConfirmationFormValues(task, fields, confirmation));
     setCost(confirmation?.cost ?? "");
-    setCurrency(confirmation?.currency || DEFAULT_CURRENCY);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: avoid reset on live patches
   }, [task.id, confirmation?.id, fieldKeySig]);
 
@@ -186,7 +183,7 @@ export function TaskConfirmationPanel({
       fields,
       fieldValues,
       cost.trim() || suggestedCost || "",
-      currency.trim() || DEFAULT_CURRENCY,
+      API_CURRENCY,
     );
   }
 
@@ -202,10 +199,6 @@ export function TaskConfirmationPanel({
     // Nest always requires cost (+ currency), even when schema says costRequired false.
     if (!nextCost) {
       toast("Enter the total amount before sending.", "error");
-      return false;
-    }
-    if (!currency.trim()) {
-      toast("Currency is required.", "error");
       return false;
     }
     return true;
@@ -278,25 +271,16 @@ export function TaskConfirmationPanel({
   return (
     <section
       id="panel-confirmation"
-      className="rounded-[var(--radius-card)] border border-border bg-surface p-4 shadow-[var(--shadow-card)] md:p-5"
+      className="overflow-hidden rounded-[15px] border border-border bg-surface p-5 shadow-(--shadow-card)"
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h2 className="text-sm font-semibold text-foreground">
-            Task Details Confirmation
+        <div className="min-w-0">
+          <h2 className="text-[24px] font-semibold tracking-[-0.05em] text-foreground">
+            Task details
           </h2>
-          <p className="mt-1 text-sm text-muted">
-            Edit any task details, enter the total amount (default{" "}
-            {DEFAULT_CURRENCY}), then send the confirmation to the client.
-            {task.taskType ? (
-              <>
-                {" "}
-                Type:{" "}
-                <span className="font-medium text-foreground-soft">
-                  {task.taskType.replaceAll("_", " ")}
-                </span>
-              </>
-            ) : null}
+          <p className="mt-2 text-[16px] font-normal leading-[1.3] tracking-[-0.04em] text-muted">
+            Add client details here, if the client asks to change them. Changes
+            are sent on the confirmation draft.
           </p>
         </div>
         {confirmation ? (
@@ -310,10 +294,14 @@ export function TaskConfirmationPanel({
         <div
           className={cn(
             "mt-4 rounded-xl border px-4 py-3",
-            isDraft && "border-sky-200 bg-sky-50",
-            waiting && "border-amber-200 bg-amber-50",
-            approved && "border-emerald-200 bg-emerald-50",
-            declined && "border-red-200 bg-red-50",
+            isDraft &&
+              "border-sky-200 bg-sky-50 dark:border-sky-500/40 dark:bg-sky-500/10",
+            waiting &&
+              "border-amber-200 bg-amber-50 dark:border-amber-500/40 dark:bg-amber-500/10",
+            approved &&
+              "border-emerald-200 bg-emerald-50 dark:border-emerald-500/40 dark:bg-emerald-500/10",
+            declined &&
+              "border-red-200 bg-red-50 dark:border-red-500/40 dark:bg-red-500/10",
             confirmation.status === "SUPERSEDED" &&
               "border-border bg-surface-hover",
           )}
@@ -358,17 +346,9 @@ export function TaskConfirmationPanel({
       ) : null}
 
       {showEditableForm ? (
-        <div className="mt-4 space-y-3 border-t border-border pt-4">
-          <p className="text-sm font-medium text-foreground">
-            Confirmation details
-          </p>
-          <p className="text-sm text-muted">
-            Edit confirmation details if the client asks to change them.
-            Changes are sent on the confirmation draft.
-          </p>
-
+        <div className="mt-5 space-y-4">
           {membershipLine ? (
-            <div className="rounded-lg border border-accent/25 bg-accent/[0.06] px-3 py-2.5">
+            <div className="rounded-[10px] border border-accent/25 bg-accent/[0.06] px-3 py-2.5">
               <p className="text-xs font-semibold uppercase tracking-wide text-accent">
                 Membership
               </p>
@@ -395,9 +375,20 @@ export function TaskConfirmationPanel({
             </p>
           )}
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <Label htmlFor="confirmation-cost">
+          <div className="border-t border-border pt-5">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[22px] font-medium tracking-[-0.045em] text-muted">
+                Total Sub
+              </p>
+              <p className="text-[32px] font-bold tracking-[-0.09em] text-foreground">
+                {cost.trim() || suggestedCost || "—"} {DISPLAY_CURRENCY}
+              </p>
+            </div>
+            <div className="mt-4">
+              <Label
+                htmlFor="confirmation-cost"
+                className="mb-2 block text-[16px] font-medium tracking-[-0.04em] text-muted"
+              >
                 Total amount <span className="text-danger">*</span>
               </Label>
               <Input
@@ -408,59 +399,46 @@ export function TaskConfirmationPanel({
                 placeholder={suggestedCost || "25.00"}
                 inputMode="decimal"
                 maxLength={40}
+                className="h-[45px] rounded-[5px] border-border px-[15px] text-[14px] tracking-[-0.05em] placeholder:text-muted-dim"
               />
-              {suggestedCost ? (
-                <p className="mt-1 text-xs text-muted">
-                  Suggested from prices above: {suggestedCost}
-                </p>
-              ) : null}
-            </div>
-            <div>
-              <Label htmlFor="confirmation-currency">
-                Currency <span className="text-danger">*</span>
-              </Label>
-              <Input
-                id="confirmation-currency"
-                value={currency}
-                onChange={(event) => setCurrency(event.target.value)}
-                disabled={pending}
-                placeholder={DEFAULT_CURRENCY}
-                maxLength={10}
-              />
-              <p className="mt-1 text-xs text-muted">
-                Always sent with the draft. Default is {DEFAULT_CURRENCY}.
-              </p>
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2 pt-1">
+          <div className="mt-2 flex w-full items-stretch gap-[15px]">
             <Button
-              type="button"
-              loading={pending}
               disabled={pending}
-              onClick={sendToClient}
-            >
-              Send confirmation to client
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
               loading={pending}
+              onClick={sendToClient}
+              className="h-[43px] min-w-0 flex-[238] rounded-full border-transparent bg-accent px-4 text-[14px] font-medium tracking-[-0.05em] text-accent-foreground shadow-none hover:bg-accent-hover"
+            >
+              Send to Client
+            </Button>
+            <button
+              type="button"
               disabled={pending}
               onClick={saveDraftOnly}
+              aria-busy={pending || undefined}
+              style={{ color: "var(--muted)", borderColor: "var(--muted)" }}
+              className="box-border inline-flex h-[43px] min-w-0 flex-[161] items-center justify-center rounded-full border border-solid bg-transparent px-4 text-[14px] font-medium leading-none tracking-[-0.05em] transition-colors hover:border-[color:var(--foreground)] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Save draft preview
-            </Button>
-            {waiting && forceEdit ? (
-              <button
-                type="button"
-                className="text-sm font-semibold text-muted hover:text-foreground"
-                onClick={() => setForceEdit(false)}
-              >
-                Cancel edit
-              </button>
-            ) : null}
+              {pending ? (
+                <span
+                  className="mr-2 size-4 shrink-0 animate-spin rounded-full border-2 border-current border-r-transparent"
+                  aria-hidden
+                />
+              ) : null}
+              Save as Draft
+            </button>
           </div>
+          {waiting && forceEdit ? (
+            <button
+              type="button"
+              className="mt-2 text-sm font-semibold text-muted hover:text-foreground"
+              onClick={() => setForceEdit(false)}
+            >
+              Cancel edit
+            </button>
+          ) : null}
         </div>
       ) : null}
 

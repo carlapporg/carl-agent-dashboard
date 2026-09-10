@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { updateTaskAgentStatusAction } from "@/features/tasks/actions/task-actions";
 import { CompleteTaskReceiptDialog } from "@/features/tasks/components/complete-task-receipt-dialog";
 import { formatStatus } from "@/features/tasks/components/status-badge";
 import { Button } from "@/components/ui/button";
+import { ChevronIcon } from "@/components/ui/chevron-icon";
 import { useToast } from "@/components/providers/toast-provider";
 import { isClosedTask } from "@/features/tasks/lib/workflow";
 import type { TaskReceipt } from "@/types/receipt";
@@ -70,6 +71,41 @@ function choiceFromDisplay(status: TaskStatus): AgentStatusChoice | null {
   return null;
 }
 
+function optionLocked(
+  value: AgentStatusChoice,
+  selectable: boolean,
+  current: AgentStatusChoice | null,
+  blockComplete: boolean,
+): boolean {
+  if (!selectable) return true;
+  if (value === "COMPLETED" && blockComplete) return true;
+  if (
+    value === "IN_PROGRESS" &&
+    (current === "WAITING_FOR_USER" || current === "WAITING_FOR_PAYMENT")
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function optionHint(
+  value: AgentStatusChoice,
+  current: AgentStatusChoice | null,
+  blockComplete: boolean,
+  fallback: string,
+): string {
+  if (value === "COMPLETED" && blockComplete) {
+    return "Locked until the client confirms the task details.";
+  }
+  if (value === "IN_PROGRESS" && current === "WAITING_FOR_USER") {
+    return "Goes back to In Progress if the customer rejects Task Details.";
+  }
+  if (value === "IN_PROGRESS" && current === "WAITING_FOR_PAYMENT") {
+    return "Available again after you upload a document at Complete.";
+  }
+  return fallback;
+}
+
 export function TaskStatusForm({
   task,
   displayStatus,
@@ -105,6 +141,11 @@ export function TaskStatusForm({
     status !== "WAITING_FOR_USER" &&
     status !== "WAITING_FOR_PAYMENT" &&
     !unchanged;
+
+  const selectedOption = useMemo(
+    () => STATUS_OPTIONS.find((option) => option.value === status),
+    [status],
+  );
 
   function submit() {
     if (!canSubmit) return;
@@ -146,9 +187,16 @@ export function TaskStatusForm({
   }
 
   return (
-    <section className="rounded-[var(--radius-card)] border border-border bg-surface p-4 shadow-[var(--shadow-card)]">
-      <h2 className="text-sm font-semibold text-foreground">Update status</h2>
-      <p className="mt-1 text-sm text-muted">
+    <section className="overflow-hidden rounded-[15px] border border-border bg-surface p-5 shadow-(--shadow-card)">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <h2 className="text-[24px] font-semibold tracking-[-0.05em] text-foreground">
+          Status Update
+        </h2>
+        <span className="inline-flex h-[31px] items-center rounded-[40px] bg-accent px-4 text-[12px] font-medium text-accent-foreground">
+          {formatStatus(shown)}
+        </span>
+      </div>
+      <p className="mt-3 text-sm leading-snug text-muted">
         {closed
           ? "This task is closed. Status cannot be changed."
           : locked
@@ -156,66 +204,83 @@ export function TaskStatusForm({
             : `Current status: ${formatStatus(shown)}. Waiting for Customer is set only when you send Task Details Confirmation — not by chat.`}
       </p>
 
-      <fieldset
-        className="mt-3 space-y-2 disabled:pointer-events-none disabled:opacity-60"
-        disabled={locked || pending}
-      >
-        {STATUS_OPTIONS.map((option) => {
-          const isCurrent = current === option.value;
-          const optionLocked =
-            !option.selectable ||
-            (option.value === "COMPLETED" && blockComplete) ||
-            (option.value === "IN_PROGRESS" &&
-              (current === "WAITING_FOR_USER" || current === "WAITING_FOR_PAYMENT"));
-          return (
-            <label
-              key={option.value}
-              className="flex cursor-pointer items-start gap-2 rounded-lg border border-border px-3 py-2 has-[:checked]:border-accent/40 has-[:checked]:bg-accent/[0.04]"
-            >
-              <input
-                type="radio"
-                name="task-status"
-                className="mt-1"
-                checked={status === option.value}
-                disabled={optionLocked}
-                onChange={() => {
-                  if (!option.selectable) return;
-                  setStatus(option.value);
-                }}
-              />
-              <span className="min-w-0 flex-1">
-                <span className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-semibold text-foreground">
-                    {option.label}
-                  </span>
-                  {isCurrent ? (
-                    <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[11px] font-semibold text-accent">
-                      Current
-                    </span>
-                  ) : null}
-                </span>
-                <span className="text-xs text-muted">
-                  {option.value === "COMPLETED" && blockComplete
-                    ? "Locked until the client confirms the task details."
-                    : option.value === "IN_PROGRESS" && current === "WAITING_FOR_USER"
-                      ? "Goes back to In Progress if the customer rejects Task Details."
-                      : option.value === "IN_PROGRESS" &&
-                          current === "WAITING_FOR_PAYMENT"
-                        ? "Available again after you upload a document at Complete."
-                        : option.hint}
-                </span>
-              </span>
-            </label>
-          );
-        })}
-      </fieldset>
+      <div className="mt-5">
+        <label
+          htmlFor="task-status-select"
+          className="mb-2 block text-[16px] font-medium tracking-[-0.04em] text-muted"
+        >
+          Status
+        </label>
+        <div className="relative">
+          <select
+            id="task-status-select"
+            value={status}
+            disabled={locked || pending}
+            onChange={(event) => {
+              const next = event.target.value as AgentStatusChoice;
+              const option = STATUS_OPTIONS.find((item) => item.value === next);
+              if (!option) return;
+              if (
+                optionLocked(
+                  option.value,
+                  option.selectable,
+                  current,
+                  blockComplete,
+                )
+              ) {
+                return;
+              }
+              setStatus(next);
+            }}
+            className="h-[45px] w-full appearance-none rounded-[5px] border border-border bg-surface px-[15px] pr-10 text-[14px] font-normal tracking-[-0.05em] text-foreground outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent/40 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {STATUS_OPTIONS.map((option) => {
+              const lockedOption = optionLocked(
+                option.value,
+                option.selectable,
+                current,
+                blockComplete,
+              );
+              // Keep the current auto-status selectable in the list so the
+              // control can show it; agent cannot switch *to* locked values.
+              const disableOption =
+                lockedOption && option.value !== status;
+              return (
+                <option
+                  key={option.value}
+                  value={option.value}
+                  disabled={disableOption}
+                >
+                  {option.label}
+                  {current === option.value ? " (Current)" : ""}
+                  {lockedOption && option.value !== status ? " — auto" : ""}
+                </option>
+              );
+            })}
+          </select>
+          <ChevronIcon
+            className="pointer-events-none absolute top-1/2 right-3 size-[15px] -translate-y-1/2 text-muted"
+          />
+        </div>
+        {selectedOption ? (
+          <p className="mt-2 text-xs text-muted">
+            {optionHint(
+              selectedOption.value,
+              current,
+              blockComplete,
+              selectedOption.hint,
+            )}
+          </p>
+        ) : null}
+      </div>
 
-      <div className="mt-3">
+      <div className="mt-4">
         <Button
           type="button"
           loading={pending}
           disabled={locked || pending || !canSubmit}
           onClick={submit}
+          className="h-[43px] rounded-[35px] px-6"
         >
           Update status
         </Button>

@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils/cn";
 
 export function NotificationPanel() {
   const {
-    items,
+    bellItems,
     unreadCount,
     panelOpen,
     setPanelOpen,
@@ -87,7 +87,7 @@ export function NotificationPanel() {
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           <NotificationList
-            items={items}
+            items={bellItems}
             onNavigate={() => setPanelOpen(false)}
           />
         </div>
