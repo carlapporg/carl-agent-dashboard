@@ -42,6 +42,8 @@ export function kindLabel(kind: NotificationKind): string {
     case "payment_expired":
       return "Payment expired";
     case "task_cancelled":
+      return "Cancelled";
+    case "task_failed":
       return "Failed";
     case "waiting_for_agent":
       return "Needs you";

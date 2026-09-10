@@ -105,17 +105,24 @@ export const API_ENDPOINTS = {
       `/agents/me/admin-chats/${id}/read` as const,
 
     /**
-     * Placeholder until Nest ships analytics / chat-meta.
-     * Swap URLs here only — UI already calls these via lib/api/*.
+     * Dashboard analytics.
+     * overview: period cards + Task Progress
+     * tasksPerHour: Task Hour chart (`range` query; default today = 24 points)
      */
+    dashboardOverview: "/agents/me/dashboard/overview",
     tasksPerHour: "/agents/me/dashboard/tasks-per-hour",
     taskChatMeta: (taskId: string) =>
       `/agents/me/tasks/${taskId}/chat-meta` as const,
     /** Placeholder payments overview until Nest ships ledger APIs. */
     paymentsSummary: "/agents/me/payments/summary",
     paymentsTransactions: "/agents/me/payments/transactions",
-    /** Placeholder activity / audit log until Nest ships. */
+    /** Activity / audit log for History (hand-over, task_status, …). */
     activityLogs: "/agents/me/activity-logs",
+    /** In-app notifications (bell + History → Notifications). */
+    notifications: "/agents/me/notifications",
+    notificationRead: (id: string) =>
+      `/agents/me/notifications/${id}/read` as const,
+    notificationsReadAll: "/agents/me/notifications/read-all",
     /** Profile extras until Nest expands /agents/me. */
     profileStats: "/agents/me/profile/stats",
     profileDetails: "/agents/me/profile/details",
@@ -132,7 +139,7 @@ export const API_ENDPOINTS = {
   },
 
   notifications: {
-    /** PUT { token } */
+    /** PUT { token } — FCM push only (not the in-app list). */
     fcmToken: "/notifications/fcm-token",
   },
 } as const;

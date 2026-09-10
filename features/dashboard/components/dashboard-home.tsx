@@ -1,9 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import {
+  getDashboardOverviewAction,
+} from "@/features/dashboard/actions";
 import { AvailabilityToggle } from "@/features/dashboard/components/availability-toggle";
 import { LiveTaskQueue } from "@/features/dashboard/components/live-task-queue";
-import { MonthFilterPill } from "@/features/dashboard/components/month-filter-pill";
+import {
+  MonthFilterPill,
+  type MonthFilterValue,
+} from "@/features/dashboard/components/month-filter-pill";
 import { mergeTaskLists } from "@/lib/tasks/merge-live-task";
 import { MetricStatCard } from "@/features/dashboard/components/metric-stat-card";
 import {
@@ -16,6 +22,17 @@ import {
   useRejectedOfferTick,
   withoutRejectedOffers,
 } from "@/features/ops/rejected-offers";
+import type { DashboardOverview } from "@/lib/api/dashboard-analytics";
+import {
+  bucketLiveQueueTasks,
+  filterLiveQueueTasks,
+  filterQueueTableTasks,
+  toLiveDayFilter,
+} from "@/lib/dashboard/live-queue";
+import {
+  formatDeltaPercent,
+  toDashboardRange,
+} from "@/lib/dashboard/range";
 import type { AgentPresence } from "@/types/agent";
 import type { Task } from "@/types/task";
 
@@ -36,10 +53,35 @@ export function DashboardHome({ tasks }: DashboardHomeProps) {
   const ops = useOps();
   const hydrateOpenTasks = ops?.hydrateOpenTasks;
   const rejectedTick = useRejectedOfferTick();
+  const [rangeLabel, setRangeLabel] = useState<MonthFilterValue>("Today");
+  const range = toDashboardRange(rangeLabel);
+  const dayFilter = toLiveDayFilter(rangeLabel);
+  const [overview, setOverview] = useState<DashboardOverview | null>(null);
 
   useEffect(() => {
     hydrateOpenTasks?.(tasks);
   }, [hydrateOpenTasks, tasks]);
+
+  const loadOverview = useCallback(async () => {
+    try {
+      const row = await getDashboardOverviewAction(range);
+      setOverview(row);
+    } catch {
+      setOverview(null);
+    }
+  }, [range]);
+
+  useEffect(() => {
+    void loadOverview();
+  }, [loadOverview]);
+
+  useEffect(() => {
+    if (!ops?.queuePulse) return;
+    const id = window.setTimeout(() => {
+      void loadOverview();
+    }, 400);
+    return () => window.clearTimeout(id);
+  }, [ops?.queuePulse, loadOverview]);
 
   const roots = useMemo(() => {
     const merged = mergeTaskLists(
@@ -50,58 +92,40 @@ export function DashboardHome({ tasks }: DashboardHomeProps) {
     return withoutRejectedOffers(merged);
   }, [tasks, ops?.liveTasks, ops?.offer, ops?.queuePulse, rejectedTick]);
 
+  /** Open-only — metric cards + Task Progress. */
+  const liveQueueItems = useMemo(
+    () => filterLiveQueueTasks(roots, dayFilter),
+    [roots, dayFilter],
+  );
+
+  /** Open + completed — Live Task Queue table. */
+  const queueTableItems = useMemo(
+    () => filterQueueTableTasks(roots, dayFilter),
+    [roots, dayFilter],
+  );
+
+  const liveBuckets = useMemo(
+    () => bucketLiveQueueTasks(liveQueueItems),
+    [liveQueueItems],
+  );
+
   const stats = useMemo(() => {
-    let offered = 0;
-    let inProgress = 0;
-    let waitingCustomer = 0;
-    let completed = 0;
-    let queued = 0;
-
-    for (const t of roots) {
-      const backend = t.backendStatus;
-      if (backend === "COMPLETED" || t.status === "completed") {
-        completed += 1;
-        continue;
-      }
-      if (
-        backend === "WAITING_FOR_USER" ||
-        t.status === "waiting_for_customer" ||
-        t.status === "waiting_for_payment"
-      ) {
-        waitingCustomer += 1;
-        continue;
-      }
-      if (
-        backend === "IN_PROGRESS" ||
-        backend === "WAITING_FOR_AGENT" ||
-        t.status === "in_progress"
-      ) {
-        inProgress += 1;
-        continue;
-      }
-      if (backend === "OFFERED" || t.status === "queued") {
-        offered += 1;
-        continue;
-      }
-      queued += 1;
-    }
-
-    const stillInQueue = offered + queued + waitingCustomer;
-    const total = Math.max(roots.length, 1);
-    const inMotionShare = completed + inProgress;
-    const progressPct = Math.round((inMotionShare / total) * 100);
-
+    const completed = overview?.completed ?? 0;
+    const { offered, inProgress, waitingCustomer, waiting, liveCount } =
+      liveBuckets;
+    const total = Math.max(completed + liveCount, 1);
     return {
       offered,
       inProgress,
       waitingCustomer,
       completed,
-      stillInQueue,
-      total,
-      progressPct,
-      activeTaskCount: offered + inProgress + waitingCustomer + queued,
+      waiting,
+      total: completed + liveCount,
+      progressPct: Math.round(((completed + inProgress) / total) * 100),
+      activeTaskCount: liveCount,
+      deltaBadge: formatDeltaPercent(overview?.completedDeltaPercent),
     };
-  }, [roots]);
+  }, [liveBuckets, overview]);
 
   return (
     <div className="space-y-5">
@@ -109,16 +133,16 @@ export function DashboardHome({ tasks }: DashboardHomeProps) {
 
       <section className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="text-[34px] font-semibold leading-none tracking-[-0.04em] text-[#1f1f21]">
+          <h1 className="text-[34px] font-semibold leading-none tracking-[-0.04em] text-foreground">
             Sales Overview
           </h1>
-          <p className="mt-3 text-[16px] font-normal tracking-[-0.02em] text-[rgba(0,0,0,0.5)]">
+          <p className="mt-3 text-[16px] font-normal tracking-[-0.02em] text-muted">
             Your current sales summary and activity
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <AvailabilityToggle activeTaskCount={stats.activeTaskCount} />
-          <MonthFilterPill />
+          <MonthFilterPill value={rangeLabel} onChange={setRangeLabel} />
         </div>
       </section>
 
@@ -152,10 +176,17 @@ export function DashboardHome({ tasks }: DashboardHomeProps) {
         <MetricStatCard
           label="Completed"
           value={stats.completed}
-          hint="Finished in this list."
+          hint="Finished in this period."
           icon={<MetricIcon src="/figma/dashboard/check-square-02.svg" />}
           variant="plainGreen"
-          badge="4.9%"
+          badge={stats.deltaBadge}
+          badgeTrend={
+            overview &&
+            overview.completedDeltaPercent != null &&
+            overview.completedDeltaPercent < 0
+              ? "down"
+              : "up"
+          }
           className="dash-slide-in"
           style={{ animationDelay: "180ms" } as CSSProperties}
         />
@@ -167,13 +198,19 @@ export function DashboardHome({ tasks }: DashboardHomeProps) {
           completed={stats.completed}
           inProgress={stats.inProgress}
           total={stats.total}
-          waiting={stats.stillInQueue}
+          waiting={stats.waiting}
           progressPercent={stats.progressPct}
+          rangeLabel={rangeLabel}
+          onRangeChange={setRangeLabel}
           className="dash-slide-in"
         />
       </div>
 
-      <LiveTaskQueue seedTasks={roots} />
+      <LiveTaskQueue
+        items={queueTableItems}
+        rangeLabel={rangeLabel}
+        onRangeChange={setRangeLabel}
+      />
     </div>
   );
 }

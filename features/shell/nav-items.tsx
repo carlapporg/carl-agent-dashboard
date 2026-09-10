@@ -28,6 +28,31 @@ export const DASHBOARD_NAV: Array<{
   { href: ROUTES.settings, label: "Settings", icon: "settings" },
 ];
 
+/** Figma Side Menu order (extra routes stay reachable elsewhere). */
+const FIGMA_PRIMARY_HREFS = new Set<string>([
+  ROUTES.dashboard,
+  ROUTES.tasks,
+  ROUTES.messages,
+  ROUTES.payments,
+  ROUTES.history,
+  ROUTES.profile,
+]);
+
+export const PRIMARY_NAV = DASHBOARD_NAV.filter((item) =>
+  FIGMA_PRIMARY_HREFS.has(item.href),
+);
+
+export const SETTINGS_NAV_ITEM = DASHBOARD_NAV.find(
+  (item) => item.href === ROUTES.settings,
+);
+
+/** Display labels matching Figma Side Menu. */
+export function navDisplayLabel(href: string, fallback: string): string {
+  if (href === ROUTES.dashboard) return "Dashboard";
+  if (href === ROUTES.tasks) return "Task";
+  return fallback;
+}
+
 function strokeIcon(paths: ReactNode) {
   return (
     <svg

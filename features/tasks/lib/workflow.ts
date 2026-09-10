@@ -178,7 +178,7 @@ export function taskListStatusChip(task: Task): TaskListStatusChip {
   ) {
     return {
       label: "Cancelled",
-      className: "bg-[#f2f4f7] text-[#667085]",
+      className: "bg-surface-muted text-muted",
     };
   }
   if (backend === "WAITING_FOR_USER" || task.status === "waiting_for_customer") {
@@ -217,7 +217,7 @@ export function taskListStatusChip(task: Task): TaskListStatusChip {
   }
   return {
     label: String(task.status).replaceAll("_", " "),
-    className: "bg-[#f2f4f7] text-[#667085]",
+    className: "bg-surface-muted text-muted",
   };
 }
 

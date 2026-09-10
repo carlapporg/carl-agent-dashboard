@@ -73,6 +73,7 @@ export type NotificationKind =
   | "payment_declined"
   | "payment_expired"
   | "task_cancelled"
+  | "task_failed"
   | "waiting_for_agent"
   | "missed_task"
   | "confirmation_confirmed"

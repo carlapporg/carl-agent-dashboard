@@ -3,20 +3,32 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { DASHBOARD_NAV, NavIcon } from "@/features/shell/nav-items";
-import { useNotifications } from "@/features/notifications/notification-provider";
+import { logoutAction } from "@/features/auth/actions/auth";
+import { useClearAppCache } from "@/features/agents/hooks";
+import {
+  NavIcon,
+  PRIMARY_NAV,
+  SETTINGS_NAV_ITEM,
+  navDisplayLabel,
+} from "@/features/shell/nav-items";
+import { clearManualPresence } from "@/lib/agent/presence";
 import { ROUTES } from "@/lib/constants/routes";
 import { cn } from "@/lib/utils/cn";
 
 export function MobileNav() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const { unreadCount } = useNotifications();
+  const clearCache = useClearAppCache();
+
+  function navActive(href: string) {
+    if (href === ROUTES.dashboard) return pathname === href;
+    return pathname === href || pathname.startsWith(`${href}/`);
+  }
 
   return (
     <div className="border-b border-border bg-surface lg:hidden">
       <div className="flex h-14 items-center justify-between px-4">
-        <Link href={DASHBOARD_NAV[0]!.href} className="block">
+        <Link href={ROUTES.dashboard} className="block" onClick={() => setOpen(false)}>
           <p className="text-base font-bold tracking-tight text-foreground">
             Carl
           </p>
@@ -40,17 +52,11 @@ export function MobileNav() {
           className="space-y-1 border-t border-border px-3 py-3"
           aria-label="Mobile"
         >
-          {DASHBOARD_NAV.map((item) => {
-            const active =
-              item.href === DASHBOARD_NAV[0]!.href
-                ? pathname === item.href
-                : pathname === item.href ||
-                  pathname.startsWith(`${item.href}/`);
-            const showUnread =
-              item.href === ROUTES.notifications && unreadCount > 0;
+          {PRIMARY_NAV.map((item) => {
+            const active = navActive(item.href);
             return (
               <Link
-                key={item.label}
+                key={item.href}
                 href={item.href}
                 onClick={() => setOpen(false)}
                 className={cn(
@@ -61,15 +67,41 @@ export function MobileNav() {
                 )}
               >
                 <NavIcon id={item.icon} />
-                <span className="flex-1">{item.label}</span>
-                {showUnread ? (
-                  <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-danger px-1.5 text-[10px] font-bold text-white">
-                    {unreadCount > 9 ? "9+" : unreadCount}
-                  </span>
-                ) : null}
+                <span className="flex-1">
+                  {navDisplayLabel(item.href, item.label)}
+                </span>
               </Link>
             );
           })}
+
+          {SETTINGS_NAV_ITEM ? (
+            <Link
+              href={SETTINGS_NAV_ITEM.href}
+              onClick={() => setOpen(false)}
+              className={cn(
+                "flex items-center gap-3 rounded-[var(--radius-md)] px-3 py-2.5 text-sm font-medium",
+                navActive(SETTINGS_NAV_ITEM.href)
+                  ? "bg-accent-soft text-accent"
+                  : "text-muted hover:bg-surface-hover hover:text-foreground",
+              )}
+            >
+              <NavIcon id={SETTINGS_NAV_ITEM.icon} />
+              <span className="flex-1">Settings</span>
+            </Link>
+          ) : null}
+
+          <button
+            type="button"
+            className="flex w-full items-center gap-3 rounded-[var(--radius-md)] bg-danger-soft px-3 py-2.5 text-left text-sm font-medium text-danger"
+            onClick={() => {
+              setOpen(false);
+              clearCache();
+              clearManualPresence();
+              void logoutAction();
+            }}
+          >
+            Log out
+          </button>
         </nav>
       ) : null}
     </div>

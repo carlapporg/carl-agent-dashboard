@@ -19,7 +19,12 @@ import {
 } from "@/features/ops/rejected-offers";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { Button } from "@/components/ui/button";
+import { EyeIcon } from "@/components/ui/eye-icon";
 import { ROUTES } from "@/lib/constants/routes";
+import {
+  matchesLiveDayFilter,
+  type LiveDayFilter,
+} from "@/lib/dashboard/live-queue";
 import { mergeTaskLists } from "@/lib/tasks/merge-live-task";
 import {
   matchesTaskHubFilter,
@@ -38,7 +43,7 @@ type HubFilter =
   | "completed"
   | "cancelled";
 
-type DayFilter = "today" | "week" | "month" | "all";
+type DayFilter = LiveDayFilter;
 
 const STATUS_FILTERS: Array<{ value: HubFilter; label: string }> = [
   { value: "all", label: "Status" },
@@ -74,25 +79,8 @@ function matchesFilter(task: Task, filter: HubFilter): boolean {
   return matchesTaskHubFilter(task, filter);
 }
 
-function startOfDay(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-}
-
 function matchesDayFilter(task: Task, filter: DayFilter): boolean {
-  if (filter === "all") return true;
-  const updated = new Date(task.updatedAt);
-  if (Number.isNaN(updated.getTime())) return true;
-  const now = new Date();
-  const today = startOfDay(now);
-  if (filter === "today") return updated >= today;
-  if (filter === "week") {
-    const weekAgo = new Date(today);
-    weekAgo.setDate(weekAgo.getDate() - 7);
-    return updated >= weekAgo;
-  }
-  const monthAgo = new Date(today);
-  monthAgo.setMonth(monthAgo.getMonth() - 1);
-  return updated >= monthAgo;
+  return matchesLiveDayFilter(task, filter);
 }
 
 function receivedTime(iso: string): string {
@@ -113,14 +101,6 @@ function receivedDate(iso: string): string {
     day: "numeric",
     year: "numeric",
   });
-}
-
-function taskIdLabel(task: Task, index: number): string {
-  if (task.code?.trim()) {
-    return task.code.startsWith("#") ? task.code : `#${task.code}`;
-  }
-  if (task.number) return `#${task.number}`;
-  return `#${index + 1}`;
 }
 
 function titleLabel(task: Task): string {
@@ -226,10 +206,10 @@ export function TaskList({ tasks }: TaskListProps) {
       {/* Figma Task Overview header row */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-[34px] font-semibold leading-none tracking-[-0.05em] text-[#1f1f21]">
+          <h2 className="text-[34px] font-semibold leading-none tracking-[-0.05em] text-foreground">
             Task Overview
           </h2>
-          <p className="mt-3 text-[14px] tracking-[-0.02em] text-[rgba(0,0,0,0.5)]">
+          <p className="mt-3 text-[14px] tracking-[-0.02em] text-muted">
             Your current sales summary and activity
           </p>
         </div>
@@ -237,9 +217,9 @@ export function TaskList({ tasks }: TaskListProps) {
       </div>
 
       {/* Figma Live Task Queue card */}
-      <section className="overflow-hidden rounded-[15px] border border-[#e7e7e7] bg-white">
+      <section className="overflow-hidden rounded-[15px] border border-border bg-surface">
         <div className="flex flex-wrap items-center justify-between gap-3 px-[15px] py-5">
-          <h3 className="text-[22px] font-semibold tracking-[-0.05em] text-[#1f1f21]">
+          <h3 className="text-[22px] font-semibold tracking-[-0.05em] text-foreground">
             Live Task Queue
           </h3>
           <div className="flex flex-wrap items-center gap-3">
@@ -261,7 +241,7 @@ export function TaskList({ tasks }: TaskListProps) {
         </div>
 
         {visible.length === 0 ? (
-          <div className="border-t border-[#e7e7e7] px-4 py-12">
+          <div className="border-t border-border px-4 py-12">
             <EmptyState
               title={
                 hasFilters ? "No tasks match these filters" : "No tasks available"
@@ -291,7 +271,7 @@ export function TaskList({ tasks }: TaskListProps) {
           <div className="overflow-x-auto px-[15px] pb-4">
             <table className="min-w-[920px] w-full border-collapse text-left">
               <thead>
-                <tr className="bg-[#f6f6f6] text-[14px] font-medium tracking-[-0.05em] text-[#666]">
+                <tr className="bg-surface-muted text-[14px] font-medium tracking-[-0.05em] text-muted">
                   <th className="rounded-l-[5px] px-5 py-2.5">ID</th>
                   <th className="px-3 py-2.5">Title</th>
                   <th className="px-3 py-2.5">Place</th>
@@ -307,12 +287,10 @@ export function TaskList({ tasks }: TaskListProps) {
                   return (
                     <tr
                       key={task.id}
-                      className="task-row-in border-t border-[#e7e7e7] text-[13px] font-medium tracking-[-0.03em] text-[rgba(0,16,44,0.5)] hover:bg-[#fafafa]"
+                      className="task-row-in border-t border-border text-[13px] font-medium tracking-[-0.03em] text-muted hover:bg-surface-hover"
                       style={{ "--row-i": index } as CSSProperties}
                     >
-                      <td className="px-5 py-5">
-                        {taskIdLabel(task, index)}
-                      </td>
+                      <td className="px-5 py-5">#{index + 1}</td>
                       <td className="max-w-[200px] truncate px-3 py-5">
                         {titleLabel(task)}
                       </td>
@@ -338,17 +316,10 @@ export function TaskList({ tasks }: TaskListProps) {
                       <td className="px-5 py-5">
                         <Link
                           href={ROUTES.task(task.id)}
-                          className="inline-flex size-4 items-center justify-center"
+                          className="inline-flex size-4 items-center justify-center text-muted hover:text-foreground"
                           aria-label={`Open ${task.title}`}
                         >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src="/figma/dashboard/eye.svg"
-                            alt=""
-                            width={15}
-                            height={8}
-                            className="h-[8px] w-[15px]"
-                          />
+                          <EyeIcon />
                         </Link>
                       </td>
                     </tr>

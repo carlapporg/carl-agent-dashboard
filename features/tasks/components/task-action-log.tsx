@@ -62,7 +62,7 @@ function LogColumn({
               className={cn(
                 "rounded-lg border px-3 py-2 text-sm",
                 tone === "system"
-                  ? "border-border bg-[#f8fafc] text-foreground-soft"
+                  ? "border-border bg-surface-muted text-foreground-soft"
                   : "border-accent/20 bg-accent/5 text-foreground-soft",
               )}
             >

@@ -6,6 +6,7 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -34,6 +35,7 @@ import type { ChatMediaKind, TimelineEvent, TimelineEventKind } from "@/types/me
 
 export type TaskChatThreadHandle = {
   prefills: (text: string) => void;
+  scrollToLatest: () => void;
 };
 
 type ChatAppearance = "workspace" | "inbox";
@@ -433,24 +435,24 @@ const ChatBubble = memo(function ChatBubble({
       <div
         className={cn(
           inbox
-            ? "px-4 py-3 text-[14px] leading-[1.5] text-[#11142d]"
+            ? "px-4 py-3 text-[14px] leading-[1.5] text-foreground"
             : "px-2.5 py-1.5 text-[13px] leading-snug",
           fromAgent
             ? inbox
               ? mediaKind === "voice"
-                ? "rounded-bl-[16px] rounded-br-[16px] rounded-tl-[16px] rounded-tr-[4px] bg-[#f0f3f6]"
+                ? "rounded-bl-[16px] rounded-br-[16px] rounded-tl-[16px] rounded-tr-[4px] bg-surface-muted"
                 : "rounded-bl-[16px] rounded-br-[16px] rounded-tl-[16px] rounded-tr-[4px] bg-[rgba(84,149,253,0.2)]"
               : "rounded-2xl rounded-br-md bg-accent text-accent-foreground"
             : inbox
-              ? "rounded-bl-[16px] rounded-br-[16px] rounded-tl-[4px] rounded-tr-[16px] bg-[#f0f3f6]"
-              : "rounded-2xl rounded-bl-md bg-[#eef0f3] text-foreground",
+              ? "rounded-bl-[16px] rounded-br-[16px] rounded-tl-[4px] rounded-tr-[16px] bg-surface-muted"
+              : "rounded-2xl rounded-bl-md bg-surface-muted text-foreground",
           grouped && fromAgent && !inbox && "rounded-tr-md",
           grouped && !fromAgent && !inbox && "rounded-tl-md",
           mediaKind === "image" && "overflow-hidden p-1.5",
           /* Figma voice bubble is 320px — waveform fills inside, not the whole chat */
           mediaKind === "voice" &&
             (inbox ? "w-[320px] max-w-[320px] px-4 py-3" : "min-w-52"),
-          event.delivery === "failed" && "bg-red-600 text-white",
+          event.delivery === "failed" && "bg-red-600 text-accent-foreground",
         )}
       >
         {mediaKind === "voice" ? (
@@ -482,7 +484,7 @@ const ChatBubble = memo(function ChatBubble({
           <span
             className={cn(
               "mt-1 flex items-center justify-end gap-1",
-              inboxAgentTone || !fromAgent ? "text-[#b2b3bd]" : "text-white/70",
+              inboxAgentTone || !fromAgent ? "text-muted-dim" : "text-white/70",
             )}
             title={
               typeof event.uploadProgress === "number"
@@ -697,10 +699,6 @@ const TaskChatThreadBody = forwardRef<
     });
   }, []);
 
-  useImperativeHandle(ref, () => ({
-    prefills: (text: string) => applyDraft(text),
-  }));
-
   useEffect(() => {
     return () => {
       stopStream();
@@ -736,8 +734,10 @@ const TaskChatThreadBody = forwardRef<
     () => buildBlocks(thread, unreadFromId),
     [thread, unreadFromId],
   );
-  const prevCount = useRef(thread.length);
+  // 0 so the first paint with messages counts as "new" and scrolls to bottom.
+  const prevCount = useRef(0);
   const threadSigRef = useRef("");
+  const didInitialPinRef = useRef(false);
 
   // Drop optimistic / duplicate extras once the real server message is present.
   useEffect(() => {
@@ -777,13 +777,44 @@ const TaskChatThreadBody = forwardRef<
   const scrollToBottom = useCallback((smooth = false) => {
     const scroller = scrollerRef.current;
     if (!scroller) return;
-    scroller.scrollTo({
-      top: scroller.scrollHeight,
-      behavior: smooth ? "smooth" : "auto",
-    });
+    if (smooth) {
+      scroller.scrollTo({
+        top: scroller.scrollHeight,
+        behavior: "smooth",
+      });
+      return;
+    }
+    scroller.scrollTop = scroller.scrollHeight;
   }, []);
 
-  useEffect(() => {
+  useImperativeHandle(ref, () => ({
+    prefills: (text: string) => applyDraft(text),
+    scrollToLatest: () => {
+      pinnedRef.current = true;
+      setPinnedToBottom(true);
+      scrollToBottom(false);
+      window.requestAnimationFrame(() => scrollToBottom(false));
+    },
+  }));
+
+  // Open already at the latest message — don't make the agent scroll down.
+  useLayoutEffect(() => {
+    if (thread.length === 0) return;
+    if (didInitialPinRef.current) return;
+    didInitialPinRef.current = true;
+    pinnedRef.current = true;
+    setPinnedToBottom(true);
+    scrollToBottom(false);
+    prevCount.current = thread.length;
+    const raf = window.requestAnimationFrame(() => scrollToBottom(false));
+    const t = window.setTimeout(() => scrollToBottom(false), 120);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.clearTimeout(t);
+    };
+  }, [scrollToBottom, thread.length]);
+
+  useLayoutEffect(() => {
     if (thread.length <= prevCount.current) {
       prevCount.current = thread.length;
       return;
@@ -798,6 +829,20 @@ const TaskChatThreadBody = forwardRef<
     }
     prevCount.current = thread.length;
   }, [scrollToBottom, thread]);
+
+  // Keep pinned when images / voice players grow the thread height.
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      if (pinnedRef.current) scrollToBottom(false);
+    });
+    ro.observe(scroller);
+    for (const child of Array.from(scroller.children)) {
+      ro.observe(child);
+    }
+    return () => ro.disconnect();
+  }, [scrollToBottom, thread.length]);
 
   useEffect(() => {
     if (!newBanner) return;
@@ -1261,7 +1306,7 @@ const TaskChatThreadBody = forwardRef<
                       ))}
                       <div
                         className={cn(
-                          "flex items-center gap-1 text-[11px] text-[#b2b3bd]",
+                          "flex items-center gap-1 text-[11px] text-muted-dim",
                           fromAgent && "justify-end",
                         )}
                       >
@@ -1342,7 +1387,7 @@ const TaskChatThreadBody = forwardRef<
       <div
         className={cn(
           "shrink-0 bg-surface",
-          inbox ? "border-t border-[#eef0f2]" : "border-t border-border",
+          inbox ? "border-t border-border" : "border-t border-border",
         )}
       >
         {showQuickBar ? (
@@ -1353,7 +1398,7 @@ const TaskChatThreadBody = forwardRef<
                     key={t}
                     type="button"
                     onClick={() => applyDraft(t)}
-                    className="shrink-0 rounded-full border border-border bg-[#f8fafc] px-2.5 py-0.5 text-[11px] text-foreground-soft hover:border-accent/40 hover:text-accent"
+                    className="shrink-0 rounded-full border border-border bg-surface-muted px-2.5 py-0.5 text-[11px] text-foreground-soft hover:border-accent/40 hover:text-accent"
                     title={t}
                   >
                     {t.length > 28 ? `${t.slice(0, 26)}…` : t}
@@ -1415,7 +1460,7 @@ const TaskChatThreadBody = forwardRef<
           {imagePreview ? (
             <div
               className={cn(
-                "mb-2 flex items-center gap-2 rounded-lg border border-border bg-[#f8fafc] p-1.5",
+                "mb-2 flex items-center gap-2 rounded-lg border border-border bg-surface-muted p-1.5",
                 inbox && "mx-6 mt-4",
               )}
             >
@@ -1438,14 +1483,24 @@ const TaskChatThreadBody = forwardRef<
               >
                 Remove
               </button>
+              {inbox ? (
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={submitComposer}
+                  className="rounded-full bg-accent px-3 py-1.5 text-[11px] font-semibold text-accent-foreground hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Send
+                </button>
+              ) : null}
             </div>
           ) : null}
           {voicePreview ? (
             <div
               className={cn(
-                "mb-2 flex items-center gap-3 rounded-lg border border-border bg-[#f8fafc] px-2 py-1.5",
+                "mb-2 flex items-center gap-3 rounded-lg border border-border bg-surface-muted px-2 py-1.5",
                 inbox &&
-                  "mx-6 mt-4 mb-0 rounded-[12px] border-[#e7e7e7] bg-white px-3 py-2.5",
+                  "mx-6 mt-4 mb-0 rounded-[12px] border-border bg-surface px-3 py-2.5",
               )}
             >
               <ChatAudioPlayer
@@ -1479,6 +1534,16 @@ const TaskChatThreadBody = forwardRef<
               >
                 Cancel
               </button>
+              {inbox ? (
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={submitComposer}
+                  className="shrink-0 rounded-full bg-accent px-3 py-1.5 text-[11px] font-semibold text-accent-foreground hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Send
+                </button>
+              ) : null}
             </div>
           ) : null}
           {recording ? (
@@ -1504,7 +1569,7 @@ const TaskChatThreadBody = forwardRef<
               <button
                 type="button"
                 onClick={stopRecording}
-                className="inline-flex size-8 items-center justify-center rounded-full bg-red-600 text-white hover:bg-red-700"
+                className="inline-flex size-8 items-center justify-center rounded-full bg-red-600 text-accent-foreground hover:bg-red-700"
                 aria-label="Stop recording"
               >
                 <StopIcon className="size-3.5" />
@@ -1525,10 +1590,10 @@ const TaskChatThreadBody = forwardRef<
               </button>
             </div>
           ) : inbox ? (
-            <div className="flex items-center gap-4 bg-white px-6 py-6">
+            <div className="flex items-center gap-4 bg-surface px-6 py-6">
               <div
                 className={cn(
-                  "flex min-w-0 flex-1 items-center gap-3 rounded-full bg-[#f7f8fa] px-4 py-3",
+                  "flex min-w-0 flex-1 items-center gap-3 rounded-full bg-surface-muted px-4 py-3",
                   flash && "ring-2 ring-accent/20",
                   disabled && "opacity-70",
                 )}
@@ -1571,7 +1636,7 @@ const TaskChatThreadBody = forwardRef<
                   }
                   rows={1}
                   disabled={disabled}
-                  className="max-h-28 min-h-[17px] flex-1 resize-none bg-transparent py-0 text-[14px] leading-normal text-[#11142d] outline-none placeholder:text-[#b2b3bd]"
+                  className="max-h-28 min-h-[17px] flex-1 resize-none bg-transparent py-0 text-[14px] leading-normal text-foreground outline-none placeholder:text-muted-dim"
                 />
               </div>
               <button
@@ -1589,16 +1654,20 @@ const TaskChatThreadBody = forwardRef<
                   }
                   void startRecording();
                 }}
-                className="inline-flex size-11 shrink-0 items-center justify-center rounded-[22px] bg-[#377dff] transition-colors hover:bg-[#2f6ae6] disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex size-11 shrink-0 items-center justify-center rounded-[22px] bg-accent text-accent-foreground transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src="/figma/messages/icon-mic.svg"
-                  alt=""
-                  width={18}
-                  height={18}
-                  className="size-[18px]"
-                />
+                {draft.trim() || imagePreview || voicePreview ? (
+                  <SendIcon className="size-[18px]" />
+                ) : (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src="/figma/messages/icon-mic.svg"
+                    alt=""
+                    width={18}
+                    height={18}
+                    className="size-[18px]"
+                  />
+                )}
               </button>
             </div>
           ) : (
@@ -1606,7 +1675,7 @@ const TaskChatThreadBody = forwardRef<
               className={cn(
                 "flex items-end gap-1.5 rounded-lg border bg-surface px-2 py-1.5",
                 flash ? "border-accent ring-2 ring-accent/20" : "border-border",
-                disabled && "bg-[#f8fafc]",
+                disabled && "bg-surface-muted",
               )}
             >
               <div className="mb-0.5 flex shrink-0 items-center gap-0.5">

@@ -12,7 +12,9 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { ConfirmDialog } from "@/components/ui/dialog";
+import { AnchoredMenu } from "@/components/ui/anchored-menu";
 import { AgentAvatar } from "@/components/ui/agent-avatar";
+import { ChevronIcon } from "@/components/ui/chevron-icon";
 import { logoutAction } from "@/features/auth/actions/auth";
 import { useClearAppCache } from "@/features/agents/hooks";
 import { clearManualPresence } from "@/lib/agent/presence";
@@ -177,15 +179,15 @@ export function UserMenu({
     pathname === ROUTES.profile || pathname.startsWith(`${ROUTES.profile}/`);
 
   return (
-    <div className="relative">
+    <div>
       <button
         ref={triggerRef}
         type="button"
         className={cn(
           "flex max-w-64 cursor-pointer items-center gap-2 text-left",
-          "rounded-[10px] px-1 py-1 transition-colors hover:bg-[#f6f6f6]",
+          "rounded-[10px] px-1 py-1 transition-colors hover:bg-surface-muted",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-          open && "bg-[#f6f6f6]",
+          open && "bg-surface-muted",
         )}
         aria-haspopup="menu"
         aria-expanded={open}
@@ -196,99 +198,91 @@ export function UserMenu({
       >
         <AgentAvatar user={user} size="sm" />
         <span className="hidden min-w-0 sm:flex sm:items-center sm:gap-1.5">
-          <span className="block max-w-[9rem] truncate text-[14px] font-medium leading-none tracking-[-0.02em] text-[#1f1f21]">
+          <span className="block max-w-[9rem] truncate text-[14px] font-medium leading-none tracking-[-0.02em] text-foreground">
             {name}
           </span>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/figma/dashboard/chevron-down.svg"
-            alt=""
-            width={16}
-            height={16}
-            className="size-4 shrink-0 opacity-70"
-          />
+          <ChevronIcon className="size-4 shrink-0 text-foreground opacity-70" />
           <span className="sr-only">
             {online ? statusLabel : statusLabel}
           </span>
         </span>
       </button>
 
-      {open ? (
-        <div
-          ref={menuRef}
-          id={menuId}
-          role="menu"
-          aria-label="Account"
-          onKeyDown={onMenuKeyDown}
-          className="absolute right-0 z-50 mt-2 w-72 origin-top-right rounded-[var(--radius-lg)] border border-border bg-surface p-3 shadow-[var(--shadow-dropdown)]"
-        >
-          <div className="border-b border-border pb-3">
-            <div className="flex items-center gap-3">
-              <AgentAvatar user={user} size="md" />
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-foreground">
-                  {name}
-                </p>
-                <p className="truncate text-xs text-muted">{user.email}</p>
-              </div>
+      <AnchoredMenu
+        open={open}
+        triggerRef={triggerRef}
+        menuRef={menuRef}
+        id={menuId}
+        aria-label="Account"
+        onKeyDown={onMenuKeyDown}
+        className="w-72 origin-top-right rounded-[var(--radius-lg)] border border-border bg-surface p-3 shadow-[var(--shadow-dropdown)]"
+      >
+        <div className="border-b border-border pb-3">
+          <div className="flex items-center gap-3">
+            <AgentAvatar user={user} size="md" />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-foreground">
+                {name}
+              </p>
+              <p className="truncate text-xs text-muted">{user.email}</p>
             </div>
-            <span className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-success-soft px-2 py-0.5 text-[11px] font-semibold text-success-foreground">
-              <span
-                className={cn(
-                  "size-1.5 rounded-full",
-                  online ? "bg-success" : "bg-muted-dim",
-                )}
-              />
-              {statusLabel}
-            </span>
-            <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-dim">
-              Support agent
-            </p>
           </div>
-
-          <div className="space-y-2 pt-3">
-            <Link
-              ref={(el) => {
-                itemRefs.current[0] = el;
-              }}
-              href={ROUTES.profile}
-              role="menuitem"
-              tabIndex={-1}
-              aria-current={profileActive ? "page" : undefined}
+          <span className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-success-soft px-2 py-0.5 text-[11px] font-semibold text-success-foreground">
+            <span
               className={cn(
-                ITEM_CLASS,
-                "justify-center border border-border",
-                profileActive
-                  ? "bg-accent-soft text-accent"
-                  : "text-foreground hover:bg-surface-hover",
+                "size-1.5 rounded-full",
+                online ? "bg-success" : "bg-muted-dim",
               )}
-              onClick={() => close()}
-            >
-              <UserIcon />
-              Profile
-            </Link>
-            <button
-              ref={(el) => {
-                itemRefs.current[1] = el;
-              }}
-              type="button"
-              role="menuitem"
-              tabIndex={-1}
-              className={cn(
-                ITEM_CLASS,
-                "justify-center bg-accent text-accent-foreground hover:bg-accent-hover",
-              )}
-              onClick={() => {
-                close();
-                setConfirmOpen(true);
-              }}
-            >
-              <SignOutIcon />
-              Log Out
-            </button>
-          </div>
+            />
+            {statusLabel}
+          </span>
+          <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-dim">
+            Support agent
+          </p>
         </div>
-      ) : null}
+
+        <div className="space-y-2 pt-3">
+          <Link
+            ref={(el) => {
+              itemRefs.current[0] = el;
+            }}
+            href={ROUTES.profile}
+            role="menuitem"
+            tabIndex={-1}
+            aria-current={profileActive ? "page" : undefined}
+            className={cn(
+              ITEM_CLASS,
+              "justify-center border border-border",
+              profileActive
+                ? "bg-accent-soft text-accent"
+                : "text-foreground hover:bg-surface-hover",
+            )}
+            onClick={() => close()}
+          >
+            <UserIcon />
+            Profile
+          </Link>
+          <button
+            ref={(el) => {
+              itemRefs.current[1] = el;
+            }}
+            type="button"
+            role="menuitem"
+            tabIndex={-1}
+            className={cn(
+              ITEM_CLASS,
+              "justify-center bg-accent text-accent-foreground hover:bg-accent-hover",
+            )}
+            onClick={() => {
+              close();
+              setConfirmOpen(true);
+            }}
+          >
+            <SignOutIcon />
+            Log Out
+          </button>
+        </div>
+      </AnchoredMenu>
 
       <ConfirmDialog
         open={confirmOpen}

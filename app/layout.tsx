@@ -4,6 +4,20 @@ import Script from "next/script";
 import { AppProviders } from "@/components/providers/app-providers";
 import "./globals.css";
 
+/** Applies saved dark mode before paint to avoid a light flash. */
+const APPLY_THEME = `
+(function () {
+  try {
+    var raw = localStorage.getItem("carl.agent.app-settings");
+    if (!raw) return;
+    var parsed = JSON.parse(raw);
+    if (parsed && parsed.darkMode === true) {
+      document.documentElement.classList.add("dark");
+    }
+  } catch (e) {}
+})();
+`;
+
 /** Strips password-manager attrs before/during hydrate (Bitwarden etc.). */
 const STRIP_EXTENSION_ATTRS = `
 (function () {
@@ -76,9 +90,14 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       suppressHydrationWarning
     >
       <body
-        className="flex min-h-dvh flex-col bg-background text-foreground"
+        className="flex h-dvh flex-col overflow-hidden bg-background text-foreground"
         suppressHydrationWarning
       >
+        <Script
+          id="apply-theme"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{ __html: APPLY_THEME }}
+        />
         <Script
           id="strip-extension-attrs"
           strategy="beforeInteractive"

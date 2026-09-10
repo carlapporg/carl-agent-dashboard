@@ -46,7 +46,7 @@ export function QuickStats() {
         {cells.map((cell) => (
           <div
             key={cell.label}
-            className="rounded-lg border border-border bg-[#f8fafc] px-3 py-2.5"
+            className="rounded-lg border border-border bg-surface-muted px-3 py-2.5"
           >
             <p className="text-xs text-muted">{cell.label}</p>
             <p className="mt-1 text-lg font-semibold tabular-nums text-foreground">

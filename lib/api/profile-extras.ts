@@ -1,4 +1,5 @@
 import { API_ENDPOINTS } from "@/lib/api/endpoints";
+import { APP_SETTINGS_STORAGE_KEY } from "@/lib/theme/document-theme";
 
 void API_ENDPOINTS;
 
@@ -28,6 +29,11 @@ export type AppSettingsState = {
   timezone: string;
   darkMode: boolean;
   twoFactorEnabled: boolean;
+  notifications: {
+    emailAlerts: boolean;
+    desktopPush: boolean;
+    soundAlerts: boolean;
+  };
   integrations: {
     slack: boolean;
     stripe: boolean;
@@ -35,7 +41,7 @@ export type AppSettingsState = {
   };
 };
 
-const SETTINGS_KEY = "carl.agent.app-settings";
+const SETTINGS_KEY = APP_SETTINGS_STORAGE_KEY;
 
 function stubStats(): ProfileStats {
   return {
@@ -86,9 +92,14 @@ function defaultSettings(): AppSettingsState {
     timezone: "Asia/Karachi",
     darkMode: false,
     twoFactorEnabled: true,
+    notifications: {
+      emailAlerts: true,
+      desktopPush: false,
+      soundAlerts: false,
+    },
     integrations: {
       slack: true,
-      stripe: true,
+      stripe: false,
       zendesk: false,
     },
   };
@@ -104,6 +115,7 @@ function readLocalSettings(): AppSettingsState {
     return {
       ...base,
       ...parsed,
+      notifications: { ...base.notifications, ...parsed.notifications },
       integrations: { ...base.integrations, ...parsed.integrations },
     };
   } catch {

@@ -113,7 +113,7 @@ export function StageLegend({ status, className }: StageLegendProps) {
             className={cn(
               "flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-sm",
               active
-                ? "border-transparent text-white"
+                ? "border-transparent text-accent-foreground"
                 : done
                   ? "border-border bg-surface-hover text-foreground"
                   : "border-border bg-surface text-muted",

@@ -12,12 +12,13 @@ export default async function DashboardPage() {
   const session = await getSession();
   const welcomeName = session ? getAgentDisplayName(session.user) : "there";
 
-  const [offered, active] = await Promise.all([
+  const [offered, active, history] = await Promise.all([
     tasksApi.listByInbox("OFFERED").catch(() => []),
     tasksApi.listByInbox("ACTIVE").catch(() => []),
+    tasksApi.listByInbox("HISTORY").catch(() => []),
   ]);
 
-  const tasks = [...offered, ...active];
+  const tasks = [...offered, ...active, ...history];
 
   return (
     <DashboardHome

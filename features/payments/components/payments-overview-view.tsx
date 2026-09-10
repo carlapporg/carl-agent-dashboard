@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { useToast } from "@/components/providers/toast-provider";
+import { AnchoredMenu } from "@/components/ui/anchored-menu";
 import { Button } from "@/components/ui/button";
 import { AvailabilityToggle } from "@/features/dashboard/components/availability-toggle";
 import { MetricStatCard } from "@/features/dashboard/components/metric-stat-card";
@@ -110,24 +111,16 @@ function rangeForMonthFilter(value: MonthFilterValue): {
   const to = end.toISOString().slice(0, 10);
   const start = new Date(end);
 
-  if (value === "This week") {
+  if (value === "Today") {
+    // start already = today
+  } else if (value === "This week") {
     const day = start.getDay();
     const diff = day === 0 ? 6 : day - 1;
     start.setDate(start.getDate() - diff);
   } else if (value === "This month") {
     start.setDate(1);
-  } else if (value === "Last month") {
-    start.setMonth(start.getMonth() - 1, 1);
-    const lastEnd = new Date(now.getFullYear(), now.getMonth(), 0);
-    return {
-      from: start.toISOString().slice(0, 10),
-      to: lastEnd.toISOString().slice(0, 10),
-    };
-  } else if (value === "This quarter") {
-    const q = Math.floor(start.getMonth() / 3) * 3;
-    start.setMonth(q, 1);
-  } else if (value === "This year") {
-    start.setMonth(0, 1);
+  } else if (value === "All time") {
+    return { from: null, to: null };
   }
 
   return { from: start.toISOString().slice(0, 10), to };
@@ -139,7 +132,8 @@ export function PaymentsOverviewView({
 }: PaymentsOverviewViewProps) {
   const { toast } = useToast();
   const ops = useOps();
-  const filterRef = useRef<HTMLDivElement>(null);
+  const filterTriggerRef = useRef<HTMLButtonElement>(null);
+  const filterMenuRef = useRef<HTMLDivElement>(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const [draftFrom, setDraftFrom] = useState("");
   const [draftTo, setDraftTo] = useState("");
@@ -171,7 +165,8 @@ export function PaymentsOverviewView({
 
     function onPointerDown(event: MouseEvent) {
       const target = event.target as Node;
-      if (filterRef.current?.contains(target)) return;
+      if (filterTriggerRef.current?.contains(target)) return;
+      if (filterMenuRef.current?.contains(target)) return;
       setFilterOpen(false);
     }
 
@@ -230,10 +225,10 @@ export function PaymentsOverviewView({
     <div className="space-y-5">
       <section className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="text-[34px] font-semibold leading-none tracking-[-0.04em] text-[#1f1f21]">
+          <h1 className="text-[34px] font-semibold leading-none tracking-[-0.04em] text-foreground">
             Payments Overview
           </h1>
-          <p className="mt-3 text-[16px] font-normal tracking-[-0.02em] text-[rgba(0,0,0,0.5)]">
+          <p className="mt-3 text-[16px] font-normal tracking-[-0.02em] text-muted">
             Your current sales summary and activity
           </p>
         </div>
@@ -274,10 +269,10 @@ export function PaymentsOverviewView({
         })}
       </div>
 
-      <section className="overflow-hidden rounded-[15px] border border-[#e7e7e7] bg-white">
+      <section className="overflow-hidden rounded-[15px] border border-border bg-surface">
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-5 md:px-5">
           <div className="flex flex-wrap items-center gap-3">
-            <h2 className="text-[22px] font-semibold tracking-[-0.05em] text-[#1f1f21]">
+            <h2 className="text-[22px] font-semibold tracking-[-0.05em] text-foreground">
               Live Task Queue
             </h2>
             <span className="relative inline-flex items-center gap-2 rounded-[50px] bg-[rgba(61,188,61,0.2)] py-1 pl-6 pr-4 text-[12px] font-medium tracking-[-0.03em] text-[#3dbc3d]">
@@ -285,87 +280,87 @@ export function PaymentsOverviewView({
               {filteredTransactions.length} Live Task
             </span>
           </div>
-          <div ref={filterRef} className="relative flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <MonthFilterPill value={monthFilter} onChange={handleMonthChange} />
-            <div className="relative">
-              <button
-                type="button"
-                aria-expanded={filterOpen}
-                aria-haspopup="dialog"
-                onClick={() => setFilterOpen((open) => !open)}
-                className={cn(
-                  "inline-flex h-[35px] items-center rounded-[40px] bg-[#f6f6f6] px-4 text-[12px] font-medium tracking-[-0.05em] text-black",
-                  filterActive && "ring-1 ring-[#377dff]/40",
-                )}
-              >
-                Filter Date
-                {filterActive ? (
-                  <span className="ml-1.5 size-1.5 rounded-full bg-[#377dff]" aria-hidden />
-                ) : null}
-              </button>
-            </div>
+            <button
+              ref={filterTriggerRef}
+              type="button"
+              aria-expanded={filterOpen}
+              aria-haspopup="dialog"
+              onClick={() => setFilterOpen((open) => !open)}
+              className={cn(
+                "inline-flex h-[35px] items-center rounded-[40px] bg-surface-muted px-4 text-[12px] font-medium tracking-[-0.05em] text-foreground",
+                filterActive && "ring-1 ring-[#377dff]/40",
+              )}
+            >
+              Filter Date
+              {filterActive ? (
+                <span className="ml-1.5 size-1.5 rounded-full bg-accent" aria-hidden />
+              ) : null}
+            </button>
             <button
               type="button"
               onClick={handleExportCsv}
-              className="inline-flex h-[35px] items-center rounded-[40px] bg-[#eefbff] px-5 text-[12px] font-medium tracking-[-0.05em] text-[#377dff]"
+              className="inline-flex h-[35px] items-center rounded-[40px] bg-accent-soft px-5 text-[12px] font-medium tracking-[-0.05em] text-accent"
             >
               Export CSV
             </button>
             <Link
               href={ROUTES.tasks}
-              className="inline-flex h-[35px] items-center rounded-[40px] bg-[#eefbff] px-6 text-[12px] font-medium tracking-[-0.05em] text-[#377dff]"
+              className="inline-flex h-[35px] items-center rounded-[40px] bg-accent-soft px-6 text-[12px] font-medium tracking-[-0.05em] text-accent"
             >
               Open full queue
             </Link>
 
-            {filterOpen ? (
-              <div
-                role="dialog"
-                aria-label="Filter by date"
-                className="absolute right-0 top-full z-20 mt-2 w-72 rounded-[12px] border border-[#e7e7e7] bg-white p-4 shadow-[0_12px_32px_rgba(15,23,42,0.12)]"
-              >
-                <p className="text-sm font-semibold text-[#1f1f21]">
-                  Filter by date
-                </p>
-                <div className="mt-3 space-y-3">
-                  <label className="block space-y-1">
-                    <span className="text-xs font-medium text-[rgba(0,0,0,0.5)]">
-                      From
-                    </span>
-                    <input
-                      type="date"
-                      value={draftFrom}
-                      onChange={(event) => setDraftFrom(event.target.value)}
-                      className="h-10 w-full rounded-[10px] border border-[#e7e7e7] bg-white px-3 text-sm outline-none focus-visible:border-[#377dff] focus-visible:ring-2 focus-visible:ring-[#377dff]/20"
-                    />
-                  </label>
-                  <label className="block space-y-1">
-                    <span className="text-xs font-medium text-[rgba(0,0,0,0.5)]">
-                      To
-                    </span>
-                    <input
-                      type="date"
-                      value={draftTo}
-                      onChange={(event) => setDraftTo(event.target.value)}
-                      className="h-10 w-full rounded-[10px] border border-[#e7e7e7] bg-white px-3 text-sm outline-none focus-visible:border-[#377dff] focus-visible:ring-2 focus-visible:ring-[#377dff]/20"
-                    />
-                  </label>
-                </div>
-                <div className="mt-4 flex justify-end gap-2">
-                  <Button type="button" variant="ghost" onClick={clearDateFilter}>
-                    Clear
-                  </Button>
-                  <Button type="button" onClick={applyDateFilter}>
-                    Apply
-                  </Button>
-                </div>
+            <AnchoredMenu
+              open={filterOpen}
+              triggerRef={filterTriggerRef}
+              menuRef={filterMenuRef}
+              role="dialog"
+              aria-label="Filter by date"
+              className="w-72 rounded-[12px] border border-border bg-surface p-4 shadow-[0_12px_32px_rgba(15,23,42,0.12)]"
+            >
+              <p className="text-sm font-semibold text-foreground">
+                Filter by date
+              </p>
+              <div className="mt-3 space-y-3">
+                <label className="block space-y-1">
+                  <span className="text-xs font-medium text-muted">
+                    From
+                  </span>
+                  <input
+                    type="date"
+                    value={draftFrom}
+                    onChange={(event) => setDraftFrom(event.target.value)}
+                    className="h-10 w-full rounded-[10px] border border-border bg-surface px-3 text-sm outline-none focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/20"
+                  />
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-xs font-medium text-muted">
+                    To
+                  </span>
+                  <input
+                    type="date"
+                    value={draftTo}
+                    onChange={(event) => setDraftTo(event.target.value)}
+                    className="h-10 w-full rounded-[10px] border border-border bg-surface px-3 text-sm outline-none focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/20"
+                  />
+                </label>
               </div>
-            ) : null}
+              <div className="mt-4 flex justify-end gap-2">
+                <Button type="button" variant="ghost" onClick={clearDateFilter}>
+                  Clear
+                </Button>
+                <Button type="button" onClick={applyDateFilter}>
+                  Apply
+                </Button>
+              </div>
+            </AnchoredMenu>
           </div>
         </div>
 
         {filterActive ? (
-          <p className="border-t border-[#e7e7e7] px-4 py-2 text-xs text-[rgba(0,0,0,0.5)] md:px-5">
+          <p className="border-t border-border px-4 py-2 text-xs text-muted md:px-5">
             Showing {filteredTransactions.length} of {transactions.length}{" "}
             transactions
             {appliedFrom ? ` from ${appliedFrom}` : ""}
@@ -374,7 +369,7 @@ export function PaymentsOverviewView({
         ) : null}
 
         {filteredTransactions.length === 0 ? (
-          <div className="border-t border-[#e7e7e7] px-4 py-12 md:px-5">
+          <div className="border-t border-border px-4 py-12 md:px-5">
             <EmptyState
               title={filterActive ? "No matches" : "No transactions"}
               description={
@@ -395,7 +390,7 @@ export function PaymentsOverviewView({
           <div className="overflow-x-auto">
             <table className="min-w-[920px] w-full border-collapse text-left">
               <thead>
-                <tr className="bg-[#f6f6f6] text-[14px] font-medium tracking-[-0.05em] text-[#666]">
+                <tr className="bg-surface-muted text-[14px] font-medium tracking-[-0.05em] text-muted">
                   <th className="px-5 py-2.5 first:rounded-l-[5px]">TRX ID</th>
                   <th className="px-3 py-2.5">Customer</th>
                   <th className="px-3 py-2.5">Amount</th>
@@ -412,12 +407,12 @@ export function PaymentsOverviewView({
                   return (
                     <tr
                       key={row.id}
-                      className="border-t border-[#e7e7e7] text-[13px] font-medium tracking-[-0.03em] text-[rgba(0,16,44,0.5)] hover:bg-[#fafafa]"
+                      className="border-t border-border text-[13px] font-medium tracking-[-0.03em] text-muted hover:bg-surface-hover"
                     >
                       <td className="px-5 py-5">
                         <Link
                           href={href}
-                          className="font-medium text-[rgba(0,16,44,0.5)] hover:text-[#377dff]"
+                          className="font-medium text-muted hover:text-accent"
                         >
                           {row.txnId}
                         </Link>

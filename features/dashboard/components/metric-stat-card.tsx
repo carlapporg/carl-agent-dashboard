@@ -75,8 +75,8 @@ export function MetricStatCard({
       className={cn(
         "relative h-[150px] w-full overflow-hidden rounded-[10px]",
         featured
-          ? "bg-gradient-to-b from-[#4f7cff] to-[#85c9ff] text-white shadow-[inset_0_3px_25px_rgba(255,255,255,0.5),inset_0_-5px_15px_rgba(255,255,255,0.3)]"
-          : "border border-[#e7e7e7] bg-white",
+          ? "bg-gradient-to-b from-[#4f7cff] to-[#85c9ff] text-accent-foreground shadow-[inset_0_3px_25px_rgba(255,255,255,0.5),inset_0_-5px_15px_rgba(255,255,255,0.3)]"
+          : "border border-border bg-surface",
         className,
       )}
       style={style}
@@ -89,7 +89,7 @@ export function MetricStatCard({
             ? "bg-white text-[#1f1f21]"
             : variant === "plain"
               ? "bg-[#1f1f21] text-white"
-              : "bg-gradient-to-b from-[#4f7cff] to-[#85c9ff] text-white shadow-[inset_0_3px_10px_rgba(255,255,255,0.45)]",
+              : "bg-gradient-to-b from-[#4f7cff] to-[#85c9ff] text-accent-foreground shadow-[inset_0_3px_10px_rgba(255,255,255,0.45)]",
         )}
         aria-hidden
       >
@@ -102,7 +102,7 @@ export function MetricStatCard({
       <p
         className={cn(
           "absolute left-[15px] top-[15px] max-w-[calc(100%-76px)] truncate text-[16px] font-medium leading-none tracking-[-0.05em]",
-          featured ? "text-white" : "text-[#1f1f21]",
+          featured ? "text-accent-foreground" : "text-foreground",
         )}
       >
         {label}
@@ -112,7 +112,7 @@ export function MetricStatCard({
       <p
         className={cn(
           "absolute left-[15px] top-[44px] text-[42px] font-normal leading-none tracking-[-0.05em] tabular-nums",
-          featured ? "text-white" : "text-[#1f1f21]",
+          featured ? "text-accent-foreground" : "text-foreground",
         )}
       >
         {display}
@@ -123,7 +123,7 @@ export function MetricStatCard({
         <p
           className={cn(
             "max-w-[147px] text-[12px] font-normal leading-[15px] tracking-[-0.05em]",
-            featured ? "text-white" : "text-[rgba(31,31,33,0.56)]",
+            featured ? "text-accent-foreground" : "text-muted",
           )}
         >
           {hint}

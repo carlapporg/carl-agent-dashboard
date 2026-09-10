@@ -49,12 +49,18 @@ export default async function DashboardLayout({
         initialPresence={initialPresence}
       >
       <PageChromeProvider>
-      <div className="app-shell flex min-h-dvh flex-1 flex-col bg-background lg:flex-row">
+      <div className="app-shell flex min-h-0 flex-1 flex-col overflow-hidden bg-background lg:flex-row">
         <DashboardSidebar />
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <MobileNav />
           <DashboardHeader user={session.user} />
-          <main className="flex-1 p-5 md:p-6 lg:px-8 lg:py-8">{children}</main>
+          {/* Sole vertical scrollport for dashboard pages on mobile */}
+          <main
+            id="dashboard-scroll"
+            className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain p-5 md:p-6 lg:px-8 lg:py-8"
+          >
+            {children}
+          </main>
         </div>
       </div>
       </PageChromeProvider>

@@ -34,7 +34,7 @@ export function Button({
         variant === "ghost" &&
           "text-muted hover:bg-surface-hover hover:text-foreground",
         variant === "danger" &&
-          "bg-danger text-white hover:bg-red-700",
+          "bg-danger text-accent-foreground hover:bg-red-700",
         fullWidth && "w-full",
         className,
       )}

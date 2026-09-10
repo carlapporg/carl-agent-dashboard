@@ -2,28 +2,31 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { OfferCountdown } from "@/features/ops/offer-countdown";
 import { OfferActions } from "@/features/dashboard/components/offer-actions";
-import { MonthFilterPill } from "@/features/dashboard/components/month-filter-pill";
+import { EyeIcon } from "@/components/ui/eye-icon";
+import {
+  MonthFilterPill,
+  type MonthFilterValue,
+} from "@/features/dashboard/components/month-filter-pill";
 import { useOps } from "@/features/ops/ops-provider";
 import { ROUTES } from "@/lib/constants/routes";
 import { cn } from "@/lib/utils/cn";
-import {
-  isPendingReject,
-  useRejectedOfferTick,
-  withoutRejectedOffers,
-} from "@/features/ops/rejected-offers";
+import { isPendingReject } from "@/features/ops/rejected-offers";
 import {
   isRejectingOrRejected,
   hasOpenRejectUi,
 } from "@/features/ops/auto-accept-offer";
-import { mergeTaskLists } from "@/lib/tasks/merge-live-task";
 import { offerWindowEnd } from "@/types/agent";
+import { isCompletedQueueTask } from "@/lib/dashboard/live-queue";
 import type { Task } from "@/types/task";
 
 type LiveTaskQueueProps = {
-  seedTasks: Task[];
+  /** Pre-filtered open tasks (same list Task Progress uses). */
+  items: Task[];
+  rangeLabel?: MonthFilterValue;
+  onRangeChange?: (value: MonthFilterValue) => void;
 };
 
 function receivedTime(iso: string): string {
@@ -69,6 +72,9 @@ function statusBadgeLabel(task: Task): string {
   if (isRejectingOrRejected(task.id) || isPendingReject(task.id)) {
     return "Rejecting";
   }
+  if (task.backendStatus === "COMPLETED" || task.status === "completed") {
+    return "Completed";
+  }
   if (task.status === "waiting_for_payment") return "Waiting For Payment";
   if (task.status === "waiting_for_customer") return "Waiting For Customer";
   if (task.backendStatus === "OFFERED") return "Offered";
@@ -81,6 +87,9 @@ function statusBadgeLabel(task: Task): string {
 }
 
 function chipTone(task: Task): string {
+  if (task.backendStatus === "COMPLETED" || task.status === "completed") {
+    return "bg-[rgba(61,188,61,0.2)] text-[#3dbc3d]";
+  }
   if (task.backendStatus === "ASSIGNED") {
     return "bg-[rgba(111,186,0,0.2)] text-[#6fba00]";
   }
@@ -95,52 +104,34 @@ function chipTone(task: Task): string {
   if (task.status === "in_progress" || task.backendStatus === "IN_PROGRESS") {
     return "bg-[rgba(84,149,253,0.2)] text-[#5072e8]";
   }
-  return "bg-[#f2f4f7] text-[#667085]";
+  return "bg-surface-muted text-muted";
 }
 
-/** Assigned / active tasks open on click — offers stay for Accept/Reject. */
+/** Assigned / active / completed tasks open on click — offers stay for Accept/Reject. */
 function canOpenTask(task: Task): boolean {
   return (
     task.backendStatus === "ASSIGNED" ||
     task.backendStatus === "IN_PROGRESS" ||
     task.backendStatus === "WAITING_FOR_USER" ||
     task.backendStatus === "WAITING_FOR_AGENT" ||
+    task.backendStatus === "COMPLETED" ||
     task.status === "assigned" ||
     task.status === "in_progress" ||
-    task.status === "waiting_for_customer"
+    task.status === "waiting_for_customer" ||
+    task.status === "completed"
   );
 }
 
-export function LiveTaskQueue({ seedTasks }: LiveTaskQueueProps) {
+export function LiveTaskQueue({
+  items,
+  rangeLabel,
+  onRangeChange,
+}: LiveTaskQueueProps) {
   const ops = useOps();
   const router = useRouter();
   const [highlight, setHighlight] = useState(false);
-  const prevIds = useRef<Set<string>>(new Set(seedTasks.map((t) => t.id)));
+  const prevIds = useRef<Set<string>>(new Set(items.map((t) => t.id)));
   const [newIds, setNewIds] = useState<Set<string>>(new Set());
-  const rejectedTick = useRejectedOfferTick();
-
-  const items = useMemo(() => {
-    return withoutRejectedOffers(
-      mergeTaskLists(seedTasks, ops?.liveTasks ?? [], ops?.offer),
-    )
-      .filter((t) => !t.parentId)
-      .filter(
-        (t) =>
-          t.backendStatus === "OFFERED" ||
-          t.backendStatus === "ASSIGNED" ||
-          t.backendStatus === "IN_PROGRESS" ||
-          t.backendStatus === "WAITING_FOR_USER" ||
-          t.backendStatus === "WAITING_FOR_AGENT" ||
-          t.status === "queued" ||
-          t.status === "assigned" ||
-          t.status === "in_progress" ||
-          t.status === "waiting_for_customer",
-      )
-      .sort(
-        (a, b) =>
-          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-      );
-  }, [ops?.liveTasks, ops?.offer, ops?.queuePulse, rejectedTick, seedTasks]);
 
   useEffect(() => {
     const next = new Set(items.map((t) => t.id));
@@ -166,10 +157,10 @@ export function LiveTaskQueue({ seedTasks }: LiveTaskQueueProps) {
   }, [ops?.queuePulse]);
 
   return (
-    <section className="overflow-hidden rounded-[15px] border border-[#e7e7e7] bg-white">
+    <section className="overflow-hidden rounded-[15px] border border-border bg-surface">
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-5 md:px-5">
         <div className="flex flex-wrap items-center gap-3">
-          <h2 className="text-[22px] font-semibold tracking-[-0.05em] text-[#1f1f21]">
+          <h2 className="text-[22px] font-semibold tracking-[-0.05em] text-foreground">
             Live Task Queue
           </h2>
           <span
@@ -183,10 +174,10 @@ export function LiveTaskQueue({ seedTasks }: LiveTaskQueueProps) {
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <MonthFilterPill />
+          <MonthFilterPill value={rangeLabel} onChange={onRangeChange} />
           <Link
             href={ROUTES.tasks}
-            className="inline-flex h-[35px] items-center rounded-[40px] bg-[#eefbff] px-6 text-[12px] font-medium tracking-[-0.05em] text-[#377dff]"
+            className="inline-flex h-[35px] items-center rounded-[40px] bg-accent-soft px-6 text-[12px] font-medium tracking-[-0.05em] text-accent"
           >
             Open full queue
           </Link>
@@ -194,14 +185,14 @@ export function LiveTaskQueue({ seedTasks }: LiveTaskQueueProps) {
       </div>
 
       {items.length === 0 ? (
-        <div className="border-t border-[#e7e7e7] px-4 py-12 text-center text-sm text-[rgba(0,0,0,0.5)]">
+        <div className="border-t border-border px-4 py-12 text-center text-sm text-muted">
           Queue is quiet. New assignments will appear here live.
         </div>
       ) : (
         <div className="overflow-x-auto">
           <table className="min-w-[920px] w-full border-collapse text-left">
             <thead>
-              <tr className="bg-[#f6f6f6] text-[14px] font-medium tracking-[-0.05em] text-[#666]">
+              <tr className="bg-surface-muted text-[14px] font-medium tracking-[-0.05em] text-muted">
                 <th className="px-5 py-2.5 first:rounded-l-[5px]">ID</th>
                 <th className="px-3 py-2.5">Task</th>
                 <th className="px-3 py-2.5">Place</th>
@@ -223,9 +214,9 @@ export function LiveTaskQueue({ seedTasks }: LiveTaskQueueProps) {
                   <tr
                     key={item.id}
                     className={cn(
-                      "border-t border-[#e7e7e7] text-[13px] font-medium tracking-[-0.03em] text-[rgba(0,16,44,0.5)]",
-                      isNew && "bg-[#f8fbff]",
-                      openable && "cursor-pointer hover:bg-[#fafafa]",
+                      "border-t border-border text-[13px] font-medium tracking-[-0.03em] text-muted",
+                      isNew && "bg-accent-soft",
+                      openable && "cursor-pointer hover:bg-surface-hover",
                     )}
                     onClick={
                       openable
@@ -253,7 +244,11 @@ export function LiveTaskQueue({ seedTasks }: LiveTaskQueueProps) {
                       {placeLabel(item)}
                     </td>
                     <td className="whitespace-nowrap px-3 py-5">
-                      {receivedTime(item.updatedAt)}
+                      {receivedTime(
+                        isCompletedQueueTask(item)
+                          ? (item.completedAt ?? item.updatedAt)
+                          : item.updatedAt,
+                      )}
                     </td>
                     <td className="px-3 py-5">
                       <div
@@ -281,24 +276,20 @@ export function LiveTaskQueue({ seedTasks }: LiveTaskQueueProps) {
                       </div>
                     </td>
                     <td className="whitespace-nowrap px-3 py-5">
-                      {receivedDate(item.updatedAt)}
+                      {receivedDate(
+                        isCompletedQueueTask(item)
+                          ? (item.completedAt ?? item.updatedAt)
+                          : item.updatedAt,
+                      )}
                     </td>
                     <td className="px-5 py-5">
                       <Link
                         href={ROUTES.task(item.id)}
-                        className="inline-flex size-4 items-center justify-center"
+                        className="inline-flex size-4 items-center justify-center text-muted hover:text-foreground"
                         aria-label={`Open ${item.title}`}
                         onClick={(event) => event.stopPropagation()}
                       >
-                        {/* Figma Hide Icon 16×16 — glyph ~14.5×8.4 */}
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src="/figma/dashboard/eye.svg"
-                          alt=""
-                          width={15}
-                          height={8}
-                          className="h-[8px] w-[15px]"
-                        />
+                        <EyeIcon />
                       </Link>
                     </td>
                   </tr>

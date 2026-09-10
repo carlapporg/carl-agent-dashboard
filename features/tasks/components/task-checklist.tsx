@@ -62,7 +62,7 @@ export function TaskChecklist({ task, locked = false }: TaskChecklistProps) {
                   className={cn(
                     "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded border text-xs font-bold",
                     done
-                      ? "border-emerald-500 bg-emerald-500 text-white"
+                      ? "border-emerald-500 bg-emerald-500 text-accent-foreground"
                       : "border-border bg-surface text-transparent",
                   )}
                   aria-hidden

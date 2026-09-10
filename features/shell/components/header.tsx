@@ -125,9 +125,9 @@ export function DashboardHeader({ user }: DashboardHeaderProps) {
   }
 
   return (
-    <header className="flex h-[68px] items-center justify-between gap-4 border-b border-[#e7e7e7] bg-white px-5 md:px-6">
+    <header className="flex h-[68px] items-center justify-between gap-4 border-b border-border bg-surface px-5 md:px-6">
       <div className="min-w-0 flex-1">
-        <h1 className="truncate text-[15px] font-normal leading-6 tracking-normal text-[#1f1f21]">
+        <h1 className="truncate text-[15px] font-normal leading-6 tracking-normal text-foreground">
           {title}
         </h1>
         {subtitle ? (

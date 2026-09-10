@@ -153,6 +153,21 @@ export function playNotificationChime() {
   playWebAudio();
 }
 
+/** Plays the chime only when Sound Alerts is enabled in notification prefs. */
+export function playNotificationChimeIfEnabled() {
+  if (typeof window === "undefined") return;
+  try {
+    const raw = window.localStorage.getItem("carl.agent.notification-prefs");
+    if (raw) {
+      const parsed = JSON.parse(raw) as { sound?: unknown };
+      if (parsed.sound === false) return;
+    }
+  } catch {
+    // fall through and play
+  }
+  playNotificationChime();
+}
+
 export function isNotificationAudioUnlocked() {
   return unlocked;
 }

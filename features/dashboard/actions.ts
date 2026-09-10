@@ -3,6 +3,7 @@
 import { unstable_noStore as noStore } from "next/cache";
 import { dashboardAnalyticsApi } from "@/lib/api/dashboard-analytics";
 import { dashboardApi } from "@/lib/api/dashboard";
+import type { DashboardRange } from "@/lib/dashboard/range";
 import { tasksApi } from "@/lib/api/tasks";
 
 export async function getQueuePreviewAction(limit = 3) {
@@ -33,7 +34,24 @@ export async function getAgentMetricsAction() {
   return dashboardApi.getAgentMetrics();
 }
 
-export async function getTasksPerHourAction() {
+export async function getDashboardOverviewAction(
+  range: DashboardRange = "this_month",
+) {
   noStore();
-  return dashboardAnalyticsApi.getTasksPerHour();
+  return dashboardAnalyticsApi.getOverview(range);
+}
+
+export async function getTasksPerHourAction(range: DashboardRange = "today") {
+  noStore();
+  return dashboardAnalyticsApi.getTasksPerHour(range);
+}
+
+/** Open + history tasks for client-side completed / in-progress chart split. */
+export async function getTasksPerDaySplitAction() {
+  noStore();
+  const [active, history] = await Promise.all([
+    tasksApi.listByInbox("ACTIVE").catch(() => []),
+    tasksApi.listByInbox("HISTORY").catch(() => []),
+  ]);
+  return { active, history };
 }

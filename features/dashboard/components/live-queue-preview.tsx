@@ -57,7 +57,7 @@ export function LiveQueuePreview() {
       {!loaded ? (
         <p className="mt-4 text-sm text-muted">Loading queue…</p>
       ) : items.length === 0 ? (
-        <div className="mt-4 flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-[#f8fafc] px-4 py-10 text-center">
+        <div className="mt-4 flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-surface-muted px-4 py-10 text-center">
           <span
             className="mb-3 size-2 animate-pulse rounded-full bg-accent"
             aria-hidden

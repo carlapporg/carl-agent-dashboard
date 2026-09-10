@@ -102,7 +102,7 @@ export function ItineraryPanel({
             {itinerary.items.map((item) => (
               <li
                 key={item.id}
-                className="rounded-xl border border-border bg-[#f8fafc] px-4 py-3"
+                className="rounded-xl border border-border bg-surface-muted px-4 py-3"
               >
                 <div className="flex items-center justify-between gap-2">
                   <p className="font-medium text-foreground-soft">{item.label}</p>

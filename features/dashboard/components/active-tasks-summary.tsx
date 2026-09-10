@@ -28,7 +28,7 @@ export function ActiveTasksSummary() {
       {!loaded ? (
         <p className="mt-4 text-sm text-muted">Loading…</p>
       ) : items.length === 0 ? (
-        <p className="mt-4 rounded-lg border border-dashed border-border bg-[#f8fafc] px-3 py-6 text-center text-sm text-muted">
+        <p className="mt-4 rounded-lg border border-dashed border-border bg-surface-muted px-3 py-6 text-center text-sm text-muted">
           No active tasks — you&apos;re clear.
         </p>
       ) : (

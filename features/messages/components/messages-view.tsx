@@ -168,10 +168,14 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
     {},
   );
   const inflightRef = useRef(new Set<string>());
+  const timelinesRef = useRef(timelines);
+  timelinesRef.current = timelines;
   const liveChatAt = ops?.liveChat?.at ?? 0;
 
   const loadTimeline = useCallback((taskId: string) => {
     if (inflightRef.current.has(taskId)) return;
+    // Skip if we already hydrated this thread — avoids POST storms on remount/refresh.
+    if (Object.hasOwn(timelinesRef.current, taskId)) return;
     inflightRef.current.add(taskId);
     void listTaskMessagesAction(taskId)
       .then((events) => {
@@ -231,33 +235,8 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
     loadTimeline(selectedId);
   }, [loadTimeline, selectedId]);
 
-  useEffect(() => {
-    let cancelled = false;
-    const others = visibleConversations
-      .map((c) => c.taskId)
-      .filter((id) => id !== selectedId);
-
-    void (async () => {
-      for (const taskId of others) {
-        if (cancelled) return;
-        if (inflightRef.current.has(taskId)) continue;
-        inflightRef.current.add(taskId);
-        try {
-          const events = await listTaskMessagesAction(taskId);
-          if (cancelled) return;
-          setTimelines((prev) =>
-            Object.hasOwn(prev, taskId) ? prev : { ...prev, [taskId]: events },
-          );
-        } finally {
-          inflightRef.current.delete(taskId);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedId, visibleConversations]);
+  // Intentionally no bulk prefetch of every conversation — each listTaskMessagesAction
+  // is a ~2s server POST. Sidebar uses conversation.lastMessage until a chat is opened.
 
   useEffect(() => {
     const live = ops?.liveChat;
@@ -351,10 +330,10 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
       <div className="space-y-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h2 className="text-[34px] font-semibold leading-none tracking-[-0.05em] text-[#1f1f21]">
+            <h2 className="text-[34px] font-semibold leading-none tracking-[-0.05em] text-foreground">
               Chat Box
             </h2>
-            <p className="mt-3 text-[14px] tracking-[-0.02em] text-[rgba(0,0,0,0.5)]">
+            <p className="mt-3 text-[14px] tracking-[-0.02em] text-muted">
               Your current sales summary and activity
             </p>
           </div>
@@ -374,10 +353,10 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
     <div className="flex h-[calc(100dvh-7.5rem)] max-h-[calc(100dvh-7.5rem)] flex-col gap-5 overflow-hidden pb-2">
       <div className="flex shrink-0 flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-[34px] font-semibold leading-none tracking-[-0.05em] text-[#1f1f21]">
+          <h2 className="text-[34px] font-semibold leading-none tracking-[-0.05em] text-foreground">
             Chat Box
           </h2>
-          <p className="mt-3 text-[14px] tracking-[-0.02em] text-[rgba(0,0,0,0.5)]">
+          <p className="mt-3 text-[14px] tracking-[-0.02em] text-muted">
             Your current sales summary and activity
           </p>
         </div>
@@ -386,28 +365,34 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
 
       {/* Figma: list 292px + gap ~25px + chat; panels end with a small bottom gap */}
       <div className="grid min-h-0 flex-1 gap-[25px] overflow-hidden lg:grid-cols-[minmax(292px,320px)_minmax(0,1fr)] lg:items-stretch">
-        <aside className="flex min-h-0 flex-col overflow-hidden rounded-[15px] border border-[#e7e7e7] bg-[#fdfdfd]">
+        <aside className="flex min-h-0 flex-col overflow-hidden rounded-[15px] border border-border bg-surface">
           <div className="shrink-0 px-5 pt-5">
-            <div className="flex h-10 items-center gap-2 rounded-[8px] border border-[#e7e7e7] bg-white px-2">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/figma/messages/icon-search.svg"
-                alt=""
-                width={20}
-                height={20}
-                className="size-5 shrink-0"
-              />
+            <div className="flex h-10 items-center gap-2 rounded-[8px] border border-border bg-surface px-2">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 20 20"
+                fill="none"
+                aria-hidden
+                className="size-5 shrink-0 text-foreground"
+              >
+                <path
+                  d="M8.47 3.33a6.74 6.74 0 0 1 6.81 6.74c0 .77-.13 1.5-.38 2.2a6.6 6.6 0 0 1-1.02 1.88l4.17 4.16a.96.96 0 0 1-.7 1.69c-.14 0-.27-.03-.4-.08a.96.96 0 0 1-.33-.21l-4.2-4.17a6.7 6.7 0 0 1-3.95 1.27 6.74 6.74 0 1 1 0-13.48Zm0 1.45a5.29 5.29 0 1 0 0 10.59 5.29 5.29 0 0 0 0-10.59Z"
+                  fill="currentColor"
+                  fillOpacity="0.7"
+                />
+              </svg>
               <input
                 value={filter}
                 onChange={(event) => setFilter(event.target.value)}
                 placeholder="Search"
                 aria-label="Search chats"
-                className="min-w-0 flex-1 bg-transparent text-[15px] font-medium leading-6 text-[#1f1f21] outline-none placeholder:text-[rgba(31,31,33,0.56)]"
+                className="min-w-0 flex-1 bg-transparent text-[15px] font-medium leading-6 text-foreground outline-none placeholder:text-muted"
               />
             </div>
 
             {/* All / Unread stay above the list — Figma tabs + 8px gap under indicator */}
-            <div className="mt-4 flex items-end gap-6 border-b border-[#e7e7e7] pb-0">
+            <div className="mt-4 flex items-end gap-6 border-b border-border pb-0">
               {(
                 [
                   { value: "all", label: "All" },
@@ -422,12 +407,12 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
                     onClick={() => setListTab(tab.value)}
                     className={cn(
                       "relative pb-2 text-[14px] font-semibold tracking-[-0.02em]",
-                      active ? "text-[#377dff]" : "text-[rgba(0,0,0,0.45)] font-medium",
+                      active ? "text-accent" : "text-muted font-medium",
                     )}
                   >
                     {tab.label}
                     {active ? (
-                      <span className="absolute inset-x-0 bottom-0 h-0.5 w-5 rounded-[1px] bg-[#377dff]" />
+                      <span className="absolute inset-x-0 bottom-0 h-0.5 w-5 rounded-[1px] bg-accent" />
                     ) : null}
                   </button>
                 );
@@ -437,7 +422,7 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
 
           <ul className="min-h-0 flex-1 overflow-y-auto px-0 pb-3 pt-2">
             {filtered.length === 0 ? (
-              <li className="px-5 py-8 text-center text-sm text-[rgba(0,0,0,0.45)]">
+              <li className="px-5 py-8 text-center text-sm text-muted">
                 No chats match this filter.
               </li>
             ) : (
@@ -453,7 +438,7 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
                       onClick={() => setSelectedId(c.taskId)}
                       className={cn(
                         "flex w-full items-start gap-2.5 px-5 py-[10px] text-left transition-colors",
-                        active ? "bg-[#f6f6f6]" : "hover:bg-[#f6f6f6]/70",
+                        active ? "bg-surface-muted" : "hover:bg-surface-muted/70",
                       )}
                     >
                       <ConversationAvatar
@@ -462,20 +447,20 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
                       />
                       <span className="min-w-0 flex-1 pt-0.5">
                         <span className="flex items-start justify-between gap-2">
-                          <span className="truncate text-[14px] font-semibold leading-[14px] tracking-[-0.02em] text-black">
+                          <span className="truncate text-[14px] font-semibold leading-[14px] tracking-[-0.02em] text-foreground">
                             {customerName}
                           </span>
-                          <span className="shrink-0 text-[10px] leading-[10px] tracking-[-0.02em] text-[rgba(0,0,0,0.4)]">
+                          <span className="shrink-0 text-[10px] leading-[10px] tracking-[-0.02em] text-muted-dim">
                             {formatRel(c.lastActivityAt)}
                           </span>
                         </span>
-                        <span className="mt-1 block truncate text-[14px] leading-[14px] tracking-[-0.02em] text-[rgba(0,0,0,0.45)]">
+                        <span className="mt-1 block truncate text-[14px] leading-[14px] tracking-[-0.02em] text-muted">
                           {c.lastMessage}
                         </span>
                       </span>
                       {c.unreadCount > 0 ? (
                         <span
-                          className="mt-1 size-2 shrink-0 rounded-full bg-[#377dff]"
+                          className="mt-1 size-2 shrink-0 rounded-full bg-accent"
                           aria-label="Unread"
                         />
                       ) : null}
@@ -489,44 +474,44 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
 
         <div className="flex min-h-0 flex-col overflow-hidden">
           {selected && task ? (
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[15px] border border-[#e7e7e7] bg-white">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[15px] border border-border bg-surface">
               <header className="flex shrink-0 items-center justify-between gap-3 px-5 py-5">
                 <div className="flex min-w-0 items-center gap-2.5">
                   <ConversationAvatar name={task.customerName} size={34} />
                   <div className="min-w-0 leading-[14px]">
-                    <h3 className="truncate text-[12px] font-semibold text-black">
+                    <h3 className="truncate text-[12px] font-semibold text-foreground">
                       {task.customerName}
                     </h3>
-                    <p className="truncate text-[12px] font-medium text-[#777583]">
+                    <p className="truncate text-[12px] font-medium text-muted">
                       Online
                     </p>
                   </div>
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1 text-right">
                   {bookingRef ? (
-                    <p className="text-[11px] text-[rgba(0,0,0,0.4)]">
+                    <p className="text-[11px] text-muted-dim">
                       {formatBookingRef(bookingRef)} · #{task.number}
                     </p>
                   ) : (
-                    <p className="text-[11px] text-[rgba(0,0,0,0.4)]">
+                    <p className="text-[11px] text-muted-dim">
                       Ticket #T-{task.number}
                     </p>
                   )}
                   <Link
                     href={ROUTES.taskPanel(task.id, "chat")}
-                    className="text-[12px] font-semibold text-[#377dff] hover:text-[#2f6ae6]"
+                    className="text-[12px] font-semibold text-accent hover:text-accent-hover"
                   >
                     Open workspace
                   </Link>
                 </div>
               </header>
-              <div className="h-px w-full bg-[#eef0f2]" />
+              <div className="h-px w-full bg-border" />
 
               <div className="min-h-0 flex-1 overflow-hidden">
                 {!chatReady ? (
                   <div className="flex h-full min-h-64 flex-col items-center justify-center gap-3 px-6 text-center">
-                    <span className="size-8 animate-pulse rounded-full bg-[#eefbff]" />
-                    <p className="text-sm text-[rgba(0,0,0,0.45)]">
+                    <span className="size-8 animate-pulse rounded-full bg-accent-soft" />
+                    <p className="text-sm text-foreground">
                       Loading conversation…
                     </p>
                   </div>
@@ -553,7 +538,7 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
               </div>
             </div>
           ) : (
-            <div className="flex min-h-0 flex-1 items-center justify-center rounded-[15px] border border-[#e7e7e7] bg-white">
+            <div className="flex min-h-0 flex-1 items-center justify-center rounded-[15px] border border-border bg-surface">
               <EmptyState
                 title="Select a conversation"
                 description="Pick a thread on the left to reply."

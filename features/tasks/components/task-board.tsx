@@ -118,13 +118,13 @@ function TaskBoardCard({
   return (
     <article
       className={cn(
-        "rounded-lg border border-transparent bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/80 transition-all",
-        "hover:-translate-y-px hover:shadow-[0_8px_18px_rgba(15,23,42,0.08)] hover:ring-slate-300",
+        "rounded-lg border border-transparent bg-surface p-3 shadow-[0_1px_2px_rgba(15,23,42,0.06)] ring-1 ring-border transition-all",
+        "hover:-translate-y-px hover:shadow-[0_8px_18px_rgba(15,23,42,0.08)] hover:ring-border",
         dragging && "rotate-1 shadow-[0_16px_32px_rgba(15,23,42,0.16)] ring-accent/40",
       )}
     >
       <div className="flex items-start justify-between gap-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-dim">
           {typeLabel}
         </p>
         <span
@@ -134,13 +134,13 @@ function TaskBoardCard({
               ? "bg-red-50 text-red-700"
               : task.priority === "high"
                 ? "bg-orange-50 text-orange-700"
-                : "bg-slate-100 text-slate-600",
+                : "bg-surface-muted text-muted",
           )}
         >
           {task.priority}
         </span>
       </div>
-      <p className="mt-1.5 text-[13px] font-semibold leading-snug text-slate-900">
+      <p className="mt-1.5 text-[13px] font-semibold leading-snug text-foreground">
         {task.title}
       </p>
       {task.expiresAt ? (
@@ -149,11 +149,11 @@ function TaskBoardCard({
         </div>
       ) : null}
       <div className="mt-3 flex items-center justify-between gap-2">
-        <span className="text-[11px] font-medium tabular-nums text-slate-400">
+        <span className="text-[11px] font-medium tabular-nums text-muted-dim">
           #{task.number} · {formatRelative(task.updatedAt)}
         </span>
         <span
-          className="flex size-6 items-center justify-center rounded-full bg-slate-100 text-[10px] font-bold text-slate-600"
+          className="flex size-6 items-center justify-center rounded-full bg-surface-muted text-[10px] font-bold text-muted"
           title={task.customerName}
         >
           {initial}
@@ -220,19 +220,19 @@ function BoardColumn({
     <section className="flex min-h-0 min-w-0 flex-col">
       <header className="mb-2 flex items-end justify-between gap-2 px-1">
         <div className="min-w-0">
-          <h3 className="truncate text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
+          <h3 className="truncate text-[11px] font-bold uppercase tracking-[0.16em] text-muted">
             {column.label}
           </h3>
-          <p className="truncate text-[11px] text-slate-400">{column.hint}</p>
+          <p className="truncate text-[11px] text-muted-dim">{column.hint}</p>
         </div>
-        <span className="rounded-full bg-slate-200/80 px-2 py-0.5 text-[11px] font-bold tabular-nums text-slate-600">
+        <span className="rounded-full bg-border px-2 py-0.5 text-[11px] font-bold tabular-nums text-muted">
           {tasks.length}
         </span>
       </header>
       <div
         ref={setNodeRef}
         className={cn(
-          "flex min-h-[12rem] flex-1 flex-col gap-2 overflow-y-auto rounded-xl bg-slate-100/80 p-2 ring-1 ring-inset ring-slate-200/80 transition-colors",
+          "flex min-h-[12rem] flex-1 flex-col gap-2 overflow-y-auto rounded-xl bg-surface-muted p-2 ring-1 ring-inset ring-border transition-colors",
           isOver && "bg-accent/[0.06] ring-2 ring-accent/30",
         )}
       >
@@ -241,7 +241,7 @@ function BoardColumn({
           strategy={verticalListSortingStrategy}
         >
           {tasks.length === 0 ? (
-            <p className="m-auto px-2 py-8 text-center text-[12px] text-slate-400">
+            <p className="m-auto px-2 py-8 text-center text-[12px] text-muted-dim">
               Drop a card here
             </p>
           ) : (
@@ -356,7 +356,7 @@ export function TaskBoard({ tasks }: TaskBoardProps) {
 
   if (tasks.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 py-16 text-center">
+      <div className="rounded-2xl border border-dashed border-border bg-surface-muted px-6 py-16 text-center">
         <p className="text-sm font-semibold text-foreground">No tasks to show</p>
         <p className="mt-1 text-sm text-muted">
           Adjust filters or search to see work on the board.

@@ -37,7 +37,7 @@ export function TaskAiBrief({
                 <button
                   type="button"
                   onClick={() => onAskMissing?.(item)}
-                  className="rounded-full border border-border bg-[#f8fafc] px-3 py-1.5 text-sm text-foreground-soft transition-colors hover:border-accent/40 hover:text-accent"
+                  className="rounded-full border border-border bg-surface-muted px-3 py-1.5 text-sm text-foreground-soft transition-colors hover:border-accent/40 hover:text-accent"
                 >
                   Ask: {item}
                 </button>

@@ -11,6 +11,11 @@ import {
   type ReactNode,
 } from "react";
 import { usePathname } from "next/navigation";
+import {
+  listNotificationsAction,
+  markAllNotificationsReadAction,
+  markNotificationReadAction,
+} from "@/features/notifications/actions";
 import { hrefForNotification } from "@/lib/notifications/from-events";
 import {
   DEFAULT_NOTIFICATION_PREFS,
@@ -44,7 +49,7 @@ type NotificationContextValue = {
   panelOpen: boolean;
   setPanelOpen: (open: boolean) => void;
   push: (
-    item: Omit<NotificationItem, "read">,
+    item: Omit<NotificationItem, "read"> & { read?: boolean },
     options?: PushOptions,
   ) => void;
   markRead: (id: string) => void;
@@ -73,6 +78,7 @@ function kindAllowed(kind: NotificationKind, prefs: NotificationPrefs): boolean 
     case "payment_expired":
       return prefs.paymentResult;
     case "task_cancelled":
+    case "task_failed":
       return true;
     case "confirmation_confirmed":
     case "confirmation_declined":
@@ -82,6 +88,25 @@ function kindAllowed(kind: NotificationKind, prefs: NotificationPrefs): boolean 
     default:
       return true;
   }
+}
+
+function sortNewest(items: NotificationItem[]): NotificationItem[] {
+  return [...items].sort(
+    (a, b) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
+}
+
+function mergeRemoteWithLocal(
+  remote: NotificationItem[],
+  local: NotificationItem[],
+): NotificationItem[] {
+  const byId = new Map<string, NotificationItem>();
+  for (const row of remote) byId.set(row.id, row);
+  for (const row of local) {
+    if (!byId.has(row.id)) byId.set(row.id, row);
+  }
+  return sortNewest([...byId.values()]);
 }
 
 function showDesktopNotification(item: NotificationItem) {
@@ -120,9 +145,24 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   prefsRef.current = prefs;
 
   useEffect(() => {
-    setItems(readNotifications());
+    let cancelled = false;
     setPrefsState(readNotificationPrefs());
+    const local = readNotifications();
+    setItems(local);
     setHydrated(true);
+
+    void listNotificationsAction(50)
+      .then((remote) => {
+        if (cancelled) return;
+        setItems((prev) => mergeRemoteWithLocal(remote, prev));
+      })
+      .catch(() => {
+        // Keep in-memory / socket-pushed items if the list API is down.
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -180,9 +220,15 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const push = useCallback(
-    (incoming: Omit<NotificationItem, "read">, options?: PushOptions) => {
+    (
+      incoming: Omit<NotificationItem, "read"> & { read?: boolean },
+      options?: PushOptions,
+    ) => {
       if (!kindAllowed(incoming.kind, prefsRef.current)) return;
-      const item: NotificationItem = { ...incoming, read: false };
+      const item: NotificationItem = {
+        ...incoming,
+        read: incoming.read === true,
+      };
       setItems((prev) => {
         const existing = prev.find((row) => row.id === item.id);
         if (existing) {
@@ -190,14 +236,14 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
           if (
             existing.body === item.body &&
             existing.title === item.title &&
-            existing.read === false
+            existing.read === item.read
           ) {
             return prev;
           }
         }
         return mergeNotification(prev, item);
       });
-      if (options?.silent) return;
+      if (options?.silent || item.read) return;
       if (prefsRef.current.sound) {
         playNotificationChime();
       }
@@ -212,10 +258,16 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     setItems((prev) =>
       prev.map((item) => (item.id === id ? { ...item, read: true } : item)),
     );
+    void markNotificationReadAction(id).catch(() => {
+      // Optimistic UI; retry on next open if needed.
+    });
   }, []);
 
   const markAllRead = useCallback(() => {
     setItems((prev) => prev.map((item) => ({ ...item, read: true })));
+    void markAllNotificationsReadAction().catch(() => {
+      // Optimistic UI.
+    });
   }, []);
 
   const dismiss = useCallback((id: string) => {

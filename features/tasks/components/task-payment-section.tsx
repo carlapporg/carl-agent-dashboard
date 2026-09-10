@@ -67,7 +67,7 @@ export function TaskPaymentSection({
             return (
               <li
                 key={auth.id}
-                className="rounded-lg border border-border bg-[#f8fafc] px-3 py-2.5 text-sm"
+                className="rounded-lg border border-border bg-surface-muted px-3 py-2.5 text-sm"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="font-medium text-foreground">

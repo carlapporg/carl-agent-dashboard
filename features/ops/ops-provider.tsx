@@ -22,6 +22,8 @@ import {
 import { offerWasAccepted, isRejectingOrRejected } from "@/features/ops/auto-accept-offer";
 import { useNotifications } from "@/features/notifications/notification-provider";
 import { useToast } from "@/components/providers/toast-provider";
+import { parseActivityPayload, type ActivityLogItem } from "@/lib/activity/parse-api";
+import { parseNotificationPayload } from "@/lib/notifications/parse-api";
 import { mapSocketAssignedPayload, uiStatusFromAgent } from "@/lib/api/map-task";
 import {
   accessTokenFromUnknown,
@@ -37,7 +39,6 @@ import {
   mergeByProgress,
   shouldIgnoreClosedSocketUpdate,
 } from "@/lib/tasks/merge-live-task";
-import { playNotificationChime } from "@/lib/notifications/sound";
 import { agentTaskStatusSchema, type AgentPresence, type AgentTaskStatus } from "@/types/agent";
 import {
   notificationFromClientMessage,
@@ -241,6 +242,8 @@ type OpsContextValue = {
   syncPresenceFromBackend: () => Promise<void>;
   offer: Task | null;
   liveTasks: Task[];
+  /** Live activity-log rows from `activity.created` (History Hand-Over / All). */
+  liveActivities: ActivityLogItem[];
   dismissOffer: () => void;
   patchLiveTask: (taskId: string, patch: Partial<Task>, fallback?: Task) => void;
   dropLiveTask: (taskId: string) => void;
@@ -310,6 +313,7 @@ export function AgentOpsProvider({
   );
   const [offer, setOffer] = useState<Task | null>(null);
   const [liveTasks, setLiveTasks] = useState<Task[]>([]);
+  const [liveActivities, setLiveActivities] = useState<ActivityLogItem[]>([]);
   const [queuePulse, setQueuePulse] = useState(0);
   const [livePulse, setLivePulse] = useState(false);
   const [liveChat, setLiveChat] = useState<LiveChatEvent | null>(null);
@@ -640,7 +644,6 @@ export function AgentOpsProvider({
           if (next) {
             setOffer((current) => current ?? next);
             notificationsRef.current.push(notificationFromOffer(next));
-            playNotificationChime();
             pulseQueue();
           }
         }
@@ -753,7 +756,6 @@ export function AgentOpsProvider({
         if (task.backendStatus === "OFFERED") {
           setOffer((current) => current ?? task);
           notificationsRef.current.push(notificationFromOffer(task));
-          playNotificationChime();
         }
       } else if (task.backendStatus === "OFFERED" && !isRejectingOrRejected(task.id)) {
         setOffer((current) =>
@@ -795,7 +797,6 @@ export function AgentOpsProvider({
           messageId: incoming.messageId,
         }),
       );
-      playNotificationChime();
       const lines = [
         incoming.clientLabel,
         preview,
@@ -865,7 +866,6 @@ export function AgentOpsProvider({
           href: item.taskId ? ROUTES.task(item.taskId) : undefined,
           actionLabel: "Open task",
         });
-        playNotificationChime();
       }
       pulseQueue();
     }
@@ -895,7 +895,6 @@ export function AgentOpsProvider({
           href: item.taskId ? ROUTES.task(item.taskId) : undefined,
           actionLabel: "Open task",
         });
-        playNotificationChime();
       }
       pulseQueue();
     }
@@ -915,7 +914,6 @@ export function AgentOpsProvider({
           href: item.taskId ? ROUTES.taskPanel(item.taskId, "receipt") : undefined,
           actionLabel: "Open task",
         });
-        playNotificationChime();
       }
       pulseQueue();
     }
@@ -935,7 +933,6 @@ export function AgentOpsProvider({
           href: item.taskId ? ROUTES.taskPanel(item.taskId, "receipt") : undefined,
           actionLabel: "Open task",
         });
-        playNotificationChime();
       }
       pulseQueue();
     }
@@ -997,6 +994,23 @@ export function AgentOpsProvider({
         setOffer((current) => (current?.id === id ? null : current));
       }
       pulseQueue();
+    }
+
+    function onNotificationCreated(payload: unknown) {
+      const item = parseNotificationPayload(payload);
+      if (!item) return;
+      notificationsRef.current.push(item, {
+        silent: item.read === true,
+      });
+    }
+
+    function onActivityCreated(payload: unknown) {
+      const item = parseActivityPayload(payload);
+      if (!item) return;
+      setLiveActivities((prev) => {
+        if (prev.some((row) => row.id === item.id)) return prev;
+        return [item, ...prev].slice(0, 50);
+      });
     }
 
     function onQueuePulse() {
@@ -1076,6 +1090,10 @@ export function AgentOpsProvider({
     socket.on("task_status_changed", onStatusChanged);
     socket.on("task.missed", onMissed);
     socket.on("task_missed", onMissed);
+    socket.on("notification.created", onNotificationCreated);
+    socket.on("notification_created", onNotificationCreated);
+    socket.on("activity.created", onActivityCreated);
+    socket.on("activity_created", onActivityCreated);
     socket.on("task.updated", onTaskUpdated);
     socket.on("task_updated", onTaskUpdated);
     socket.on("queue.updated", onQueuePulse);
@@ -1120,6 +1138,10 @@ export function AgentOpsProvider({
       socket.off("task_status_changed", onStatusChanged);
       socket.off("task.missed", onMissed);
       socket.off("task_missed", onMissed);
+      socket.off("notification.created", onNotificationCreated);
+      socket.off("notification_created", onNotificationCreated);
+      socket.off("activity.created", onActivityCreated);
+      socket.off("activity_created", onActivityCreated);
       socket.off("task.updated", onTaskUpdated);
       socket.off("task_updated", onTaskUpdated);
       socket.off("queue.updated", onQueuePulse);
@@ -1145,6 +1167,7 @@ export function AgentOpsProvider({
       syncPresenceFromBackend,
       offer,
       liveTasks,
+      liveActivities,
       dismissOffer,
       patchLiveTask,
       dropLiveTask,
@@ -1164,6 +1187,7 @@ export function AgentOpsProvider({
       dismissOffer,
       dropLiveTask,
       hydrateOpenTasks,
+      liveActivities,
       liveChat,
       liveConfirmation,
       liveReceipt,

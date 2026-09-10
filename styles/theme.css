@@ -107,6 +107,72 @@
   color-scheme: light;
 }
 
+html.dark {
+  color-scheme: dark;
+
+  --background: #0f1115;
+  --foreground: #f2f4f7;
+  --foreground-soft: #e4e7ec;
+  --muted: rgba(255, 255, 255, 0.55);
+  --muted-dim: #98a2b3;
+  --surface: #171a21;
+  --surface-elevated: #1c212b;
+  --surface-hover: #222833;
+  --surface-muted: #1e2430;
+  --surface-tint: rgba(55, 125, 255, 0.14);
+  --border: #2a3140;
+  --border-soft: #232a36;
+
+  --accent: #377dff;
+  --accent-hover: #4d8bff;
+  --accent-foreground: #ffffff;
+  --accent-soft: rgba(55, 125, 255, 0.18);
+  --accent-muted: #85c9ff;
+
+  --danger: #ff6b61;
+  --danger-foreground: #ff6b61;
+  --danger-soft: rgba(252, 68, 56, 0.18);
+  --success: #4fd14f;
+  --success-foreground: #4fd14f;
+  --success-soft: rgba(61, 188, 61, 0.22);
+  --warning: #fbbf24;
+  --warning-foreground: #fcd34d;
+  --warning-soft: rgba(245, 158, 11, 0.18);
+  --info: #377dff;
+  --info-foreground: #85c9ff;
+
+  --dash-blue: #377dff;
+  --dash-blue-deep: #4f7cff;
+  --dash-blue-soft: #85c9ff;
+  --dash-ink: #f2f4f7;
+  --dash-muted: rgba(255, 255, 255, 0.55);
+  --dash-muted-2: #98a2b3;
+  --dash-chip: #1e2430;
+  --dash-border: #2a3140;
+  --dash-ring-done: #2f5a3a;
+  --dash-ring-progress: #1e4a63;
+  --dash-ring-waiting: #2a4066;
+  --dash-legend-progress: #1e4a63;
+
+  --chart-completed: #2f5a3a;
+  --chart-progress: #377dff;
+  --chart-queue: #2a4066;
+  --chart-line: #4d8bff;
+  --chart-fill: rgba(55, 125, 255, 0.28);
+
+  --ring-offset: #0f1115;
+  --selection: color-mix(in srgb, var(--accent) 28%, transparent);
+
+  --auth-glow-top: color-mix(in srgb, var(--accent) 16%, transparent);
+  --auth-glow-bottom: color-mix(in srgb, #1e2430 80%, transparent);
+  --auth-grid-line: rgba(255, 255, 255, 0.06);
+  --auth-grid-opacity: 0.35;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35), 0 8px 24px rgba(0, 0, 0, 0.28);
+  --shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-dropdown: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -208,7 +274,7 @@ body {
 
 @keyframes dashFlash {
   0% {
-    background-color: color-mix(in srgb, var(--accent) 22%, white);
+    background-color: color-mix(in srgb, var(--accent) 22%, var(--surface));
   }
   100% {
     background-color: transparent;

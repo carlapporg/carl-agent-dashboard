@@ -38,7 +38,7 @@ export function TaskReceipts({
           {receipts.map((r) => (
             <li
               key={r.id}
-              className="rounded-lg border border-border bg-[#f8fafc] px-3 py-2"
+              className="rounded-lg border border-border bg-surface-muted px-3 py-2"
             >
               <p className="font-medium text-foreground">{r.fileName}</p>
               <p className="text-muted">

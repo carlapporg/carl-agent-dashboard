@@ -266,6 +266,8 @@ export function TaskWorkspace({
         behavior: "smooth",
         block: "start",
       });
+      chatRef.current?.scrollToLatest();
+      window.setTimeout(() => chatRef.current?.scrollToLatest(), 150);
       return;
     }
     if (panel === "brief") {
@@ -340,6 +342,7 @@ export function TaskWorkspace({
 
   function fillChat(text: string) {
     chatRef.current?.prefills(text);
+    chatRef.current?.scrollToLatest();
     if (typeof window !== "undefined" && window.innerWidth < 1024) {
       document.getElementById("panel-chat")?.scrollIntoView({
         behavior: "smooth",
@@ -397,18 +400,14 @@ export function TaskWorkspace({
               />
             </div>
 
-            {(task.backendStatus === "OFFERED" ||
-              task.backendStatus === "ASSIGNED") &&
-            !lockedReadOnly ? (
+            {task.backendStatus === "OFFERED" && !lockedReadOnly ? (
               <div className="mt-4 flex flex-wrap items-center gap-3">
-                {task.backendStatus === "OFFERED" ? (
-                  <OfferCountdown
-                    expiresAt={offerWindowEnd(task)}
-                    taskId={task.id}
-                    autoAccept
-                    size="lg"
-                  />
-                ) : null}
+                <OfferCountdown
+                  expiresAt={offerWindowEnd(task)}
+                  taskId={task.id}
+                  autoAccept
+                  size="lg"
+                />
                 <OfferActions task={task} />
               </div>
             ) : closed ? (

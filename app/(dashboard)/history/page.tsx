@@ -19,7 +19,11 @@ export default async function HistoryPage() {
 
   try {
     const roots = historyTasks.filter((t) => !t.parentId);
-    const logs = await activityLogsApi.list(roots);
+    const logs = await activityLogsApi.list({
+      kind: "all",
+      limit: 50,
+      historyTasks: roots,
+    });
     return (
       <PageShell wide>
         <HistoryView logs={logs} />

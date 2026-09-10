@@ -34,7 +34,8 @@ function isSystemKind(kind: NotificationKind) {
     kind === "payment_approved" ||
     kind === "payment_declined" ||
     kind === "payment_expired" ||
-    kind === "task_cancelled"
+    kind === "task_cancelled" ||
+    kind === "task_failed"
   );
 }
 
@@ -64,7 +65,11 @@ function IconFor({ kind }: { kind: NotificationKind }) {
       </span>
     );
   }
-  if (kind === "task_cancelled" || kind === "missed_task") {
+  if (
+    kind === "task_cancelled" ||
+    kind === "task_failed" ||
+    kind === "missed_task"
+  ) {
     return (
       <span className="relative flex size-[26px] shrink-0 items-center justify-center rounded-full bg-[rgba(84,149,253,0.2)]">
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -135,10 +140,10 @@ export function NotificationsView() {
       <div className="space-y-5">
         <section className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
-            <h1 className="text-[34px] font-semibold leading-none tracking-[-0.04em] text-[#1f1f21]">
+            <h1 className="text-[34px] font-semibold leading-none tracking-[-0.04em] text-foreground">
               Notification
             </h1>
-            <p className="mt-3 text-[16px] font-normal tracking-[-0.02em] text-[rgba(0,0,0,0.5)]">
+            <p className="mt-3 text-[16px] font-normal tracking-[-0.02em] text-muted">
               Your current sales summary and activity
             </p>
           </div>
@@ -146,7 +151,7 @@ export function NotificationsView() {
             type="button"
             disabled={unreadCount === 0}
             onClick={markAllRead}
-            className="inline-flex h-[35px] items-center rounded-[40px] border border-[#cacaca] bg-white px-[25px] text-[12px] font-medium tracking-[-0.05em] text-[#1f1f21] disabled:opacity-50"
+            className="inline-flex h-[35px] items-center rounded-[40px] border border-border bg-surface px-[25px] text-[12px] font-medium tracking-[-0.05em] text-foreground disabled:opacity-50"
           >
             Mark all as read
           </button>
@@ -166,8 +171,8 @@ export function NotificationsView() {
                 className={cn(
                   "inline-flex h-[35px] items-center rounded-[40px] px-4 text-[12px] font-medium tracking-[-0.05em]",
                   active
-                    ? "bg-black text-white"
-                    : "bg-[#f6f6f6] text-black hover:bg-[#ececec]",
+                    ? "bg-black text-accent-foreground"
+                    : "bg-surface-muted text-foreground hover:bg-surface-hover",
                 )}
               >
                 {item.label}
@@ -176,13 +181,13 @@ export function NotificationsView() {
           })}
         </div>
 
-        <section className="overflow-hidden rounded-[15px] border border-[#e7e7e7] bg-white p-[25px]">
+        <section className="overflow-hidden rounded-[15px] border border-border bg-surface p-[25px]">
           {pageItems.length === 0 ? (
             <div className="py-12 text-center">
-              <p className="text-sm font-semibold text-[#1f1f21]">
+              <p className="text-sm font-semibold text-foreground">
                 No notifications yet
               </p>
-              <p className="mt-1 text-sm text-[rgba(0,0,0,0.5)]">
+              <p className="mt-1 text-sm text-muted">
                 New offers, client messages, and payment results will show up
                 here.
               </p>
@@ -197,26 +202,26 @@ export function NotificationsView() {
                       href={href}
                       onClick={() => markRead(item.id)}
                       className={cn(
-                        "flex min-h-[103px] gap-4 rounded-[10px] border border-[#e7e7e7] bg-[#fdfdfd] px-[15px] py-5 transition-colors hover:bg-[#fafafa]",
-                        !item.read && "border-[#377dff]/25",
+                        "flex min-h-[103px] gap-4 rounded-[10px] border border-border bg-surface px-[15px] py-5 transition-colors hover:bg-surface-hover",
+                        !item.read && "border-accent/25",
                       )}
                     >
                       <IconFor kind={item.kind} />
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-start justify-between gap-3">
-                          <p className="text-[16px] font-semibold leading-[19px] tracking-[-0.03em] text-[#1f1f21]">
+                          <p className="text-[16px] font-semibold leading-[19px] tracking-[-0.03em] text-foreground">
                             {item.title}
                             {!item.read ? (
-                              <span className="ml-2 inline-flex rounded-full bg-[rgba(55,125,255,0.12)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#377dff]">
+                              <span className="ml-2 inline-flex rounded-full bg-[rgba(55,125,255,0.12)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-accent">
                                 New
                               </span>
                             ) : null}
                           </p>
-                          <time className="shrink-0 text-[12px] font-medium tracking-[-0.03em] text-[rgba(0,16,44,0.5)]">
+                          <time className="shrink-0 text-[12px] font-medium tracking-[-0.03em] text-muted">
                             {formatNotificationTime(item.createdAt)}
                           </time>
                         </div>
-                        <p className="mt-2 max-w-[740px] text-[13px] font-normal leading-[17px] tracking-[-0.02em] text-[rgba(0,16,44,0.5)]">
+                        <p className="mt-2 max-w-[740px] text-[13px] font-normal leading-[17px] tracking-[-0.02em] text-muted">
                           {item.body}
                         </p>
                       </div>
@@ -228,8 +233,8 @@ export function NotificationsView() {
           )}
 
           {filtered.length > PAGE_SIZE ? (
-            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-[#e7e7e7] pt-4">
-              <p className="text-sm text-[rgba(0,0,0,0.5)]">
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+              <p className="text-sm text-muted">
                 Page {safePage} of {totalPages}
               </p>
               <div className="flex gap-2">
@@ -237,7 +242,7 @@ export function NotificationsView() {
                   type="button"
                   disabled={safePage <= 1}
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  className="inline-flex h-8 items-center rounded-[40px] bg-[#f6f6f6] px-3 text-[12px] font-medium disabled:opacity-40"
+                  className="inline-flex h-8 items-center rounded-[40px] bg-surface-muted px-3 text-[12px] font-medium disabled:opacity-40"
                 >
                   Previous
                 </button>
@@ -245,7 +250,7 @@ export function NotificationsView() {
                   type="button"
                   disabled={safePage >= totalPages}
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  className="inline-flex h-8 items-center rounded-[40px] bg-[#f6f6f6] px-3 text-[12px] font-medium disabled:opacity-40"
+                  className="inline-flex h-8 items-center rounded-[40px] bg-surface-muted px-3 text-[12px] font-medium disabled:opacity-40"
                 >
                   Next
                 </button>

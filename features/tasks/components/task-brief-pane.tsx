@@ -164,7 +164,7 @@ export function TaskBriefPane({ task, timeline }: TaskBriefPaneProps) {
                         className={cn(
                           "inline-flex h-8 items-center rounded-full border px-3 text-sm font-semibold transition-colors",
                           active
-                            ? "border-transparent text-white shadow-sm"
+                            ? "border-transparent text-accent-foreground shadow-sm"
                             : "border-border bg-surface text-muted hover:bg-surface-hover hover:text-foreground",
                         )}
                         style={

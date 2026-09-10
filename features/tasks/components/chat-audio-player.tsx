@@ -268,7 +268,7 @@ export function ChatAudioPlayer({
           disabled={broken}
           aria-label={playing ? "Pause voice message" : "Play voice message"}
           className={cn(
-            "relative inline-flex size-8 shrink-0 items-center justify-center rounded-[16px] text-[#377dff]",
+            "relative inline-flex size-8 shrink-0 items-center justify-center rounded-[16px] text-accent",
             broken && "opacity-50",
           )}
         >
@@ -317,7 +317,7 @@ export function ChatAudioPlayer({
               segment.type === "line" ? (
                 <span
                   key={`line-${index}`}
-                  className="shrink-0 rounded-full bg-[#377dff]"
+                  className="shrink-0 rounded-full bg-accent"
                   style={{
                     width: segment.span * 3 + Math.max(0, segment.span - 1) * 3,
                     height: QUIET_LINE_H,
@@ -327,7 +327,7 @@ export function ChatAudioPlayer({
               ) : (
                 <span
                   key={`bar-${index}`}
-                  className="w-[3px] shrink-0 rounded-[1.5px] bg-[#377dff]"
+                  className="w-[3px] shrink-0 rounded-[1.5px] bg-accent"
                   style={{ height: segment.height }}
                   aria-hidden
                 />
@@ -336,7 +336,7 @@ export function ChatAudioPlayer({
           </div>
           <div
             ref={maskRef}
-            className="pointer-events-none absolute inset-y-0 right-0 bg-[#f0f3f6]/75"
+            className="pointer-events-none absolute inset-y-0 right-0 bg-surface-muted/75"
             style={{
               width: playing || currentMs > 0 ? `${100 - progress}%` : "0%",
             }}
@@ -346,7 +346,7 @@ export function ChatAudioPlayer({
 
         <p
           ref={clockRef}
-          className="shrink-0 text-[12px] font-medium tabular-nums text-[#11142d]"
+          className="shrink-0 text-[12px] font-medium tabular-nums text-foreground"
         >
           {broken ? "—" : formatInboxDuration(displayMs > 0 ? displayMs : total)}
         </p>
@@ -364,7 +364,7 @@ export function ChatAudioPlayer({
           disabled={broken}
           aria-label={playing ? "Pause voice message" : "Play voice message"}
           className={cn(
-            "inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-[#377dff] text-white hover:bg-[#2f6ae6]",
+            "inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground hover:bg-accent-hover",
             broken && "opacity-50",
           )}
         >
@@ -385,7 +385,7 @@ export function ChatAudioPlayer({
             onChange={(event) => {
               seekToRatio(Number(event.target.value) / 100);
             }}
-            className="h-1 w-full cursor-pointer appearance-none rounded-full bg-[#e8eaed] accent-[#377dff]"
+            className="h-1 w-full cursor-pointer appearance-none rounded-full bg-border accent-[#377dff]"
           />
           <p className="mt-1 text-[11px] tabular-nums text-[rgba(0,0,0,0.45)]">
             {broken
