@@ -40,16 +40,6 @@ import {
   shouldIgnoreClosedSocketUpdate,
 } from "@/lib/tasks/merge-live-task";
 import { agentTaskStatusSchema, type AgentPresence, type AgentTaskStatus } from "@/types/agent";
-import {
-  notificationFromClientMessage,
-  notificationFromOffer,
-  parseCancelledNotification,
-  parseConfirmationNotification,
-  parseMissedTask,
-  parsePaymentNotification,
-  parseReceiptNotification,
-  parseWaitingForAgent,
-} from "@/lib/notifications/from-events";
 import { getOpenTasksAction } from "@/features/dashboard/actions";
 import { parseIncomingTaskMessage, previewForIncomingMessage } from "@/lib/realtime/parse-task-message";
 import {
@@ -643,7 +633,7 @@ export function AgentOpsProvider({
           const next = newOffers[0];
           if (next) {
             setOffer((current) => current ?? next);
-            notificationsRef.current.push(notificationFromOffer(next));
+            // Bell/History: Nest `notification.created` only (no local duplicate).
             pulseQueue();
           }
         }
@@ -755,7 +745,7 @@ export function AgentOpsProvider({
         joinTaskRoom(socket, task.id);
         if (task.backendStatus === "OFFERED") {
           setOffer((current) => current ?? task);
-          notificationsRef.current.push(notificationFromOffer(task));
+          // Bell/History: Nest `notification.created` only.
         }
       } else if (task.backendStatus === "OFFERED" && !isRejectingOrRejected(task.id)) {
         setOffer((current) =>
@@ -787,16 +777,8 @@ export function AgentOpsProvider({
       }
       if (incoming.sender !== "USER") return;
       if (notificationsRef.current.isViewingTaskInbox(incoming.taskId)) return;
+      // Bell/History: Nest `notification.created` only (avoids duplicate MESSAGE rows).
       const preview = previewForIncomingMessage(incoming);
-      notificationsRef.current.push(
-        notificationFromClientMessage({
-          taskId: incoming.taskId,
-          content: preview,
-          clientLabel: incoming.clientLabel,
-          taskTitle: incoming.taskTitle,
-          messageId: incoming.messageId,
-        }),
-      );
       const lines = [
         incoming.clientLabel,
         preview,
@@ -812,9 +794,7 @@ export function AgentOpsProvider({
     }
 
     function onCancelled(payload: unknown) {
-      const item = parseCancelledNotification(payload);
-      if (item) notificationsRef.current.push(item);
-      const id = item?.taskId ?? extractTaskId(payload);
+      const id = extractTaskId(payload);
       if (id) {
         patchLiveTaskRef.current(id, liveStatusPatch("FAILED", "failed"));
         setOffer((current) => (current?.id === id ? null : current));
@@ -823,21 +803,16 @@ export function AgentOpsProvider({
       pulseQueue();
     }
 
-    function onPaymentApproved(payload: unknown) {
-      const item = parsePaymentNotification(payload, "payment_approved");
-      if (item) notificationsRef.current.push(item);
+    function onPaymentApproved(_payload: unknown) {
+      // Bell/History: Nest `notification.created` only.
       pulseQueue();
     }
 
-    function onPaymentDeclined(payload: unknown) {
-      const item = parsePaymentNotification(payload, "payment_declined");
-      if (item) notificationsRef.current.push(item);
+    function onPaymentDeclined(_payload: unknown) {
       pulseQueue();
     }
 
-    function onPaymentExpired(payload: unknown) {
-      const item = parsePaymentNotification(payload, "payment_expired");
-      if (item) notificationsRef.current.push(item);
+    function onPaymentExpired(_payload: unknown) {
       pulseQueue();
     }
 
@@ -847,23 +822,16 @@ export function AgentOpsProvider({
         markTaskConfirmationKnown(confirmation.taskId);
         setLiveConfirmationRef.current(confirmation);
       }
-      const id =
-        confirmation?.taskId ??
-        parseConfirmationNotification(payload, "confirmation_confirmed")?.taskId ??
-        extractTaskId(payload);
+      const id = confirmation?.taskId ?? extractTaskId(payload);
       if (id) {
         markTaskConfirmationKnown(id);
         patchLiveTaskRef.current(
           id,
           liveStatusPatch("WAITING_FOR_USER", "waiting_for_payment"),
         );
-      }
-      const item = parseConfirmationNotification(payload, "confirmation_confirmed");
-      if (item) {
-        notificationsRef.current.push(item);
-        toastRef.current(item.body, "success", {
-          title: item.title,
-          href: item.taskId ? ROUTES.task(item.taskId) : undefined,
+        toastRef.current("Confirmation accepted.", "success", {
+          title: "Details confirmed",
+          href: ROUTES.task(id),
           actionLabel: "Open task",
         });
       }
@@ -876,23 +844,16 @@ export function AgentOpsProvider({
         markTaskConfirmationKnown(confirmation.taskId);
         setLiveConfirmationRef.current(confirmation);
       }
-      const id =
-        confirmation?.taskId ??
-        parseConfirmationNotification(payload, "confirmation_declined")?.taskId ??
-        extractTaskId(payload);
+      const id = confirmation?.taskId ?? extractTaskId(payload);
       if (id) {
         markTaskConfirmationKnown(id);
         patchLiveTaskRef.current(
           id,
           liveStatusPatch("IN_PROGRESS", "in_progress"),
         );
-      }
-      const item = parseConfirmationNotification(payload, "confirmation_declined");
-      if (item) {
-        notificationsRef.current.push(item);
-        toastRef.current(item.body, "info", {
-          title: item.title,
-          href: item.taskId ? ROUTES.task(item.taskId) : undefined,
+        toastRef.current("Confirmation declined.", "info", {
+          title: "Details declined",
+          href: ROUTES.task(id),
           actionLabel: "Open task",
         });
       }
@@ -904,14 +865,9 @@ export function AgentOpsProvider({
       if (receipt) {
         markTaskReceiptKnown(receipt.taskId);
         setLiveReceiptRef.current(receipt);
-      }
-      const item = parseReceiptNotification(payload, "receipt_accepted");
-      if (item) {
-        if (item.taskId) markTaskReceiptKnown(item.taskId);
-        notificationsRef.current.push(item);
-        toastRef.current(item.body, "success", {
-          title: item.title,
-          href: item.taskId ? ROUTES.taskPanel(item.taskId, "receipt") : undefined,
+        toastRef.current("You can complete the task when ready.", "success", {
+          title: "Document update",
+          href: ROUTES.taskPanel(receipt.taskId, "receipt"),
           actionLabel: "Open task",
         });
       }
@@ -923,14 +879,10 @@ export function AgentOpsProvider({
       if (receipt) {
         markTaskReceiptKnown(receipt.taskId);
         setLiveReceiptRef.current(receipt);
-      }
-      const item = parseReceiptNotification(payload, "receipt_rejected");
-      if (item) {
-        if (item.taskId) markTaskReceiptKnown(item.taskId);
-        notificationsRef.current.push(item);
-        toastRef.current(item.body, "info", {
-          title: item.title,
-          href: item.taskId ? ROUTES.taskPanel(item.taskId, "receipt") : undefined,
+        const reason = receipt.rejectReason?.trim();
+        toastRef.current(reason || "Upload a new document.", "info", {
+          title: "Document needs a replace",
+          href: ROUTES.taskPanel(receipt.taskId, "receipt"),
           actionLabel: "Open task",
         });
       }
@@ -971,16 +923,12 @@ export function AgentOpsProvider({
           });
         }
       }
-      const item = parseWaitingForAgent(payload);
-      if (item && !notificationsRef.current.isViewingTaskInbox(item.taskId ?? "")) {
-        notificationsRef.current.push(item);
-      }
+      // Bell/History waiting alerts: Nest `notification.created` only.
       pulseQueue();
     }
 
     function onMissed(payload: unknown) {
-      const item = parseMissedTask(payload);
-      const id = item?.taskId ?? extractTaskId(payload);
+      const id = extractTaskId(payload);
       if (forgetIfRejecting(id)) return;
       const live = id
         ? liveTasksRef.current.find((row) => row.id === id)
@@ -988,7 +936,6 @@ export function AgentOpsProvider({
       if (id && (offerWasAccepted(id) || (live && isKeptAfterMiss(live)))) {
         return;
       }
-      if (item) notificationsRef.current.push(item);
       if (id) {
         setLiveTasks((prev) => prev.filter((row) => row.id !== id));
         setOffer((current) => (current?.id === id ? null : current));
