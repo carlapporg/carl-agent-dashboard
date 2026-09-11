@@ -35,8 +35,6 @@ type MessagesViewProps = {
   tasks: Record<string, Task>;
 };
 
-type ListTab = "all" | "unread";
-
 const AVATAR_TONES = [
   "bg-[#dbeafe] text-[#1d4ed8]",
   "bg-[#fce7f3] text-[#be185d]",
@@ -163,7 +161,6 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
     {},
   );
   const [filter, setFilter] = useState("");
-  const [listTab, setListTab] = useState<ListTab>("all");
   const [bookingRefs, setBookingRefs] = useState<Record<string, string | null>>(
     {},
   );
@@ -204,7 +201,6 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase();
     return displayConversations.filter((c) => {
-      if (listTab === "unread" && c.unreadCount <= 0) return false;
       if (!q) return true;
       const row = tasks[c.taskId];
       return (
@@ -214,7 +210,7 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
         String(c.taskNumber).includes(q)
       );
     });
-  }, [displayConversations, filter, listTab, tasks]);
+  }, [displayConversations, filter, tasks]);
 
   const selected = useMemo(
     () => filtered.find((c) => c.taskId === selectedId) ?? null,
@@ -390,40 +386,12 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
                 className="min-w-0 flex-1 bg-transparent text-[15px] font-medium leading-6 text-foreground outline-none placeholder:text-muted"
               />
             </div>
-
-            {/* All / Unread stay above the list — Figma tabs + 8px gap under indicator */}
-            <div className="mt-4 flex items-end gap-6 border-b border-border pb-0">
-              {(
-                [
-                  { value: "all", label: "All" },
-                  { value: "unread", label: "Unread" },
-                ] as const
-              ).map((tab) => {
-                const active = listTab === tab.value;
-                return (
-                  <button
-                    key={tab.value}
-                    type="button"
-                    onClick={() => setListTab(tab.value)}
-                    className={cn(
-                      "relative pb-2 text-[14px] font-semibold tracking-[-0.02em]",
-                      active ? "text-accent" : "text-muted font-medium",
-                    )}
-                  >
-                    {tab.label}
-                    {active ? (
-                      <span className="absolute inset-x-0 bottom-0 h-0.5 w-5 rounded-[1px] bg-accent" />
-                    ) : null}
-                  </button>
-                );
-              })}
-            </div>
           </div>
 
           <ul className="min-h-0 flex-1 overflow-y-auto px-0 pb-3 pt-2">
             {filtered.length === 0 ? (
               <li className="px-5 py-8 text-center text-sm text-muted">
-                No chats match this filter.
+                {filter.trim() ? "No chats match this search." : "No chats yet."}
               </li>
             ) : (
               filtered.map((c) => {
