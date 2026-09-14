@@ -20,7 +20,7 @@ export const DASHBOARD_NAV: Array<{
   { href: ROUTES.dashboard, label: "Overview", icon: "overview" },
   { href: ROUTES.tasks, label: "Tasks", icon: "tasks" },
   { href: ROUTES.messages, label: "Messages", icon: "messages" },
-  { href: ROUTES.adminChat, label: "Admin chat", icon: "adminChat" },
+  { href: ROUTES.adminChat, label: "Admin Support", icon: "adminChat" },
   { href: ROUTES.payments, label: "Payments", icon: "payments" },
   { href: ROUTES.history, label: "History", icon: "history" },
   { href: ROUTES.notifications, label: "Notifications", icon: "notifications" },
@@ -33,8 +33,10 @@ const FIGMA_PRIMARY_HREFS = new Set<string>([
   ROUTES.dashboard,
   ROUTES.tasks,
   ROUTES.messages,
+  ROUTES.adminChat,
   ROUTES.payments,
   ROUTES.history,
+  ROUTES.notifications,
   ROUTES.profile,
 ]);
 
@@ -50,6 +52,8 @@ export const SETTINGS_NAV_ITEM = DASHBOARD_NAV.find(
 export function navDisplayLabel(href: string, fallback: string): string {
   if (href === ROUTES.dashboard) return "Dashboard";
   if (href === ROUTES.tasks) return "Task";
+  if (href === ROUTES.adminChat) return "Admin Support";
+  if (href === ROUTES.notifications) return "Notifications";
   return fallback;
 }
 

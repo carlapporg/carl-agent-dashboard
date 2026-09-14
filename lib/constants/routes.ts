@@ -20,12 +20,16 @@ export const ROUTES = {
   settings: "/settings",
   unauthorized: "/unauthorized",
   sessionClear: "/session/clear",
+  privacy: "/privacy",
+  terms: "/terms",
 } as const;
 
 export const PUBLIC_ROUTES = [
   ROUTES.login,
   ROUTES.register,
   ROUTES.unauthorized,
+  ROUTES.privacy,
+  ROUTES.terms,
 ] as const;
 
 export const AUTH_COOKIE_NAME = "carl_agent_session";
