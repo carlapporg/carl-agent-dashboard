@@ -273,7 +273,8 @@ export function offerWindowEnd(task: {
   updatedAt?: string;
   createdAt?: string;
 }): string {
-  for (const value of [task.expiresAt, task.rejectUntil, undefined]) {
+  // Prefer rejectUntil — Nest's offer window. expiresAt can be a longer SLA.
+  for (const value of [task.rejectUntil, task.expiresAt, undefined]) {
     if (!value) continue;
     const time = new Date(value).getTime();
     if (Number.isFinite(time)) return new Date(time).toISOString();

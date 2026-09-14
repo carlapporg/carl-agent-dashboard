@@ -79,28 +79,21 @@ export function shouldIgnoreClosedSocketUpdate(
   return status === "FAILED" || status === "REJECTED";
 }
 
-function laterDeadline(left?: string, right?: string): string | undefined {
-  const leftMs = left ? new Date(left).getTime() : Number.NaN;
-  const rightMs = right ? new Date(right).getTime() : Number.NaN;
-  const now = Date.now();
-  const leftLive = Number.isFinite(leftMs) && leftMs > now;
-  const rightLive = Number.isFinite(rightMs) && rightMs > now;
-  if (leftLive && rightLive) return leftMs >= rightMs ? left : right;
-  if (rightLive) return right;
-  if (leftLive) return left;
-  if (Number.isFinite(leftMs) && Number.isFinite(rightMs)) {
-    return leftMs >= rightMs ? left : right;
-  }
-  return left ?? right;
-}
-
 function withFreshDeadline(merged: Task, base: Task, incoming: Task): Task {
   if (taskProgressRank(merged) >= 2) {
-    return { ...merged, expiresAt: undefined };
+    return { ...merged, expiresAt: undefined, rejectUntil: null };
   }
+  // Prefer the incoming Nest reject window — don't keep a longer stale expiresAt.
+  const rejectUntil = incoming.rejectUntil ?? base.rejectUntil ?? null;
+  const expiresAt =
+    incoming.rejectUntil ||
+    incoming.expiresAt ||
+    base.rejectUntil ||
+    base.expiresAt;
   return {
     ...merged,
-    expiresAt: laterDeadline(base.expiresAt, incoming.expiresAt),
+    rejectUntil,
+    expiresAt,
   };
 }
 
