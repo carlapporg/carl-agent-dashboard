@@ -1,4 +1,5 @@
 import type { NotificationItem, NotificationKind } from "@/types/dashboard";
+import { isAgentIrrelevantNotification } from "@/lib/notifications/parse-api";
 
 export const NOTIFICATION_STORE_KEY = "carl.agent.notifications";
 export const MAX_NOTIFICATIONS = 80;
@@ -32,9 +33,19 @@ function parseItem(value: unknown): NotificationItem | null {
   if (typeof row.id !== "string" || !row.id) return null;
   if (typeof row.title !== "string" || typeof row.body !== "string") return null;
   if (typeof row.createdAt !== "string") return null;
+  const kind = isKind(row.kind) ? row.kind : "task_assigned";
+  if (
+    isAgentIrrelevantNotification({
+      title: row.title,
+      body: row.body,
+      kind,
+    })
+  ) {
+    return null;
+  }
   return {
     id: row.id,
-    kind: isKind(row.kind) ? row.kind : "task_assigned",
+    kind,
     title: row.title,
     body: row.body,
     createdAt: row.createdAt,

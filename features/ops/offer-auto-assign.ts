@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import {
   autoAcceptExpiredOffer,
+  autoRejectOfflineOffer,
   getOfferTimerGeneration,
   isOfferTimerPaused,
   isRejectingOrRejected,
@@ -12,7 +13,8 @@ import {
 } from "@/features/ops/auto-accept-offer";
 import { getOfferLiveStateAction } from "@/features/tasks/actions/task-actions";
 import { liveStatusPatch, taskProgressRank } from "@/lib/tasks/merge-live-task";
-import { offerWindowEnd } from "@/types/agent";
+import { offerAutoAssignAtMs, offerWindowEnd } from "@/types/agent";
+import type { AgentPresence } from "@/types/agent";
 import type { Task } from "@/types/task";
 
 const MAX_ATTEMPTS = 8;
@@ -30,6 +32,7 @@ type AssignRefs = {
   dropLiveTask: (taskId: string) => void;
   tasks: Task[];
   refresh: () => void;
+  getPresence: () => AgentPresence;
 };
 
 const refs: AssignRefs = {
@@ -37,16 +40,21 @@ const refs: AssignRefs = {
   dropLiveTask: () => undefined,
   tasks: [],
   refresh: () => undefined,
+  getPresence: () => "AVAILABLE",
 };
 
 function seedFor(taskId: string): Task | undefined {
   return refs.tasks.find((row) => row.id === taskId);
 }
 
-function isWindowExpired(task: Task | undefined): boolean {
+/** Auto-assign only after Nest's reject grace (rejectUntil + 5s). */
+function isAutoAssignDue(task: Task | undefined): boolean {
   if (!task) return false;
-  const end = new Date(offerWindowEnd(task)).getTime();
-  return Number.isFinite(end) && Date.now() >= end;
+  return Date.now() >= offerAutoAssignAtMs(task);
+}
+
+function isAgentOffline(): boolean {
+  return refs.getPresence() === "OFFLINE";
 }
 
 async function resolveOfferOutcome(
@@ -79,7 +87,7 @@ async function resolveOfferOutcome(
   return false;
 }
 
-async function assignIfStillOffered(taskId: string, expectedGen: number) {
+async function settleExpiredOrOfflineOffer(taskId: string, expectedGen: number) {
   if (getOfferTimerGeneration(taskId) !== expectedGen) return;
   if (inFlight.has(taskId) || isRejectingOrRejected(taskId)) return;
   if (isOfferTimerPaused(taskId)) return;
@@ -101,6 +109,20 @@ async function assignIfStillOffered(taskId: string, expectedGen: number) {
       if (isRejectingOrRejected(taskId)) return;
 
       if (await resolveOfferOutcome(taskId, seed)) return;
+
+      // Offline → auto-reject. Never auto-accept while OFFLINE.
+      if (isAgentOffline()) {
+        const rejected = await autoRejectOfflineOffer(taskId);
+        if (getOfferTimerGeneration(taskId) !== expectedGen) return;
+        if (rejected || isRejectingOrRejected(taskId)) {
+          refs.dropLiveTask(taskId);
+          refs.refresh();
+          return;
+        }
+        if (await resolveOfferOutcome(taskId, seed)) return;
+        await sleep(800 * (attempt + 1));
+        continue;
+      }
 
       const ok = await autoAcceptExpiredOffer(taskId);
       if (getOfferTimerGeneration(taskId) !== expectedGen) return;
@@ -136,27 +158,28 @@ function scheduleAutoAssign(task: Task, timers: Map<string, number>) {
   if (inFlight.has(task.id) || timers.has(task.id)) return;
 
   const gen = getOfferTimerGeneration(task.id);
-  const wait = Math.max(
-    50,
-    new Date(offerWindowEnd(task)).getTime() - Date.now() + 50,
-  );
+  // Offline: reject ASAP instead of waiting for the accept timer.
+  const wait = isAgentOffline()
+    ? 50
+    : Math.max(50, offerAutoAssignAtMs(task) - Date.now() + 50);
   const taskId = task.id;
 
   timers.set(
     taskId,
     window.setTimeout(() => {
       timers.delete(taskId);
-      void assignIfStillOffered(taskId, gen);
+      void settleExpiredOrOfflineOffer(taskId, gen);
     }, wait),
   );
 }
 
 /**
  * One timer per offered task, independent of which page is open.
- * The local clock only schedules the check. Nest decides OFFERED vs ASSIGNED.
+ * Nest decides OFFERED vs ASSIGNED; offline agents auto-reject.
  */
 export function useOfferAutoAssign(args: {
   tasks: Task[];
+  presence: AgentPresence;
   patchLiveTask: (taskId: string, patch: Partial<Task>, fallback?: Task) => void;
   dropLiveTask: (taskId: string) => void;
   refresh: () => void;
@@ -165,6 +188,7 @@ export function useOfferAutoAssign(args: {
   refs.dropLiveTask = args.dropLiveTask;
   refs.tasks = args.tasks;
   refs.refresh = args.refresh;
+  refs.getPresence = () => args.presence;
 
   const offeredKey = args.tasks
     .filter((task) => task.backendStatus === "OFFERED")
@@ -182,7 +206,19 @@ export function useOfferAutoAssign(args: {
     return () => {
       for (const timer of timers.values()) window.clearTimeout(timer);
     };
-  }, [offeredKey]);
+  }, [offeredKey, args.presence]);
+
+  // Going OFFLINE with open offers → reject immediately.
+  useEffect(() => {
+    if (args.presence !== "OFFLINE") return;
+    for (const task of refs.tasks) {
+      if (task.backendStatus !== "OFFERED") continue;
+      if (isRejectingOrRejected(task.id)) continue;
+      if (inFlight.has(task.id)) continue;
+      const gen = getOfferTimerGeneration(task.id);
+      void settleExpiredOrOfflineOffer(task.id, gen);
+    }
+  }, [args.presence, offeredKey]);
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -191,12 +227,12 @@ export function useOfferAutoAssign(args: {
         if (isRejectingOrRejected(task.id)) continue;
         if (isOfferTimerPaused(task.id)) continue;
         if (inFlight.has(task.id)) continue;
-        if (!isWindowExpired(task)) continue;
+        if (!isAgentOffline() && !isAutoAssignDue(task)) continue;
         const gen = getOfferTimerGeneration(task.id);
-        void assignIfStillOffered(task.id, gen);
+        void settleExpiredOrOfflineOffer(task.id, gen);
       }
     }, RECOVERY_SWEEP_MS);
 
     return () => window.clearInterval(id);
-  }, [offeredKey]);
+  }, [offeredKey, args.presence]);
 }

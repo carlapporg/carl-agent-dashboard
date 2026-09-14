@@ -522,6 +522,7 @@ export function AgentOpsProvider({
 
   useOfferAutoAssign({
     tasks: autoAssignTasks,
+    presence,
     patchLiveTask,
     dropLiveTask,
     refresh,

@@ -30,9 +30,6 @@ function statusLabel(args: {
   if (args.flight === "accept" || args.settled === "accepted") {
     return "Accepting offer…";
   }
-  if (args.paused && args.flight === "none") {
-    return "Confirm rejection…";
-  }
   if (args.expired) return "Offer ended";
   return `Accept within ${args.remainingSec}s`;
 }
@@ -64,7 +61,14 @@ export function OfferCountdown({
   const urgent = remainingSec <= 10 && !expired && !settled && !paused;
   const pct = Math.min(100, (remainingMs / REJECT_WINDOW_MS) * 100);
   const waitingOnApi = inFlight;
-  const pausedForRejectDialog = paused && decision.rejectUiOpen && !inFlight;
+  const color =
+    expired || waitingOnApi || settled
+      ? "#9ca3af"
+      : urgent
+        ? "#dc2626"
+        : remainingSec <= 20
+          ? "#d97706"
+          : "#4f7cff";
 
   useEffect(() => {
     fired.current = false;
@@ -95,16 +99,6 @@ export function OfferCountdown({
   const radius = (ring - stroke) / 2;
   const circ = 2 * Math.PI * radius;
   const dash = (pct / 100) * circ;
-  const color =
-    expired || waitingOnApi || settled
-      ? "#9ca3af"
-      : pausedForRejectDialog
-        ? "#6b7280"
-        : urgent
-          ? "#dc2626"
-          : remainingSec <= 20
-            ? "#d97706"
-            : "#4f7cff";
 
   return (
     <div
@@ -140,11 +134,9 @@ export function OfferCountdown({
             size === "lg" ? "text-lg" : "text-xs",
             expired || waitingOnApi || settled
               ? "text-muted"
-              : pausedForRejectDialog
-                ? "text-muted"
-                : urgent
-                  ? "text-red-600"
-                  : "text-foreground",
+              : urgent
+                ? "text-red-600"
+                : "text-foreground",
           )}
         >
           {waitingOnApi ? "…" : expired ? "0" : remainingSec}

@@ -97,12 +97,11 @@ function freezeOfferTimer(taskId: string, expiresAt: string) {
   write(taskId, { frozenRemainingMs: remaining });
 }
 
-/** Timer is paused while accept/reject is in flight or the reject dialog is open. */
+/** Timer pauses only while accept is in flight or the offer is settled. Reject keeps the clock running. */
 export function isOfferTimerPaused(taskId: string): boolean {
   const state = read(taskId);
   if (state.settled !== "none") return true;
-  if (state.flight !== "none") return true;
-  if (state.rejectUiOpen) return true;
+  if (state.flight === "accept" || claimOf(taskId) === "accept") return true;
   return false;
 }
 
@@ -150,9 +149,7 @@ export function canShowRejectUi(taskId: string): boolean {
   const state = read(taskId);
   if (state.settled !== "none") return false;
   if (state.flight === "accept" || claimOf(taskId) === "accept") return false;
-  if (state.windowExpired && state.flight !== "reject" && claimOf(taskId) !== "reject") {
-    return false;
-  }
+  // windowExpired only means the 30s UI hit 0 — Nest grace may still allow Reject.
   return true;
 }
 
@@ -161,12 +158,11 @@ export function cancelInFlightAutoAccept(taskId: string) {
   bumpAutoAcceptGen(taskId);
 }
 
-export function openRejectOfferUi(taskId: string, expiresAt?: string) {
+export function openRejectOfferUi(taskId: string, _expiresAt?: string) {
   if (!taskId) return;
   const state = read(taskId);
-  if (state.settled !== "none" || state.windowExpired) return;
+  if (state.settled !== "none") return;
   if (claimOf(taskId) === "accept") return;
-  if (expiresAt) freezeOfferTimer(taskId, expiresAt);
   write(taskId, { rejectUiOpen: true });
 }
 
@@ -218,7 +214,7 @@ export function beginAcceptOffer(taskId: string, expiresAt?: string): boolean {
  * Claim reject immediately so auto-accept cannot start.
  * Do not hide the task until Nest confirms.
  */
-export function beginRejectOffer(taskId: string, expiresAt?: string): boolean {
+export function beginRejectOffer(taskId: string, _expiresAt?: string): boolean {
   if (!taskId) return false;
   const state = read(taskId);
   if (state.settled === "rejected" || claimOf(taskId) === "reject") return true;
@@ -226,7 +222,6 @@ export function beginRejectOffer(taskId: string, expiresAt?: string): boolean {
   if (state.flight === "accept" || claimOf(taskId) === "accept") return false;
   claims.set(taskId, "reject");
   bumpAutoAcceptGen(taskId);
-  if (expiresAt) freezeOfferTimer(taskId, expiresAt);
   write(taskId, {
     flight: "reject",
     rejectUiOpen: true,
@@ -472,4 +467,23 @@ export async function autoAcceptExpiredOffer(taskId: string): Promise<boolean> {
   }
   const result = await submitAcceptOffer(taskId);
   return result.ok;
+}
+
+/** Default Nest reject reason when the agent is OFFLINE. */
+export const OFFLINE_REJECT_REASON = "Agent went offline";
+
+/** Reject an open offer because the agent is offline (never auto-accept). */
+export async function autoRejectOfflineOffer(taskId: string): Promise<boolean> {
+  if (!taskId) return false;
+  if (read(taskId).settled === "rejected") return true;
+  if (read(taskId).settled === "accepted" || offerWasAccepted(taskId)) {
+    return false;
+  }
+  const pending = rejectPosts.get(taskId);
+  if (pending) {
+    const result = await pending;
+    return result.ok || read(taskId).settled === "rejected";
+  }
+  const result = await submitRejectOffer(taskId, OFFLINE_REJECT_REASON);
+  return result.ok || read(taskId).settled === "rejected";
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import {
   autoAcceptExpiredOffer,
@@ -25,7 +25,7 @@ import { ROUTES } from "@/lib/constants/routes";
 import {
   canRejectOffer,
   isOfferedTask,
-  isOfferRejectWindowOpen,
+  isOfferRejectStillAllowed,
   offerWindowEnd,
 } from "@/types/agent";
 import { isClosedTask } from "@/features/tasks/lib/workflow";
@@ -41,15 +41,24 @@ export function OfferActions({ task }: OfferActionsProps) {
   const ops = useOps();
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
+  const [now, setNow] = useState(() => Date.now());
   const decision = useOfferDecision(task.id);
   const rejecting = isRejectingOrRejected(task.id);
   const offered =
     (isOfferedTask(task) || hasOpenRejectUi(task.id)) && !isClosedTask(task);
-  const windowOpen = isOfferRejectWindowOpen(task) && !decision.windowExpired;
+
+  useEffect(() => {
+    if (!offered) return;
+    setNow(Date.now());
+    const id = window.setInterval(() => setNow(Date.now()), 500);
+    return () => window.clearInterval(id);
+  }, [offered, task.id]);
+
+  // Nest grace: Reject stays available ~5s after the 30s countdown hits 0.
+  const rejectAllowed =
+    isOfferRejectStillAllowed(task, now) || decision.flight === "reject";
   const showReject =
-    canRejectOffer(task) &&
-    canShowRejectUi(task.id) &&
-    (windowOpen || decision.flight === "reject");
+    canRejectOffer(task) && canShowRejectUi(task.id) && rejectAllowed;
   const acceptLocked = pending || isOfferAcceptLocked(task.id);
   const dialogOpen =
     decision.rejectUiOpen &&
@@ -84,8 +93,9 @@ export function OfferActions({ task }: OfferActionsProps) {
   }
 
   function openReject() {
-    if (decision.settled !== "none" || decision.windowExpired) return;
-    if (!isOfferRejectWindowOpen(task)) return;
+    if (decision.settled !== "none") return;
+    if (decision.flight === "accept") return;
+    if (!isOfferRejectStillAllowed(task) && decision.flight !== "reject") return;
     openRejectOfferUi(task.id, offerWindowEnd(task));
   }
 
@@ -140,8 +150,7 @@ export function OfferActions({ task }: OfferActionsProps) {
             disabled={
               acceptLocked ||
               decision.flight !== "none" ||
-              decision.settled !== "none" ||
-              decision.windowExpired
+              decision.settled !== "none"
             }
             onClick={openReject}
           >

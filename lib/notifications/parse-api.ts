@@ -41,6 +41,23 @@ function normalizeKind(raw: string): NotificationKind {
   return "task_assigned";
 }
 
+/** System dispatch noise — not useful on the agent dashboard. */
+export function isAgentIrrelevantNotification(item: {
+  title: string;
+  body: string;
+  kind?: string;
+}): boolean {
+  const text = `${item.title} ${item.body}`.toLowerCase();
+  if (text.includes("no agent available")) return true;
+  if (
+    (item.kind === "task_failed" || item.kind === "task_cancelled") &&
+    text.includes("no agent")
+  ) {
+    return true;
+  }
+  return false;
+}
+
 /** REST / socket notification row → NotificationItem. */
 export function parseNotificationItem(row: unknown): NotificationItem | null {
   const record = asRecord(row);
@@ -52,6 +69,15 @@ export function parseNotificationItem(row: unknown): NotificationItem | null {
   if (typeof record.createdAt !== "string") return null;
   const kind =
     typeof record.kind === "string" ? normalizeKind(record.kind) : "task_assigned";
+  if (
+    isAgentIrrelevantNotification({
+      title: record.title,
+      body: record.body,
+      kind,
+    })
+  ) {
+    return null;
+  }
   const panel = record.panel;
   return {
     id: record.id,

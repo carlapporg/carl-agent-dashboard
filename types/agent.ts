@@ -260,6 +260,8 @@ export type AgentTaskMessage = z.infer<typeof agentTaskMessageSchema>;
 export const agentTaskMessageListSchema = z.array(agentTaskMessageSchema);
 
 export const REJECT_WINDOW_MS = 30_000;
+/** Nest still accepts Reject after the UI countdown hits 0. Auto-assign waits for this. */
+export const ASSIGN_REJECT_GRACE_MS = 5_000;
 
 export function rejectDeadlineIso(assignedAtIso: string): string {
   return new Date(new Date(assignedAtIso).getTime() + REJECT_WINDOW_MS).toISOString();
@@ -281,6 +283,19 @@ export function offerWindowEnd(task: {
     return rejectDeadlineIso(base);
   }
   return rejectDeadlineIso(new Date().toISOString());
+}
+
+export function offerAutoAssignAtMs(
+  task: {
+    expiresAt?: string;
+    rejectUntil?: string | null;
+    updatedAt?: string;
+    createdAt?: string;
+  },
+): number {
+  const end = new Date(offerWindowEnd(task)).getTime();
+  if (!Number.isFinite(end)) return Date.now() + REJECT_WINDOW_MS + ASSIGN_REJECT_GRACE_MS;
+  return end + ASSIGN_REJECT_GRACE_MS;
 }
 
 export function isRejectWindowOpen(
@@ -305,7 +320,7 @@ export function canRejectOffer(task: { backendStatus?: string }): boolean {
   return task.backendStatus === "OFFERED";
 }
 
-/** Nest rejectUntil/expiresAt is the source of truth. Local clock only mirrors it. */
+/** Nest rejectUntil/expiresAt is the source of truth for the 30s UI countdown. */
 export function isOfferRejectWindowOpen(
   task: {
     backendStatus?: string;
@@ -319,4 +334,22 @@ export function isOfferRejectWindowOpen(
   if (!canRejectOffer(task)) return false;
   const end = new Date(offerWindowEnd(task)).getTime();
   return Number.isFinite(end) && now < end;
+}
+
+/**
+ * Reject may still succeed during Nest's +5s grace after rejectUntil.
+ * `canReject: false` is only a hint — status OFFERED is what matters here.
+ */
+export function isOfferRejectStillAllowed(
+  task: {
+    backendStatus?: string;
+    expiresAt?: string;
+    rejectUntil?: string | null;
+    updatedAt?: string;
+    createdAt?: string;
+  },
+  now = Date.now(),
+): boolean {
+  if (!canRejectOffer(task)) return false;
+  return now < offerAutoAssignAtMs(task);
 }

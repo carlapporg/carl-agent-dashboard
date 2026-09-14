@@ -9,7 +9,7 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   slaWarning: true,
   customerReply: true,
   desktop: false,
-  sound: false,
+  sound: true,
 };
 
 function isBool(value: unknown): value is boolean {

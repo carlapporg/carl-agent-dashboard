@@ -17,6 +17,7 @@ import {
   markNotificationReadAction,
 } from "@/features/notifications/actions";
 import { hrefForNotification } from "@/lib/notifications/from-events";
+import { isAgentIrrelevantNotification } from "@/lib/notifications/parse-api";
 import {
   DEFAULT_NOTIFICATION_PREFS,
   NOTIFICATION_PREFS_KEY,
@@ -110,6 +111,7 @@ function mergeRemoteWithLocal(
   const localById = new Map(local.map((row) => [row.id, row]));
   const byId = new Map<string, NotificationItem>();
   for (const row of remote) {
+    if (isAgentIrrelevantNotification(row)) continue;
     const prev = localById.get(row.id);
     byId.set(
       row.id,
@@ -121,6 +123,7 @@ function mergeRemoteWithLocal(
     );
   }
   for (const row of local) {
+    if (isAgentIrrelevantNotification(row)) continue;
     if (!byId.has(row.id)) byId.set(row.id, row);
   }
   return sortNewest([...byId.values()]);
@@ -241,6 +244,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       incoming: Omit<NotificationItem, "read"> & { read?: boolean },
       options?: PushOptions,
     ) => {
+      if (isAgentIrrelevantNotification(incoming)) return;
       if (!kindAllowed(incoming.kind, prefsRef.current)) return;
       const item: NotificationItem = {
         ...incoming,
