@@ -1,9 +1,5 @@
 /**
  * Query key factory — keep all cache keys here so invalidation stays consistent.
- *
- * Future feature:
- *   queryKeys.tasks.list(filters)
- *   queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all })
  */
 export const queryKeys = {
   agents: {
@@ -15,8 +11,18 @@ export const queryKeys = {
     lists: () => [...queryKeys.tasks.all, "list"] as const,
     list: (filters: Record<string, unknown> = {}) =>
       [...queryKeys.tasks.lists(), filters] as const,
+    /** Dashboard seed: offered + active + history. */
+    dashboardSeed: () => [...queryKeys.tasks.lists(), "dashboard-seed"] as const,
+    /** Task Hub full list. */
+    hub: () => [...queryKeys.tasks.lists(), "hub"] as const,
+    /** Open tasks for Chat Box. */
+    open: () => [...queryKeys.tasks.lists(), "open"] as const,
     details: () => [...queryKeys.tasks.all, "detail"] as const,
     detail: (id: string) => [...queryKeys.tasks.details(), id] as const,
+  },
+  history: {
+    all: ["history"] as const,
+    logs: () => [...queryKeys.history.all, "logs"] as const,
   },
   payments: {
     all: ["payments"] as const,

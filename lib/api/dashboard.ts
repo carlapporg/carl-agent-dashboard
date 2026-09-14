@@ -7,11 +7,12 @@ import type {
   QueuePreviewItem,
 } from "@/types/dashboard";
 import { presenceToUi, uiToPresence } from "@/lib/agent/presence";
+import { taskToConversation } from "@/lib/messages/task-to-conversation";
 import { tasksApi } from "@/lib/api/tasks";
 import { agentsApi } from "@/lib/api/agents";
 import type { Task } from "@/types/task";
 
-export { presenceToUi, uiToPresence };
+export { presenceToUi, uiToPresence, taskToConversation };
 
 function toQueueItem(task: Task): QueuePreviewItem {
   return {
@@ -22,26 +23,6 @@ function toQueueItem(task: Task): QueuePreviewItem {
     taskType: task.taskType ?? "TASK",
     priority: task.priority,
     expiresAt: task.expiresAt ?? task.updatedAt,
-  };
-}
-
-function conversationPreview(task: Task): string {
-  const summary = task.aiBrief?.summary?.trim();
-  if (summary) return summary;
-  const request = task.request.trim();
-  if (request) return request;
-  return "No messages yet";
-}
-
-export function taskToConversation(task: Task): ConversationSummary {
-  return {
-    taskId: task.id,
-    taskNumber: task.number,
-    taskTitle: task.title,
-    taskStatus: task.status,
-    lastMessage: conversationPreview(task),
-    lastActivityAt: task.updatedAt,
-    unreadCount: 0,
   };
 }
 

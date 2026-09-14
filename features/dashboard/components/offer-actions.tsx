@@ -20,6 +20,7 @@ import { RejectDialog } from "@/features/ops/reject-dialog";
 import { markOfferRejected } from "@/features/ops/rejected-offers";
 import { useOps } from "@/features/ops/ops-provider";
 import { useToast } from "@/components/providers/toast-provider";
+import { useInvalidateTaskPageQueries } from "@/features/tasks/hooks/use-page-queries";
 import { liveStatusPatch } from "@/lib/tasks/merge-live-task";
 import { ROUTES } from "@/lib/constants/routes";
 import {
@@ -40,6 +41,7 @@ export function OfferActions({ task }: OfferActionsProps) {
   const pathname = usePathname();
   const ops = useOps();
   const { toast } = useToast();
+  const invalidateLists = useInvalidateTaskPageQueries();
   const [pending, startTransition] = useTransition();
   const [now, setNow] = useState(() => Date.now());
   const decision = useOfferDecision(task.id);
@@ -73,6 +75,7 @@ export function OfferActions({ task }: OfferActionsProps) {
   function done(patch?: Partial<Task>) {
     if (patch) ops?.patchLiveTask(task.id, patch, task);
     ops?.silenceOffer(task.id);
+    invalidateLists();
     ops?.refresh();
     router.refresh();
   }
@@ -81,6 +84,7 @@ export function OfferActions({ task }: OfferActionsProps) {
     markOfferRejected(task.id);
     ops?.dropLiveTask(task.id);
     ops?.silenceOffer(task.id);
+    invalidateLists();
     const onTaskPage =
       pathname === ROUTES.task(task.id) ||
       pathname.startsWith(`${ROUTES.task(task.id)}/`);

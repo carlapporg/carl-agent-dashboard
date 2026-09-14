@@ -14,6 +14,21 @@ export async function getOpenTasksAction() {
   return tasksApi.listOpen();
 }
 
+/** Offered + active + history for dashboard live queue seed. */
+export async function getDashboardSeedTasksAction() {
+  const [offered, active, history] = await Promise.all([
+    tasksApi.listByInbox("OFFERED").catch(() => []),
+    tasksApi.listByInbox("ACTIVE").catch(() => []),
+    tasksApi.listByInbox("HISTORY").catch(() => []),
+  ]);
+  return [...offered, ...active, ...history];
+}
+
+/** Full task list for Task Hub. */
+export async function getTaskHubTasksAction() {
+  return tasksApi.list();
+}
+
 export async function getActiveTasksAction() {
   return dashboardApi.getActiveTasks();
 }
