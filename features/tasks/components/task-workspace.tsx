@@ -142,10 +142,21 @@ export function TaskWorkspace({
     setTask(taskProp);
   }, [taskProp, rejecting]);
 
+  const rememberConfirmation = ops?.rememberConfirmation;
+  const rememberReceipt = ops?.rememberReceipt;
+
   useEffect(() => {
+    rememberConfirmation?.(taskProp.id, confirmationProp ?? null);
     if (confirmationProp) markTaskConfirmationKnown(taskProp.id);
+    rememberReceipt?.(taskProp.id, receiptProp ?? null);
     if (receiptProp) markTaskReceiptKnown(taskProp.id);
-  }, [confirmationProp, receiptProp, taskProp.id]);
+  }, [
+    confirmationProp,
+    receiptProp,
+    taskProp.id,
+    rememberConfirmation,
+    rememberReceipt,
+  ]);
 
   /**
    * After customer declines, Nest returns the task to IN_PROGRESS.
@@ -163,14 +174,20 @@ export function TaskWorkspace({
     // Always probe once for DRAFT / declined confirmations; 404 → null.
     let cancelled = false;
     void getTaskConfirmationAction(taskProp.id).then((result) => {
-      if (cancelled || !result.ok || !result.confirmation) return;
+      if (cancelled || !result.ok) return;
       markTaskConfirmationKnown(taskProp.id);
       setConfirmation(result.confirmation);
+      rememberConfirmation?.(taskProp.id, result.confirmation);
     });
     return () => {
       cancelled = true;
     };
-  }, [confirmationProp, taskProp.backendStatus, taskProp.id]);
+  }, [
+    confirmationProp,
+    taskProp.backendStatus,
+    taskProp.id,
+    rememberConfirmation,
+  ]);
 
   useEffect(() => {
     const live =
@@ -597,10 +614,11 @@ export function TaskWorkspace({
               }}
             />
 
-            <div className="min-h-[520px] flex-1 overflow-hidden rounded-[15px] border border-border bg-surface shadow-(--shadow-card) lg:min-h-[544px]">
+            <div className="flex h-[min(70vh,720px)] min-h-[560px] flex-col overflow-hidden rounded-[15px] border border-border bg-surface shadow-(--shadow-card)">
               <TaskChatThread
                 ref={chatRef}
-                className="h-full min-h-[520px] border-0 shadow-none lg:min-h-[544px]"
+                className="min-h-0 flex-1 border-0 shadow-none"
+                fillHeight
                 taskId={task.id}
                 timeline={timeline}
                 quickActions={task.aiBrief?.missingInfo ?? []}

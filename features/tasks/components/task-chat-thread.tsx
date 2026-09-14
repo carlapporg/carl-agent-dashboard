@@ -1203,7 +1203,8 @@ const TaskChatThreadBody = forwardRef<
     <section
       id="panel-chat"
       className={cn(
-        "flex h-full min-h-0 flex-col overflow-hidden rounded-(--radius-card) border border-border bg-surface shadow-(--shadow-card)",
+        "flex min-h-0 flex-col overflow-hidden rounded-(--radius-card) border border-border bg-surface shadow-(--shadow-card)",
+        fillHeight ? "h-full min-h-0 flex-1" : "min-h-[16rem]",
         className,
       )}
     >
@@ -1229,12 +1230,12 @@ const TaskChatThreadBody = forwardRef<
         </header>
       ) : null}
 
-      <div className="relative min-h-0 flex-1">
+      <div className="relative min-h-0 flex-1 overflow-hidden">
         <div
           ref={scrollerRef}
           onScroll={onScrollerScroll}
           className={cn(
-            "h-full overflow-y-auto",
+            "absolute inset-0 overflow-y-auto overscroll-contain",
             inbox ? "px-5 py-5" : "px-3 py-2",
           )}
         >
@@ -1245,7 +1246,12 @@ const TaskChatThreadBody = forwardRef<
               </p>
             </div>
           ) : (
-            <div className={cn("flex flex-col", inbox ? "gap-[20px]" : "gap-2")}>
+            <div
+              className={cn(
+                "flex min-h-full flex-col justify-end",
+                inbox ? "gap-[20px]" : "gap-2",
+              )}
+            >
               {blocks.map((block) => {
                 if (block.type === "day") {
                   return (

@@ -1,7 +1,13 @@
 "use client";
 
 import { cn } from "@/lib/utils/cn";
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 
 /**
  * Figma metric cards (Dashboard Home 200:24736–741)
@@ -48,24 +54,29 @@ export function MetricStatCard({
 }: MetricStatCardProps) {
   const numeric = typeof value === "number";
   const [shown, setShown] = useState(numeric ? value : 0);
+  const shownRef = useRef(numeric ? value : 0);
 
   useEffect(() => {
     if (!numeric) return;
-    const from = shown;
+    const from = shownRef.current;
     const to = value;
-    if (from === to) return;
+    if (from === to) {
+      setShown(to);
+      return;
+    }
     const start = performance.now();
     const dur = 420;
     let frame = 0;
     function tick(now: number) {
       const t = Math.min(1, (now - start) / dur);
-      setShown(Math.round(from + (to - from) * t));
+      const next = Math.round(from + (to - from) * t);
+      shownRef.current = next;
+      setShown(next);
       if (t < 1) frame = requestAnimationFrame(tick);
     }
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- animate from previous shown
-  }, [value]);
+  }, [numeric, value]);
 
   const display = numeric ? String(shown).padStart(2, "0") : value;
   const featured = variant === "featured";

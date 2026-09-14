@@ -114,18 +114,23 @@ function emptyValueForField(
   return fieldInputType(field) === "lineItems" ? [emptyLineItem()] : "";
 }
 
-/** Date/time must be filled before send (Nest schema often marks them optional). */
-function isDateOrTimeField(
+/** Fields Nest often marks optional that agents must fill before send. */
+function isAgentRequiredField(
   field: Pick<ConfirmationSchemaField, "key" | "label">,
 ): boolean {
-  const key = field.key.trim().toLowerCase();
+  const key = field.key.trim().toLowerCase().replace(/[\s_-]+/g, "");
   const label = field.label?.trim().toLowerCase() ?? "";
   if (
     key === "date" ||
     key === "time" ||
     key === "pickuptime" ||
     key === "departuredate" ||
-    key === "departuretime"
+    key === "departuretime" ||
+    key === "phone" ||
+    key === "phonenumber" ||
+    key === "mobile" ||
+    key === "contactphone" ||
+    key === "airline"
   ) {
     return true;
   }
@@ -134,14 +139,18 @@ function isDateOrTimeField(
     label === "time" ||
     label === "pickup time" ||
     label === "departure date" ||
-    label === "departure time"
+    label === "departure time" ||
+    label === "phone" ||
+    label === "phone number" ||
+    label === "mobile" ||
+    label === "airline"
   );
 }
 
 function withRequiredFlags(
   field: ConfirmationSchemaField,
 ): ConfirmationSchemaField {
-  if (isDateOrTimeField(field)) {
+  if (isAgentRequiredField(field)) {
     return { ...field, required: true };
   }
   return field;

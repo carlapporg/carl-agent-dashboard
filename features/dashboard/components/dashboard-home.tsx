@@ -71,17 +71,10 @@ export function DashboardHome({ tasks }: DashboardHomeProps) {
     }
   }, [range]);
 
+  // Range changes only — do not refetch on queuePulse (that loops with server actions).
   useEffect(() => {
     void loadOverview();
   }, [loadOverview]);
-
-  useEffect(() => {
-    if (!ops?.queuePulse) return;
-    const id = window.setTimeout(() => {
-      void loadOverview();
-    }, 400);
-    return () => window.clearTimeout(id);
-  }, [ops?.queuePulse, loadOverview]);
 
   const roots = useMemo(() => {
     const merged = mergeTaskLists(
@@ -90,7 +83,7 @@ export function DashboardHome({ tasks }: DashboardHomeProps) {
       ops?.offer,
     );
     return withoutRejectedOffers(merged);
-  }, [tasks, ops?.liveTasks, ops?.offer, ops?.queuePulse, rejectedTick]);
+  }, [tasks, ops?.liveTasks, ops?.offer, rejectedTick]);
 
   /** Open-only — metric cards + Task Progress. */
   const liveQueueItems = useMemo(
@@ -105,8 +98,13 @@ export function DashboardHome({ tasks }: DashboardHomeProps) {
   );
 
   const liveBuckets = useMemo(
-    () => bucketLiveQueueTasks(liveQueueItems),
-    [liveQueueItems],
+    () =>
+      bucketLiveQueueTasks(
+        liveQueueItems,
+        ops?.confirmationsByTaskId,
+        ops?.receiptsByTaskId,
+      ),
+    [liveQueueItems, ops?.confirmationsByTaskId, ops?.receiptsByTaskId],
   );
 
   const stats = useMemo(() => {
@@ -154,6 +152,7 @@ export function DashboardHome({ tasks }: DashboardHomeProps) {
           icon={<MetricIcon src="/figma/dashboard/alert-02.svg" />}
           variant="featured"
           className="dash-slide-in"
+          style={{ animationDelay: "0ms" } as CSSProperties}
         />
         <MetricStatCard
           label="In Progress"
@@ -193,7 +192,7 @@ export function DashboardHome({ tasks }: DashboardHomeProps) {
       </div>
 
       <div className="grid gap-[25px] lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] lg:items-stretch">
-        <TasksPerHourPanel className="dash-slide-in min-h-[424px]" />
+        <TasksPerHourPanel className="dash-slide-in min-h-[424px] overflow-hidden" />
         <ShiftProgress
           completed={stats.completed}
           inProgress={stats.inProgress}

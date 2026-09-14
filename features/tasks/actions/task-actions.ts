@@ -212,11 +212,15 @@ export type SendMessageResult =
 
 export async function listTaskMessagesAction(
   taskId: string,
-): Promise<TimelineEvent[]> {
+): Promise<
+  | { ok: true; events: TimelineEvent[] }
+  | { ok: false; message: string }
+> {
   try {
-    return await messagesApi.list(taskId);
-  } catch {
-    return [];
+    const events = await messagesApi.list(taskId);
+    return { ok: true, events };
+  } catch (error) {
+    return { ok: false, message: toUserMessage(error) };
   }
 }
 

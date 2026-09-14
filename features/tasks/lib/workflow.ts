@@ -61,6 +61,11 @@ export function workflowStagesForTask(_task: Task): WorkflowStage[] {
  * - In Progress — working, declined details, or document sent (ready to complete)
  * Chat / messages never drive this overlay.
  * Cancelled Nest states are shown as Failed.
+ *
+ * `confirmation` / `receipt`:
+ * - omit (`undefined`) when not loaded yet (list/queue) → trust Nest/local task status
+ * - pass a row or `null` when loaded (task detail) → confirmation is authoritative;
+ *   Nest WAITING_FOR_USER alone does not show Waiting
  */
 export function displayedTaskStatus(
   task: Task,
@@ -86,72 +91,54 @@ export function displayedTaskStatus(
   ) {
     return "queued";
   }
-  if (
-    task.backendStatus === "IN_PROGRESS" ||
-    task.backendStatus === "WAITING_FOR_AGENT" ||
-    task.backendStatus === "WAITING_FOR_USER" ||
-    task.status === "in_progress" ||
-    task.status === "waiting_for_customer" ||
-    task.status === "waiting_for_payment"
-  ) {
+  if (task.backendStatus === "ASSIGNED" || task.status === "assigned") {
+    return "assigned";
+  }
+
+  const confirmationLoaded = confirmation !== undefined;
+
+  if (confirmationLoaded) {
     if (isConfirmationPending(confirmation)) return "waiting_for_customer";
-    if (confirmation?.status === "DECLINED" || confirmation?.status === "SUPERSEDED") {
+    if (
+      confirmation?.status === "DECLINED" ||
+      confirmation?.status === "SUPERSEDED"
+    ) {
       return "in_progress";
     }
     if (isConfirmationConfirmed(confirmation)) {
       if (isReceiptSent(receipt)) return "in_progress";
       return "waiting_for_payment";
     }
+    // Loaded DRAFT / null — do not trust stale Nest WAITING_FOR_USER.
     if (task.status === "waiting_for_payment") return "waiting_for_payment";
-    if (
-      task.status === "waiting_for_customer" ||
-      task.backendStatus === "WAITING_FOR_USER"
-    ) {
-      return "waiting_for_customer";
-    }
     return "in_progress";
-  }
-  if (task.backendStatus === "ASSIGNED" || task.status === "assigned") {
-    return "assigned";
   }
 
-  if (isConfirmationPending(confirmation)) return "waiting_for_customer";
-  if (confirmation?.status === "DECLINED" || confirmation?.status === "SUPERSEDED") {
-    return "in_progress";
-  }
-  if (isConfirmationConfirmed(confirmation)) {
-    if (isReceiptSent(receipt)) return "in_progress";
-    return "waiting_for_payment";
-  }
+  // Confirmation not loaded (overview / live queue): Nest + local status.
   if (task.status === "waiting_for_payment") return "waiting_for_payment";
-  if (task.status === "waiting_for_customer") return "waiting_for_customer";
-  return "in_progress";
-}
-
-/** Highlight only the current status stage (non-linear). */
-export function currentStageId(task: Task): WorkflowStageId | null {
-  if (task.status === "cancelled" || task.status === "failed") return null;
-  if (task.status === "completed" || task.backendStatus === "COMPLETED") {
-    return "completed";
-  }
-  if (task.status === "waiting_for_payment") return "waiting_payment";
   if (
     task.status === "waiting_for_customer" ||
     task.backendStatus === "WAITING_FOR_USER"
   ) {
-    return "waiting_customer";
+    return "waiting_for_customer";
   }
-  if (
-    task.status === "in_progress" ||
-    task.backendStatus === "IN_PROGRESS" ||
-    task.backendStatus === "WAITING_FOR_AGENT"
-  ) {
-    return "in_progress";
-  }
-  if (task.status === "queued" || task.backendStatus === "OFFERED") return "offered";
-  if (task.status === "assigned" || task.backendStatus === "ASSIGNED") {
-    return "assigned";
-  }
+  return "in_progress";
+}
+
+/** Highlight only the current status stage (non-linear). */
+export function currentStageId(
+  task: Task,
+  confirmation?: TaskConfirmation | null,
+  receipt?: TaskReceipt | null,
+): WorkflowStageId | null {
+  const status = displayedTaskStatus(task, confirmation, receipt);
+  if (status === "cancelled" || status === "failed") return null;
+  if (status === "completed") return "completed";
+  if (status === "waiting_for_payment") return "waiting_payment";
+  if (status === "waiting_for_customer") return "waiting_customer";
+  if (status === "in_progress") return "in_progress";
+  if (status === "queued") return "offered";
+  if (status === "assigned") return "assigned";
   return "assigned";
 }
 
@@ -160,65 +147,59 @@ export type TaskListStatusChip = {
   className: string;
 };
 
-/** Backend-first status chip for the task hub table (Figma Task Overview colors). */
-export function taskListStatusChip(task: Task): TaskListStatusChip {
-  const backend = task.backendStatus;
-  if (backend === "COMPLETED" || task.status === "completed") {
-    return {
-      label: "Completed",
-      className: "bg-[rgba(61,188,61,0.2)] text-[#3dbc3d]",
-    };
+/**
+ * Task hub table chip — same rules as task detail (`displayedTaskStatus`).
+ * Pass loaded confirmation/receipt when known so list matches workspace.
+ */
+export function taskListStatusChip(
+  task: Task,
+  confirmation?: TaskConfirmation | null,
+  receipt?: TaskReceipt | null,
+): TaskListStatusChip {
+  const status = displayedTaskStatus(task, confirmation, receipt);
+  switch (status) {
+    case "completed":
+      return {
+        label: "Completed",
+        className: "bg-[rgba(61,188,61,0.2)] text-[#3dbc3d]",
+      };
+    case "failed":
+    case "cancelled":
+      return {
+        label: "Cancelled",
+        className: "bg-surface-muted text-muted",
+      };
+    case "waiting_for_customer":
+      return {
+        label: "Waiting on Cust",
+        className: "bg-[rgba(255,94,94,0.2)] text-[#ff5e5e]",
+      };
+    case "waiting_for_payment":
+      return {
+        label: "Pending Payment",
+        className: "bg-[rgba(255,94,94,0.2)] text-[#ff5e5e]",
+      };
+    case "in_progress":
+      return {
+        label: "In Progress",
+        className: "bg-[rgba(84,149,253,0.2)] text-[#5072e8]",
+      };
+    case "assigned":
+      return {
+        label: "Assigned",
+        className: "bg-[rgba(111,186,0,0.2)] text-[#6fba00]",
+      };
+    case "queued":
+      return {
+        label: "Pending",
+        className: "bg-[rgba(245,158,11,0.18)] text-[#b45309]",
+      };
+    default:
+      return {
+        label: String(status).replaceAll("_", " "),
+        className: "bg-surface-muted text-muted",
+      };
   }
-  if (
-    backend === "FAILED" ||
-    backend === "CANCELLED" ||
-    backend === "REJECTED" ||
-    task.status === "failed" ||
-    task.status === "cancelled"
-  ) {
-    return {
-      label: "Cancelled",
-      className: "bg-surface-muted text-muted",
-    };
-  }
-  if (backend === "WAITING_FOR_USER" || task.status === "waiting_for_customer") {
-    return {
-      label: "Waiting on Cust",
-      className: "bg-[rgba(255,94,94,0.2)] text-[#ff5e5e]",
-    };
-  }
-  if (task.status === "waiting_for_payment") {
-    return {
-      label: "Pending Payment",
-      className: "bg-[rgba(255,94,94,0.2)] text-[#ff5e5e]",
-    };
-  }
-  if (
-    backend === "IN_PROGRESS" ||
-    backend === "WAITING_FOR_AGENT" ||
-    task.status === "in_progress"
-  ) {
-    return {
-      label: "In Progress",
-      className: "bg-[rgba(84,149,253,0.2)] text-[#5072e8]",
-    };
-  }
-  if (backend === "ASSIGNED" || task.status === "assigned") {
-    return {
-      label: "Assigned",
-      className: "bg-[rgba(111,186,0,0.2)] text-[#6fba00]",
-    };
-  }
-  if (backend === "OFFERED" || backend === "QUEUED" || task.status === "queued") {
-    return {
-      label: "Pending",
-      className: "bg-[rgba(245,158,11,0.18)] text-[#b45309]",
-    };
-  }
-  return {
-    label: String(task.status).replaceAll("_", " "),
-    className: "bg-surface-muted text-muted",
-  };
 }
 
 export function matchesTaskHubFilter(
@@ -232,9 +213,11 @@ export function matchesTaskHubFilter(
     | "waiting_for_payment"
     | "completed"
     | "cancelled",
+  confirmation?: TaskConfirmation | null,
+  receipt?: TaskReceipt | null,
 ): boolean {
   if (filter === "all") return true;
-  const chip = taskListStatusChip(task);
+  const chip = taskListStatusChip(task, confirmation, receipt);
   if (filter === "offered") {
     return chip.label === "Pending";
   }
@@ -546,3 +529,32 @@ export const CHAT_TEMPLATES = [
   "Payment request sent. Please approve when ready.",
   "All set on my side. Anything else you need?",
 ] as const;
+
+export function confirmationFromCache(
+  byId: Record<string, TaskConfirmation | null> | undefined,
+  taskId: string,
+): TaskConfirmation | null | undefined {
+  if (!byId || !Object.prototype.hasOwnProperty.call(byId, taskId)) {
+    return undefined;
+  }
+  return byId[taskId];
+}
+
+export function receiptFromCache(
+  byId: Record<string, TaskReceipt | null> | undefined,
+  taskId: string,
+): TaskReceipt | null | undefined {
+  if (!byId || !Object.prototype.hasOwnProperty.call(byId, taskId)) {
+    return undefined;
+  }
+  return byId[taskId];
+}
+
+/** True when list/queue should fetch confirmation to match task detail. */
+export function shouldHydrateTaskConfirmation(task: Task): boolean {
+  return (
+    task.backendStatus === "WAITING_FOR_USER" ||
+    task.status === "waiting_for_customer" ||
+    task.status === "waiting_for_payment"
+  );
+}

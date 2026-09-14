@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
   getTasksPerDaySplitAction,
   getTasksPerHourAction,
@@ -9,13 +9,11 @@ import {
   MonthFilterPill,
   type MonthFilterValue,
 } from "@/features/dashboard/components/month-filter-pill";
-import { useOps } from "@/features/ops/ops-provider";
 import type { TasksPerHour } from "@/lib/api/dashboard-analytics";
 import { cn } from "@/lib/utils/cn";
 import type { Task } from "@/types/task";
 
 const REFETCH_MS = 5 * 60 * 1000;
-const LIVE_REFETCH_DEBOUNCE_MS = 400;
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "Mon"];
 const WEEKDAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 
@@ -283,6 +281,7 @@ type ShiftProgressProps = {
   waiting?: number;
   progressPercent?: number;
   className?: string;
+  style?: CSSProperties;
   rangeLabel?: MonthFilterValue;
   onRangeChange?: (value: MonthFilterValue) => void;
 };
@@ -474,9 +473,13 @@ function BarFill({
   );
 }
 
-export function TasksPerHourPanel({ className }: { className?: string }) {
-  const ops = useOps();
-  const queuePulse = ops?.queuePulse ?? 0;
+export function TasksPerHourPanel({
+  className,
+  style,
+}: {
+  className?: string;
+  style?: CSSProperties;
+}) {
   const [hourly, setHourly] = useState<TasksPerHour | null>(null);
   const [split, setSplit] = useState<{
     history: Task[];
@@ -514,13 +517,7 @@ export function TasksPerHourPanel({ className }: { className?: string }) {
     };
   }, [load]);
 
-  useEffect(() => {
-    if (queuePulse === 0) return;
-    const id = window.setTimeout(() => {
-      void load();
-    }, LIVE_REFETCH_DEBOUNCE_MS);
-    return () => window.clearTimeout(id);
-  }, [queuePulse, load]);
+  // Intentionally no queuePulse refetch — server actions + pulse caused a render loop.
 
   const chart = useMemo(() => {
     if (!hourly) return null;
@@ -538,6 +535,7 @@ export function TasksPerHourPanel({ className }: { className?: string }) {
           "flex items-center justify-center rounded-[10px] border border-border bg-surface text-sm text-destructive",
           className,
         )}
+        style={style}
       >
         {error}
       </div>
@@ -551,6 +549,7 @@ export function TasksPerHourPanel({ className }: { className?: string }) {
           "flex items-center justify-center rounded-[10px] border border-border bg-surface text-sm text-muted",
           className,
         )}
+        style={style}
       >
         Loading tasks / day…
       </div>
@@ -567,11 +566,12 @@ export function TasksPerHourPanel({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "flex flex-col overflow-visible rounded-[10px] border border-border bg-surface p-5",
+        "relative flex flex-col overflow-hidden rounded-[10px] border border-border bg-surface p-5",
         className,
       )}
+      style={style}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="relative z-[1] flex items-start justify-between gap-3">
         <div>
           <h3 className="text-[22px] font-semibold tracking-[-0.05em] text-foreground">
             Tasks Per Day
@@ -704,6 +704,7 @@ export function ShiftProgress({
   waiting,
   progressPercent,
   className,
+  style,
   rangeLabel = "Today",
   onRangeChange,
 }: ShiftProgressProps) {
@@ -719,8 +720,9 @@ export function ShiftProgress({
         "relative h-[424px] w-full overflow-hidden rounded-[10px] border border-border bg-surface",
         className,
       )}
+      style={style}
     >
-      <h3 className="absolute left-[15px] top-[29px] text-[22px] font-semibold leading-[27px] tracking-[-0.05em] text-foreground">
+      <h3 className="absolute left-[15px] top-[29px] z-[1] text-[22px] font-semibold leading-[27px] tracking-[-0.05em] text-foreground">
         Task Progress
       </h3>
 

@@ -4,6 +4,7 @@ import {
   PriorityBadge,
   StatusBadge,
 } from "@/features/tasks/components/status-badge";
+import { displayedTaskStatus } from "@/features/tasks/lib/workflow";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { Button } from "@/components/ui/button";
 import { PageShell } from "@/components/ui/page-shell";
@@ -78,7 +79,7 @@ export default async function InboxPage() {
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <PriorityBadge priority={task.priority} />
-                    <StatusBadge status={task.status} />
+                    <StatusBadge status={displayedTaskStatus(task)} />
                     <span className="inline-flex h-8 items-center rounded-[var(--radius-md)] border border-accent/30 bg-accent-soft px-2.5 text-sm font-semibold text-accent">
                       Open
                     </span>

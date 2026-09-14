@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { AvailabilityToggle } from "@/features/dashboard/components/availability-toggle";
 import { TaskChatThread } from "@/features/tasks/components/task-chat-thread";
 import { EmptyState } from "@/components/feedback/empty-state";
@@ -19,10 +19,10 @@ import {
 } from "@/features/tasks/lib/workflow";
 import {
   lastChatActivityAt,
-  lastChatPreview,
 } from "@/features/messages/lib/preview";
 import { previewForIncomingMessage } from "@/lib/realtime/parse-task-message";
 import { dashboardExtrasApi } from "@/lib/api/dashboard-extras";
+import { taskListSubtitle, taskPlaceLabel } from "@/lib/tasks/place-label";
 import { ROUTES } from "@/lib/constants/routes";
 import { cn } from "@/lib/utils/cn";
 import { getAgentDisplayName } from "@/types/user";
@@ -34,6 +34,11 @@ type MessagesViewProps = {
   conversations: ConversationSummary[];
   tasks: Record<string, Task>;
 };
+
+type TimelineLoad =
+  | { status: "loading" }
+  | { status: "ready"; events: TimelineEvent[] }
+  | { status: "error"; message: string };
 
 const AVATAR_TONES = [
   "bg-[#dbeafe] text-[#1d4ed8]",
@@ -71,12 +76,12 @@ function bookingRefFromTask(task: Task): string | null {
   return null;
 }
 
-function sidebarPreview(
+/** Sidebar second line: place/venue so duplicate client names stay distinct. */
+function sidebarSubtitle(
   conversation: ConversationSummary,
-  events: TimelineEvent[] | undefined,
+  task?: Task,
 ): string {
-  const fromThread = events ? lastChatPreview(events) : null;
-  if (fromThread) return fromThread;
+  if (task) return taskListSubtitle(task, conversation.taskTitle);
   if (
     conversation.lastMessage &&
     conversation.lastMessage !== "No messages yet"
@@ -157,7 +162,7 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
   const [selectedId, setSelectedId] = useState(
     visibleConversations[0]?.taskId ?? null,
   );
-  const [timelines, setTimelines] = useState<Record<string, TimelineEvent[]>>(
+  const [timelines, setTimelines] = useState<Record<string, TimelineLoad>>(
     {},
   );
   const [filter, setFilter] = useState("");
@@ -169,14 +174,29 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
   timelinesRef.current = timelines;
   const liveChatAt = ops?.liveChat?.at ?? 0;
 
-  const loadTimeline = useCallback((taskId: string) => {
-    if (inflightRef.current.has(taskId)) return;
-    // Skip if we already hydrated this thread — avoids POST storms on remount/refresh.
-    if (Object.hasOwn(timelinesRef.current, taskId)) return;
+  const loadTimeline = useCallback((taskId: string, force = false) => {
+    if (!force && inflightRef.current.has(taskId)) return;
+    const existing = timelinesRef.current[taskId];
+    if (!force && existing?.status === "ready") return;
+    if (!force && existing?.status === "loading") return;
     inflightRef.current.add(taskId);
+    setTimelines((prev) => ({
+      ...prev,
+      [taskId]: { status: "loading" },
+    }));
     void listTaskMessagesAction(taskId)
-      .then((events) => {
-        setTimelines((prev) => ({ ...prev, [taskId]: events }));
+      .then((result) => {
+        if (!result.ok) {
+          setTimelines((prev) => ({
+            ...prev,
+            [taskId]: { status: "error", message: result.message },
+          }));
+          return;
+        }
+        setTimelines((prev) => ({
+          ...prev,
+          [taskId]: { status: "ready", events: result.events },
+        }));
       })
       .finally(() => {
         inflightRef.current.delete(taskId);
@@ -185,8 +205,9 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
 
   const displayConversations = useMemo(() => {
     const rows = visibleConversations.map((c) => {
-      const events = timelines[c.taskId];
-      const preview = sidebarPreview(c, events);
+      const load = timelines[c.taskId];
+      const events = load?.status === "ready" ? load.events : undefined;
+      const preview = sidebarSubtitle(c, tasks[c.taskId]);
       const activityAt =
         (events ? lastChatActivityAt(events) : null) ?? c.lastActivityAt;
       return { ...c, lastMessage: preview, lastActivityAt: activityAt };
@@ -196,7 +217,7 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
         new Date(b.lastActivityAt).getTime() -
         new Date(a.lastActivityAt).getTime(),
     );
-  }, [timelines, visibleConversations]);
+  }, [tasks, timelines, visibleConversations]);
 
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase();
@@ -217,8 +238,20 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
     [filtered, selectedId],
   );
   const task = selectedId ? tasks[selectedId] : null;
-  const timeline = selectedId ? (timelines[selectedId] ?? []) : [];
-  const chatReady = selectedId != null && Object.hasOwn(timelines, selectedId);
+  const timelineLoad = selectedId ? timelines[selectedId] : undefined;
+  const timeline =
+    timelineLoad?.status === "ready" ? timelineLoad.events : [];
+  const chatReady = timelineLoad?.status === "ready";
+  const chatError =
+    timelineLoad?.status === "error" ? timelineLoad.message : null;
+  const chatLoading =
+    selectedId != null &&
+    (timelineLoad == null || timelineLoad.status === "loading");
+  const taskPlace = task ? taskPlaceLabel(task) : "—";
+  const taskContext =
+    task && taskPlace !== "—"
+      ? taskPlace
+      : task?.title?.trim() || selected?.taskTitle || "";
 
   useEffect(() => {
     if (!selectedId) return;
@@ -241,8 +274,17 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
     // Echoing them here duplicates the bubble with a second id.
     if (live.sender !== "USER") return;
 
+    const existingLoad = timelinesRef.current[live.taskId];
+    // If we never loaded this thread (or last load failed), fetch history
+    // instead of showing only the live ping.
+    if (existingLoad?.status !== "ready") {
+      loadTimeline(live.taskId, true);
+      return;
+    }
+
     setTimelines((prev) => {
-      const existing = prev[live.taskId] ?? [];
+      const ready = prev[live.taskId];
+      const existing = ready?.status === "ready" ? ready.events : [];
       if (live.messageId && existing.some((row) => row.id === live.messageId)) {
         return prev;
       }
@@ -268,9 +310,12 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
         durationMs: live.durationMs,
       };
 
-      return { ...prev, [live.taskId]: [...existing, nextEvent] };
+      return {
+        ...prev,
+        [live.taskId]: { status: "ready", events: [...existing, nextEvent] },
+      };
     });
-  }, [liveChatAt, ops?.liveChat]);
+  }, [liveChatAt, loadTimeline, ops?.liveChat]);
 
   const handleThreadUpdate = useCallback(
     (taskId: string, thread: TimelineEvent[]) => {
@@ -282,8 +327,13 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
       const sig = threadSignature(durable);
       setTimelines((prev) => {
         const current = prev[taskId];
-        if (current && threadSignature(current) === sig) return prev;
-        return { ...prev, [taskId]: durable };
+        if (
+          current?.status === "ready" &&
+          threadSignature(current.events) === sig
+        ) {
+          return prev;
+        }
+        return { ...prev, [taskId]: { status: "ready", events: durable } };
       });
     },
     [],
@@ -330,7 +380,7 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
               Chat Box
             </h2>
             <p className="mt-3 text-[14px] tracking-[-0.02em] text-muted">
-              Your current sales summary and activity
+              Message clients on your open tasks
             </p>
           </div>
           <AvailabilityToggle />
@@ -346,14 +396,14 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
   const bookingRef = task ? bookingRefs[task.id] : null;
 
   return (
-    <div className="flex h-[calc(100dvh-7.5rem)] max-h-[calc(100dvh-7.5rem)] flex-col gap-5 overflow-hidden pb-2">
+    <div className="flex h-[calc(100dvh-8.5rem)] max-h-[calc(100dvh-8.5rem)] flex-col gap-5 overflow-hidden">
       <div className="flex shrink-0 flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-[34px] font-semibold leading-none tracking-[-0.05em] text-foreground">
             Chat Box
           </h2>
           <p className="mt-3 text-[14px] tracking-[-0.02em] text-muted">
-            Your current sales summary and activity
+            Message clients on your open tasks
           </p>
         </div>
         <AvailabilityToggle />
@@ -361,7 +411,7 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
 
       {/* Figma: list 292px + gap ~25px + chat; panels end with a small bottom gap */}
       <div className="grid min-h-0 flex-1 gap-[25px] overflow-hidden lg:grid-cols-[minmax(292px,320px)_minmax(0,1fr)] lg:items-stretch">
-        <aside className="flex min-h-0 flex-col overflow-hidden rounded-[15px] border border-border bg-surface">
+        <aside className="dash-card-shimmer flex h-full min-h-0 flex-col overflow-hidden rounded-[15px] border border-border bg-surface">
           <div className="shrink-0 px-5 pt-5">
             <div className="flex h-10 items-center gap-2 rounded-[8px] border border-border bg-surface px-2">
               <svg
@@ -394,7 +444,7 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
                 {filter.trim() ? "No chats match this search." : "No chats yet."}
               </li>
             ) : (
-              filtered.map((c) => {
+              filtered.map((c, index) => {
                 const active = c.taskId === selectedId;
                 const rowTask = tasks[c.taskId];
                 const customerName =
@@ -405,9 +455,10 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
                       type="button"
                       onClick={() => setSelectedId(c.taskId)}
                       className={cn(
-                        "flex w-full items-start gap-2.5 px-5 py-[10px] text-left transition-colors",
+                        "task-row-in task-row-shimmer flex w-full items-start gap-2.5 px-5 py-[10px] text-left transition-colors",
                         active ? "bg-surface-muted" : "hover:bg-surface-muted/70",
                       )}
+                      style={{ "--row-i": index } as CSSProperties}
                     >
                       <ConversationAvatar
                         name={customerName}
@@ -440,9 +491,12 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
           </ul>
         </aside>
 
-        <div className="flex min-h-0 flex-col overflow-hidden">
+        <div className="flex h-full min-h-0 flex-col overflow-hidden">
           {selected && task ? (
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[15px] border border-border bg-surface">
+            <div
+              className="dash-card-shimmer flex h-full min-h-0 flex-1 flex-col overflow-hidden rounded-[15px] border border-border bg-surface"
+              style={{ "--row-i": 1 } as CSSProperties}
+            >
               <header className="flex shrink-0 items-center justify-between gap-3 px-5 py-5">
                 <div className="flex min-w-0 items-center gap-2.5">
                   <ConversationAvatar name={task.customerName} size={34} />
@@ -451,7 +505,7 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
                       {task.customerName}
                     </h3>
                     <p className="truncate text-[12px] font-medium text-muted">
-                      Online
+                      {taskContext ? `${taskContext} · Online` : "Online"}
                     </p>
                   </div>
                 </div>
@@ -473,17 +527,33 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
                   </Link>
                 </div>
               </header>
-              <div className="h-px w-full bg-border" />
+              <div className="h-px w-full shrink-0 bg-border" />
 
-              <div className="min-h-0 flex-1 overflow-hidden">
-                {!chatReady ? (
-                  <div className="flex h-full min-h-64 flex-col items-center justify-center gap-3 px-6 text-center">
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                {chatLoading ? (
+                  <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
                     <span className="size-8 animate-pulse rounded-full bg-accent-soft" />
                     <p className="text-sm text-foreground">
                       Loading conversation…
                     </p>
                   </div>
-                ) : (
+                ) : chatError ? (
+                  <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+                    <p className="text-sm text-foreground">
+                      Couldn’t load messages
+                    </p>
+                    <p className="max-w-sm text-xs text-muted">{chatError}</p>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        selectedId && loadTimeline(selectedId, true)
+                      }
+                      className="inline-flex h-9 items-center rounded-full bg-accent px-4 text-xs font-semibold text-accent-foreground hover:bg-accent-hover"
+                    >
+                      Try again
+                    </button>
+                  </div>
+                ) : chatReady ? (
                   <TaskChatThread
                     taskId={selected.taskId}
                     timeline={timeline}
@@ -494,7 +564,7 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
                     agentLabel={agentLabel}
                     appearance="inbox"
                     fillHeight
-                    className="h-full min-h-0 rounded-none border-0 shadow-none"
+                    className="min-h-0 flex-1 rounded-none border-0 shadow-none"
                     showTemplates={
                       canMessageClient(task) && !isFailedOrCancelled(task)
                     }
@@ -502,11 +572,11 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
                     disabledHint={messageClientHint(task)}
                     onThreadUpdate={handleSelectedThreadUpdate}
                   />
-                )}
+                ) : null}
               </div>
             </div>
           ) : (
-            <div className="flex min-h-0 flex-1 items-center justify-center rounded-[15px] border border-border bg-surface">
+            <div className="flex h-full min-h-0 flex-1 items-center justify-center rounded-[15px] border border-border bg-surface">
               <EmptyState
                 title="Select a conversation"
                 description="Pick a thread on the left to reply."

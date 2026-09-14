@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { useAgentMe } from "@/features/agents/hooks";
 import { AgentAvatar } from "@/components/ui/agent-avatar";
 import { EmptyState } from "@/components/feedback/empty-state";
-import { PageSkeleton } from "@/components/feedback/skeleton";
+import { ProfileSkeleton } from "@/components/feedback/skeleton";
 import { PageShell } from "@/components/ui/page-shell";
 import { AvailabilityToggle } from "@/features/dashboard/components/availability-toggle";
 import { useOps } from "@/features/ops/ops-provider";
@@ -78,9 +78,9 @@ export function ProfileView({ initialUser }: ProfileViewProps) {
     return (
       <PageShell
         wide
-        className="flex h-[calc(100dvh-8.5rem)] max-h-[calc(100dvh-8.5rem)] items-center"
+        className="flex h-[calc(100dvh-8.5rem)] max-h-[calc(100dvh-8.5rem)] flex-col overflow-hidden"
       >
-        <PageSkeleton />
+        <ProfileSkeleton className="min-h-0 flex-1" />
       </PageShell>
     );
   }
@@ -136,7 +136,7 @@ export function ProfileView({ initialUser }: ProfileViewProps) {
 
         {/* Figma: right card ~862px tall with ~25px gap above frame bottom */}
         <div className="grid min-h-0 flex-1 gap-[25px] overflow-hidden pb-[25px] lg:grid-cols-[292px_minmax(0,1fr)] lg:items-stretch">
-          <aside className="flex h-fit flex-col items-center self-start rounded-[10px] bg-surface px-5 pb-6 pt-6 shadow-[0_0_0_1px_rgba(0,0,0,0.04)]">
+          <aside className="dash-card-shimmer flex h-fit flex-col items-center self-start rounded-[10px] bg-surface px-5 pb-6 pt-6 shadow-[0_0_0_1px_rgba(0,0,0,0.04)]">
             <AgentAvatar
               user={current}
               size="xl"
@@ -153,7 +153,10 @@ export function ProfileView({ initialUser }: ProfileViewProps) {
             </div>
           </aside>
 
-          <section className="min-h-0 h-full overflow-hidden rounded-[10px] bg-surface px-5 py-5 pb-6 shadow-[0_0_0_1px_rgba(0,0,0,0.04)]">
+          <section
+            className="dash-card-shimmer min-h-0 h-full overflow-hidden rounded-[10px] bg-surface px-5 py-5 pb-6 shadow-[0_0_0_1px_rgba(0,0,0,0.04)]"
+            style={{ "--row-i": 1 } as CSSProperties}
+          >
             <h2 className="text-[34px] font-semibold leading-none tracking-[-0.04em] text-foreground">
               Personal Info
             </h2>

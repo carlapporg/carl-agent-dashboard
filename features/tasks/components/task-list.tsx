@@ -7,7 +7,6 @@ import {
   useMemo,
   useState,
   useTransition,
-  type CSSProperties,
 } from "react";
 import { AvailabilityToggle } from "@/features/dashboard/components/availability-toggle";
 import { FilterPill } from "@/features/dashboard/components/filter-pill";
@@ -27,11 +26,17 @@ import {
 } from "@/lib/dashboard/live-queue";
 import { mergeTaskLists } from "@/lib/tasks/merge-live-task";
 import {
+  confirmationFromCache,
   matchesTaskHubFilter,
+  receiptFromCache,
   taskListStatusChip,
 } from "@/features/tasks/lib/workflow";
+import { useHydrateTaskConfirmations } from "@/features/tasks/hooks/use-hydrate-task-confirmations";
+import { taskPlaceLabel } from "@/lib/tasks/place-label";
 import { cn } from "@/lib/utils/cn";
 import type { Task } from "@/types/task";
+import type { TaskConfirmation } from "@/types/confirmation";
+import type { TaskReceipt } from "@/types/receipt";
 
 type HubFilter =
   | "all"
@@ -75,8 +80,13 @@ function parseHubFilter(raw: string | null): HubFilter {
   return "all";
 }
 
-function matchesFilter(task: Task, filter: HubFilter): boolean {
-  return matchesTaskHubFilter(task, filter);
+function matchesFilter(
+  task: Task,
+  filter: HubFilter,
+  confirmation?: TaskConfirmation | null,
+  receipt?: TaskReceipt | null,
+): boolean {
+  return matchesTaskHubFilter(task, filter, confirmation, receipt);
 }
 
 function matchesDayFilter(task: Task, filter: DayFilter): boolean {
@@ -111,22 +121,7 @@ function titleLabel(task: Task): string {
 }
 
 function placeLabel(task: Task): string {
-  const meta =
-    task.metadata && typeof task.metadata === "object"
-      ? (task.metadata as Record<string, unknown>)
-      : null;
-  const candidates = [
-    meta?.location,
-    meta?.destinationCity,
-    meta?.pickupCity,
-    meta?.deliveryCity,
-    meta?.city,
-    meta?.place,
-  ];
-  for (const value of candidates) {
-    if (typeof value === "string" && value.trim()) return value.trim();
-  }
-  return task.customerName || "—";
+  return taskPlaceLabel(task);
 }
 
 export function TaskList({ tasks }: TaskListProps) {
@@ -141,7 +136,6 @@ export function TaskList({ tasks }: TaskListProps) {
   const search = searchParams.get("q") ?? "";
   const hasFilters =
     status !== "all" || dayFilter !== "all" || Boolean(search.trim());
-  const [motionKey, setMotionKey] = useState(0);
   const rejectedTick = useRejectedOfferTick();
   const hydrateOpenTasks = ops?.hydrateOpenTasks;
 
@@ -154,13 +148,21 @@ export function TaskList({ tasks }: TaskListProps) {
       withoutRejectedOffers(
         mergeTaskLists(tasks, ops?.liveTasks ?? [], ops?.offer),
       ),
-    [ops?.liveTasks, ops?.offer, ops?.queuePulse, rejectedTick, tasks],
+    // queuePulse is intentionally omitted — liveTasks/offer already update.
+    [ops?.liveTasks, ops?.offer, rejectedTick, tasks],
   );
+
+  const confirmationsByTaskId = ops?.confirmationsByTaskId;
+  const receiptsByTaskId = ops?.receiptsByTaskId;
+
+  useHydrateTaskConfirmations(allTasks);
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     return allTasks.filter((task) => {
-      if (!matchesFilter(task, status)) return false;
+      const confirmation = confirmationFromCache(confirmationsByTaskId, task.id);
+      const receipt = receiptFromCache(receiptsByTaskId, task.id);
+      if (!matchesFilter(task, status, confirmation, receipt)) return false;
       if (!matchesDayFilter(task, dayFilter)) return false;
       if (!q) return true;
       return (
@@ -171,11 +173,14 @@ export function TaskList({ tasks }: TaskListProps) {
         (task.taskType?.toLowerCase().includes(q) ?? false)
       );
     });
-  }, [allTasks, status, dayFilter, search]);
-
-  useEffect(() => {
-    setMotionKey((k) => k + 1);
-  }, [status, dayFilter, search]);
+  }, [
+    allTasks,
+    confirmationsByTaskId,
+    dayFilter,
+    receiptsByTaskId,
+    search,
+    status,
+  ]);
 
   function updateParams(next: Record<string, string>) {
     if (next.status !== undefined) setStatus(parseHubFilter(next.status));
@@ -281,14 +286,31 @@ export function TaskList({ tasks }: TaskListProps) {
                   <th className="rounded-r-[5px] px-5 py-2.5">Actions</th>
                 </tr>
               </thead>
-              <tbody key={motionKey}>
+              <tbody>
                 {visible.map((task, index) => {
-                  const statusChip = taskListStatusChip(task);
+                  const confirmation = confirmationFromCache(
+                    confirmationsByTaskId,
+                    task.id,
+                  );
+                  const receipt = receiptFromCache(receiptsByTaskId, task.id);
+                  const statusChip = taskListStatusChip(
+                    task,
+                    confirmation,
+                    receipt,
+                  );
                   return (
                     <tr
                       key={task.id}
-                      className="task-row-in border-t border-border text-[13px] font-medium tracking-[-0.03em] text-muted hover:bg-surface-hover"
-                      style={{ "--row-i": index } as CSSProperties}
+                      role="link"
+                      tabIndex={0}
+                      className="cursor-pointer border-t border-border text-[13px] font-medium tracking-[-0.03em] text-muted hover:bg-surface-hover"
+                      onClick={() => router.push(ROUTES.task(task.id))}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          router.push(ROUTES.task(task.id));
+                        }
+                      }}
                     >
                       <td className="px-5 py-5">#{index + 1}</td>
                       <td className="max-w-[200px] truncate px-3 py-5">
@@ -318,6 +340,7 @@ export function TaskList({ tasks }: TaskListProps) {
                           href={ROUTES.task(task.id)}
                           className="inline-flex size-4 items-center justify-center text-muted hover:text-foreground"
                           aria-label={`Open ${task.title}`}
+                          onClick={(event) => event.stopPropagation()}
                         >
                           <EyeIcon />
                         </Link>

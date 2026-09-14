@@ -3,6 +3,13 @@ import {
   isTimestampInDashboardRange,
   type DashboardRange,
 } from "@/lib/dashboard/range";
+import {
+  confirmationFromCache,
+  displayedTaskStatus,
+  receiptFromCache,
+} from "@/features/tasks/lib/workflow";
+import type { TaskConfirmation } from "@/types/confirmation";
+import type { TaskReceipt } from "@/types/receipt";
 import type { Task } from "@/types/task";
 
 /** Day filter aligned with dashboard range labels + overview API. */
@@ -136,7 +143,11 @@ export type LiveQueueBuckets = {
  * Split open rows only (ignore completed if present).
  * `inProgress + waiting === liveCount`.
  */
-export function bucketLiveQueueTasks(tasks: Task[]): LiveQueueBuckets {
+export function bucketLiveQueueTasks(
+  tasks: Task[],
+  confirmationsByTaskId?: Record<string, TaskConfirmation | null>,
+  receiptsByTaskId?: Record<string, TaskReceipt | null>,
+): LiveQueueBuckets {
   let offered = 0;
   let inProgress = 0;
   let waitingCustomer = 0;
@@ -145,16 +156,19 @@ export function bucketLiveQueueTasks(tasks: Task[]): LiveQueueBuckets {
     if (isCompletedQueueTask(task)) continue;
     if (!isLiveQueueTask(task)) continue;
 
-    const backend = task.backendStatus;
+    const shown = displayedTaskStatus(
+      task,
+      confirmationFromCache(confirmationsByTaskId, task.id),
+      receiptFromCache(receiptsByTaskId, task.id),
+    );
     if (
-      backend === "WAITING_FOR_USER" ||
-      task.status === "waiting_for_customer" ||
-      task.status === "waiting_for_payment"
+      shown === "waiting_for_customer" ||
+      shown === "waiting_for_payment"
     ) {
       waitingCustomer += 1;
       continue;
     }
-    if (backend === "OFFERED" || task.status === "queued") {
+    if (shown === "queued") {
       offered += 1;
       continue;
     }

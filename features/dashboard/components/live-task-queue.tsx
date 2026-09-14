@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { OfferCountdown } from "@/features/ops/offer-countdown";
 import { OfferActions } from "@/features/dashboard/components/offer-actions";
 import { EyeIcon } from "@/components/ui/eye-icon";
@@ -20,7 +20,16 @@ import {
 } from "@/features/ops/auto-accept-offer";
 import { offerWindowEnd } from "@/types/agent";
 import { isCompletedQueueTask } from "@/lib/dashboard/live-queue";
+import {
+  confirmationFromCache,
+  receiptFromCache,
+  taskListStatusChip,
+} from "@/features/tasks/lib/workflow";
+import { useHydrateTaskConfirmations } from "@/features/tasks/hooks/use-hydrate-task-confirmations";
+import { taskPlaceLabel } from "@/lib/tasks/place-label";
 import type { Task } from "@/types/task";
+import type { TaskConfirmation } from "@/types/confirmation";
+import type { TaskReceipt } from "@/types/receipt";
 
 type LiveTaskQueueProps = {
   /** Pre-filtered open tasks (same list Task Progress uses). */
@@ -50,61 +59,30 @@ function receivedDate(iso: string): string {
 }
 
 function placeLabel(task: Task): string {
-  const meta =
-    task.metadata && typeof task.metadata === "object"
-      ? (task.metadata as Record<string, unknown>)
-      : null;
-  const candidates = [
-    meta?.location,
-    meta?.destinationCity,
-    meta?.pickupCity,
-    meta?.deliveryCity,
-    meta?.city,
-    meta?.place,
-  ];
-  for (const value of candidates) {
-    if (typeof value === "string" && value.trim()) return value.trim();
-  }
-  return task.customerName || "—";
+  return taskPlaceLabel(task);
 }
 
-function statusBadgeLabel(task: Task): string {
+function statusBadgeLabel(
+  task: Task,
+  confirmation?: TaskConfirmation | null,
+  receipt?: TaskReceipt | null,
+): string {
   if (isRejectingOrRejected(task.id) || isPendingReject(task.id)) {
     return "Rejecting";
   }
-  if (task.backendStatus === "COMPLETED" || task.status === "completed") {
-    return "Completed";
-  }
-  if (task.status === "waiting_for_payment") return "Waiting For Payment";
-  if (task.status === "waiting_for_customer") return "Waiting For Customer";
-  if (task.backendStatus === "OFFERED") return "Offered";
-  if (task.backendStatus === "ASSIGNED") return "Assigned";
-  if (task.backendStatus === "WAITING_FOR_USER") return "Waiting For Customer";
-  if (task.backendStatus === "IN_PROGRESS") return "In Progress";
-  if (task.backendStatus === "WAITING_FOR_AGENT") return "In Progress";
-  if (task.status === "cancelled") return "Failed";
-  return task.status.replaceAll("_", " ");
+  const chip = taskListStatusChip(task, confirmation, receipt);
+  if (chip.label === "Pending") return "Offered";
+  if (chip.label === "Waiting on Cust") return "Waiting For Customer";
+  if (chip.label === "Pending Payment") return "Waiting For Payment";
+  return chip.label;
 }
 
-function chipTone(task: Task): string {
-  if (task.backendStatus === "COMPLETED" || task.status === "completed") {
-    return "bg-[rgba(61,188,61,0.2)] text-[#3dbc3d]";
-  }
-  if (task.backendStatus === "ASSIGNED") {
-    return "bg-[rgba(111,186,0,0.2)] text-[#6fba00]";
-  }
-  if (
-    task.status === "waiting_for_customer" ||
-    task.status === "waiting_for_payment" ||
-    task.backendStatus === "OFFERED" ||
-    task.backendStatus === "WAITING_FOR_USER"
-  ) {
-    return "bg-[rgba(245,158,11,0.18)] text-[#b45309]";
-  }
-  if (task.status === "in_progress" || task.backendStatus === "IN_PROGRESS") {
-    return "bg-[rgba(84,149,253,0.2)] text-[#5072e8]";
-  }
-  return "bg-surface-muted text-muted";
+function chipTone(
+  task: Task,
+  confirmation?: TaskConfirmation | null,
+  receipt?: TaskReceipt | null,
+): string {
+  return taskListStatusChip(task, confirmation, receipt).className;
 }
 
 /** Assigned / active / completed tasks open on click — offers stay for Accept/Reject. */
@@ -133,6 +111,11 @@ export function LiveTaskQueue({
   const prevIds = useRef<Set<string>>(new Set(items.map((t) => t.id)));
   const [newIds, setNewIds] = useState<Set<string>>(new Set());
 
+  const confirmationsByTaskId = ops?.confirmationsByTaskId;
+  const receiptsByTaskId = ops?.receiptsByTaskId;
+
+  useHydrateTaskConfirmations(items);
+
   useEffect(() => {
     const next = new Set(items.map((t) => t.id));
     const added = items
@@ -147,14 +130,7 @@ export function LiveTaskQueue({
       setNewIds(new Set());
     }, 1800);
     return () => window.clearTimeout(id);
-  }, [items, ops?.queuePulse]);
-
-  useEffect(() => {
-    if (!ops?.queuePulse) return;
-    setHighlight(true);
-    const id = window.setTimeout(() => setHighlight(false), 1400);
-    return () => window.clearTimeout(id);
-  }, [ops?.queuePulse]);
+  }, [items]);
 
   return (
     <section className="overflow-hidden rounded-[15px] border border-border bg-surface">
@@ -208,16 +184,22 @@ export function LiveTaskQueue({
                 const offered =
                   item.backendStatus === "OFFERED" || hasOpenRejectUi(item.id);
                 const openable = canOpenTask(item);
-                const label = statusBadgeLabel(item);
+                const confirmation = confirmationFromCache(
+                  confirmationsByTaskId,
+                  item.id,
+                );
+                const receipt = receiptFromCache(receiptsByTaskId, item.id);
+                const label = statusBadgeLabel(item, confirmation, receipt);
 
                 return (
                   <tr
                     key={item.id}
                     className={cn(
-                      "border-t border-border text-[13px] font-medium tracking-[-0.03em] text-muted",
+                      "task-row-in task-row-shimmer border-t border-border text-[13px] font-medium tracking-[-0.03em] text-muted",
                       isNew && "bg-accent-soft",
                       openable && "cursor-pointer hover:bg-surface-hover",
                     )}
+                    style={{ "--row-i": index } as CSSProperties}
                     onClick={
                       openable
                         ? () => router.push(ROUTES.task(item.id))
@@ -260,7 +242,7 @@ export function LiveTaskQueue({
                         <span
                           className={cn(
                             "inline-flex rounded-[50px] px-3.5 py-1 text-[12px] font-medium tracking-[-0.03em]",
-                            chipTone(item),
+                            chipTone(item, confirmation, receipt),
                           )}
                         >
                           {label}

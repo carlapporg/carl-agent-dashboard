@@ -14,6 +14,7 @@ import {
   stageProgressPercent,
   TASK_STAGES,
 } from "@/features/tasks/components/stage-progress";
+import { displayedTaskStatus } from "@/features/tasks/lib/workflow";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { ROUTES } from "@/lib/constants/routes";
@@ -36,9 +37,10 @@ type TaskBriefPaneProps = {
 };
 
 export function TaskBriefPane({ task, timeline }: TaskBriefPaneProps) {
-  const pct = stageProgressPercent(task.status);
+  const shown = displayedTaskStatus(task);
+  const pct = stageProgressPercent(shown);
   const color =
-    TASK_STAGES.find((s) => s.status === task.status)?.color ?? "#4f7cff";
+    TASK_STAGES.find((s) => s.status === shown)?.color ?? "#4f7cff";
 
   return (
     <div className="space-y-4">
@@ -57,7 +59,7 @@ export function TaskBriefPane({ task, timeline }: TaskBriefPaneProps) {
                 <span className="rounded-md bg-surface-hover px-2.5 py-0.5 text-sm font-semibold text-muted">
                   #{task.number}
                 </span>
-                <StatusBadge status={task.status} withDot />
+                <StatusBadge status={shown} withDot />
                 <PriorityBadge priority={task.priority} />
               </div>
               <h1 className="mt-2 text-xl font-semibold tracking-tight text-foreground md:text-2xl">

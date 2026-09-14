@@ -243,9 +243,18 @@ type OpsContextValue = {
   livePulse: boolean;
   liveChat: LiveChatEvent | null;
   liveConfirmation: TaskConfirmation | null;
+  /** Confirmation rows keyed by task id (`null` = fetched, none). */
+  confirmationsByTaskId: Record<string, TaskConfirmation | null>;
   setLiveConfirmation: (row: TaskConfirmation | null) => void;
+  rememberConfirmation: (
+    taskId: string,
+    row: TaskConfirmation | null,
+  ) => void;
   liveReceipt: TaskReceipt | null;
+  /** Receipt rows keyed by task id (`null` = fetched, none). */
+  receiptsByTaskId: Record<string, TaskReceipt | null>;
   setLiveReceipt: (row: TaskReceipt | null) => void;
+  rememberReceipt: (taskId: string, row: TaskReceipt | null) => void;
   refresh: () => void;
 };
 
@@ -307,9 +316,15 @@ export function AgentOpsProvider({
   const [queuePulse, setQueuePulse] = useState(0);
   const [livePulse, setLivePulse] = useState(false);
   const [liveChat, setLiveChat] = useState<LiveChatEvent | null>(null);
-  const [liveConfirmation, setLiveConfirmation] =
+  const [liveConfirmation, setLiveConfirmationState] =
     useState<TaskConfirmation | null>(null);
-  const [liveReceipt, setLiveReceipt] = useState<TaskReceipt | null>(null);
+  const [confirmationsByTaskId, setConfirmationsByTaskId] = useState<
+    Record<string, TaskConfirmation | null>
+  >({});
+  const [liveReceipt, setLiveReceiptState] = useState<TaskReceipt | null>(null);
+  const [receiptsByTaskId, setReceiptsByTaskId] = useState<
+    Record<string, TaskReceipt | null>
+  >({});
   const refreshTimer = useRef<number>(0);
   const presenceRef = useRef(presence);
   presenceRef.current = presence;
@@ -352,7 +367,7 @@ export function AgentOpsProvider({
     const desired = desiredPresenceForSession(
       normalizePresence(initialPresence ?? "AVAILABLE"),
     );
-    setPresenceState(desired);
+    setPresenceState((current) => (current === desired ? current : desired));
   }, [initialPresence]);
 
   useEffect(() => {
@@ -365,6 +380,67 @@ export function AgentOpsProvider({
       router.refresh();
     }, 350);
   }, [router]);
+
+  const rememberConfirmation = useCallback(
+    (taskId: string, row: TaskConfirmation | null) => {
+      if (!taskId) return;
+      setConfirmationsByTaskId((prev) => {
+        if (Object.prototype.hasOwnProperty.call(prev, taskId)) {
+          const existing = prev[taskId];
+          if (existing === row) return prev;
+          if (
+            existing &&
+            row &&
+            existing.id === row.id &&
+            existing.status === row.status &&
+            existing.updatedAt === row.updatedAt
+          ) {
+            return prev;
+          }
+          if (existing == null && row == null) return prev;
+        }
+        return { ...prev, [taskId]: row };
+      });
+      // Only mirror into the "open task" confirmation when it already matches —
+      // list hydrates must not thrash liveConfirmation for unrelated tasks.
+      setLiveConfirmationState((current) => {
+        if (!current || current.taskId !== taskId) return current;
+        if (row && row.taskId === taskId) return row;
+        if (!row) return null;
+        return current;
+      });
+    },
+    [],
+  );
+
+  const setLiveConfirmation = useCallback((row: TaskConfirmation | null) => {
+    setLiveConfirmationState(row);
+    if (row?.taskId) {
+      setConfirmationsByTaskId((prev) => ({ ...prev, [row.taskId]: row }));
+    }
+  }, []);
+
+  const rememberReceipt = useCallback((taskId: string, row: TaskReceipt | null) => {
+    if (!taskId) return;
+    setReceiptsByTaskId((prev) => {
+      if (Object.prototype.hasOwnProperty.call(prev, taskId) && prev[taskId] === row) {
+        return prev;
+      }
+      return { ...prev, [taskId]: row };
+    });
+    setLiveReceiptState((current) => {
+      if (row && row.taskId === taskId) return row;
+      if (!row && current?.taskId === taskId) return null;
+      return current;
+    });
+  }, []);
+
+  const setLiveReceipt = useCallback((row: TaskReceipt | null) => {
+    setLiveReceiptState(row);
+    if (row?.taskId) {
+      setReceiptsByTaskId((prev) => ({ ...prev, [row.taskId]: row }));
+    }
+  }, []);
 
   const pulseQueue = useCallback(() => {
     setQueuePulse((n) => n + 1);
@@ -389,8 +465,8 @@ export function AgentOpsProvider({
   const hydrateOpenTasks = useCallback((tasks: Task[]) => {
     didInitialCatchUpGlobal = true;
     if (tasks.length === 0) return;
-    let changed = false;
     setLiveTasks((prev) => {
+      let changed = false;
       const byId = new Map(prev.map((row) => [row.id, row]));
       for (const task of tasks) {
         if (isRejectingOrRejected(task.id)) continue;
@@ -411,10 +487,11 @@ export function AgentOpsProvider({
         byId.set(task.id, next);
         changed = true;
       }
+      // Update live list only — no pulseQueue. Pulsing from hydrate + server
+      // actions re-fetched the dashboard in a loop.
       return changed ? [...byId.values()] : prev;
     });
-    if (changed) pulseQueue();
-  }, [pulseQueue]);
+  }, []);
 
   const upsertLiveTask = useCallback((task: Task) => {
     if (isRejectingOrRejected(task.id)) return;
@@ -1125,13 +1202,18 @@ export function AgentOpsProvider({
       livePulse,
       liveChat,
       liveConfirmation,
+      confirmationsByTaskId,
       setLiveConfirmation,
+      rememberConfirmation,
       liveReceipt,
+      receiptsByTaskId,
       setLiveReceipt,
+      rememberReceipt,
       refresh,
     }),
     [
       connected,
+      confirmationsByTaskId,
       dismissOffer,
       dropLiveTask,
       hydrateOpenTasks,
@@ -1145,6 +1227,9 @@ export function AgentOpsProvider({
       patchLiveTask,
       presence,
       queuePulse,
+      receiptsByTaskId,
+      rememberConfirmation,
+      rememberReceipt,
       refresh,
       setLiveConfirmation,
       setLiveReceipt,

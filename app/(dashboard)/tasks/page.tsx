@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { TaskList } from "@/features/tasks/components/task-list";
 import { EmptyState } from "@/components/feedback/empty-state";
-import { PageSkeleton } from "@/components/feedback/skeleton";
+import { TasksSkeleton } from "@/components/feedback/skeleton";
 import { PageShell } from "@/components/ui/page-shell";
 import { tasksApi } from "@/lib/api/tasks";
 
@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   title: "Task Hub",
 };
 
-export default async function TasksPage() {
+async function TasksContent() {
   let tasks: Awaited<ReturnType<typeof tasksApi.list>> | null = null;
   try {
     tasks = await tasksApi.list();
@@ -20,21 +20,22 @@ export default async function TasksPage() {
 
   if (!tasks) {
     return (
-      <PageShell wide>
-        <EmptyState
-          title="Can't load tasks"
-          description="Your login is still saved. Refresh the page. If this keeps happening, sign out and sign in again."
-        />
-      </PageShell>
+      <EmptyState
+        title="Can't load tasks"
+        description="Your login is still saved. Refresh the page. If this keeps happening, sign out and sign in again."
+      />
     );
   }
 
   const roots = tasks.filter((t) => !t.parentId);
+  return <TaskList tasks={roots} />;
+}
 
+export default function TasksPage() {
   return (
     <PageShell wide>
-      <Suspense fallback={<PageSkeleton />}>
-        <TaskList tasks={roots} />
+      <Suspense fallback={<TasksSkeleton />}>
+        <TasksContent />
       </Suspense>
     </PageShell>
   );
