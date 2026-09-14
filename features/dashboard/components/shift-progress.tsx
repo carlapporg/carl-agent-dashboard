@@ -567,7 +567,7 @@ export function TasksPerHourPanel({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "flex flex-col overflow-hidden rounded-[10px] border border-border bg-surface p-5",
+        "flex flex-col overflow-visible rounded-[10px] border border-border bg-surface p-5",
         className,
       )}
     >
@@ -649,11 +649,20 @@ export function TasksPerHourPanel({ className }: { className?: string }) {
 
                   {isHovered ? (
                     <span
-                      className="pointer-events-none absolute left-1/2 z-10 w-[124px] -translate-x-1/2 rounded-[8px] border border-accent/30 bg-surface px-2 py-1.5 text-left shadow-[0_8px_24px_rgba(16,24,40,0.12)]"
-                      style={{
-                        top: `${100 - fillPct}%`,
-                        transform: "translate(-50%, calc(-100% - 10px))",
-                      }}
+                      className="pointer-events-none absolute z-20 w-[124px] rounded-[8px] border border-accent/30 bg-surface px-2 py-1.5 text-left shadow-[0_8px_24px_rgba(16,24,40,0.12)]"
+                      style={
+                        fillPct >= 72
+                          ? {
+                              top: `${100 - fillPct}%`,
+                              left: "100%",
+                              transform: "translate(8px, -50%)",
+                            }
+                          : {
+                              top: `${100 - fillPct}%`,
+                              left: "50%",
+                              transform: "translate(-50%, calc(-100% - 10px))",
+                            }
+                      }
                     >
                       <span className="block text-[10px] font-medium text-foreground">
                         {column.label}
