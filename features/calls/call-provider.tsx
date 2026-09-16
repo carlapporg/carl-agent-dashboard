@@ -252,20 +252,40 @@ export function CallProvider({ children }: { children: ReactNode }) {
 
   const startCall = useCallback(
     async (taskId: string, type: CallType = "AUDIO") => {
-      if (phaseRef.current !== "idle" || busy) {
+      // Real in-progress call — block.
+      const phaseNow = phaseRef.current;
+      const inLiveCall =
+        phaseNow === "active" ||
+        phaseNow === "incoming" ||
+        Boolean(roomRef.current);
+      if (inLiveCall) {
         toast("End your current call before starting another.", "error");
         return false;
       }
+
+      // Stale "ringing/connecting" UI with no LiveKit room (common after busy/fail).
+      if (phaseNow !== "idle") {
+        const staleId = callRef.current?.id;
+        if (staleId) {
+          await endCallAction(staleId).catch(() => null);
+        }
+        await resetToIdle();
+      }
+
       setBusy(true);
       const result = await startCallAction(taskId, type);
       setBusy(false);
       if (!result.ok) {
-        toast(
-          result.code === "CALLER_BUSY"
-            ? "End your current call before starting another."
-            : result.message,
-          "error",
-        );
+        if (result.code === "CALLER_BUSY") {
+          // Nest still has an open call for this agent — clear local and explain.
+          await resetToIdle();
+          toast(
+            "Server still has an open call for you. Wait a few seconds, or end it from the call bar if you see one, then try again.",
+            "error",
+          );
+          return false;
+        }
+        toast(result.message, "error");
         return false;
       }
       setCall(result.data);
@@ -277,13 +297,17 @@ export function CallProvider({ children }: { children: ReactNode }) {
       }
       return true;
     },
-    [busy, joinLivekit, toast],
+    [joinLivekit, resetToIdle, toast],
   );
 
   const acceptIncoming = useCallback(async () => {
     const current = call;
     // Single-call product: only accept while in incoming (not mid-call).
-    if (!current || phase !== "incoming" || busy) return;
+    if (!current || phase !== "incoming") return;
+    if (roomRef.current) {
+      toast("End your current call before accepting another.", "error");
+      return;
+    }
     stopIncomingRingtone();
     setBusy(true);
     const result = await acceptCallAction(current.id);
@@ -300,29 +324,33 @@ export function CallProvider({ children }: { children: ReactNode }) {
     setCall(result.data);
     setDirection("incoming");
     await joinLivekit(result.data);
-  }, [busy, call, joinLivekit, phase, toast]);
+  }, [call, joinLivekit, phase, toast]);
 
   const rejectIncoming = useCallback(async () => {
     const current = call;
-    if (!current || busy) return;
+    if (!current) return;
     stopIncomingRingtone();
     setBusy(true);
     const result = await rejectCallAction(current.id);
     setBusy(false);
     if (!result.ok) toast(result.message, "error");
     await resetToIdle();
-  }, [busy, call, resetToIdle, toast]);
+  }, [call, resetToIdle, toast]);
 
   const endActive = useCallback(async () => {
-    const current = call;
-    if (!current || busy) return;
+    const current = callRef.current;
     setBusy(true);
     setPhase("ending");
-    const result = await endCallAction(current.id);
+    if (current?.id) {
+      const result = await endCallAction(current.id);
+      if (!result.ok) {
+        // Still clear local UI so the agent isn't stuck.
+        toast(result.message, "error");
+      }
+    }
     setBusy(false);
-    if (!result.ok) toast(result.message, "error");
     await resetToIdle();
-  }, [busy, call, resetToIdle, toast]);
+  }, [resetToIdle, toast]);
 
   const toggleMute = useCallback(() => {
     const room = roomRef.current;
@@ -378,8 +406,12 @@ export function CallProvider({ children }: { children: ReactNode }) {
       const name =
         normalized === "notification.created" ? "call.invite" : normalized;
 
-      // Caller hears busy even if payload is minimal.
+      // Caller-only: peer is busy. Never show this to the callee / idle agent.
       if (name === "call.busy") {
+        const phaseNow = phaseRef.current;
+        if (phaseNow !== "outgoing" && phaseNow !== "connecting") {
+          return;
+        }
         const busyId =
           parsed?.id ??
           (effectivePayload &&
@@ -387,7 +419,9 @@ export function CallProvider({ children }: { children: ReactNode }) {
           typeof (effectivePayload as { id?: unknown }).id === "string"
             ? (effectivePayload as { id: string }).id
             : null);
-        if (callIdRef.current && busyId && callIdRef.current !== busyId) return;
+        if (callIdRef.current && busyId && callIdRef.current !== busyId) {
+          return;
+        }
         toast("They’re on another call right now.", "error");
         void resetToIdle();
         return;
@@ -409,10 +443,12 @@ export function CallProvider({ children }: { children: ReactNode }) {
       }
 
       if (name === "call.ringing") {
+        // Ringing ack is for the caller. Don't flip an incoming invite into "outgoing".
+        if (phaseRef.current === "incoming") return;
         if (callIdRef.current && callIdRef.current !== parsed.id) return;
         setCall((prev) => ({ ...(prev ?? parsed), ...parsed }));
-        setDirection((d) => d ?? "outgoing");
-        setPhase((p) => (p === "idle" ? "outgoing" : p));
+        setDirection("outgoing");
+        setPhase((p) => (p === "idle" || p === "outgoing" ? "outgoing" : p));
         setConnectionLabel("Ringing…");
         return;
       }
@@ -442,21 +478,45 @@ export function CallProvider({ children }: { children: ReactNode }) {
         name === "call.failed"
       ) {
         if (callIdRef.current && callIdRef.current !== parsed.id) return;
-        stopIncomingRingtone();
+
         const endReason =
           effectivePayload &&
           typeof effectivePayload === "object" &&
           "endReason" in effectivePayload
-            ? String((effectivePayload as { endReason?: unknown }).endReason ?? "")
+            ? String(
+                (effectivePayload as { endReason?: unknown }).endReason ?? "",
+              )
             : "";
+        const peerBusy =
+          name === "call.failed" &&
+          (endReason === "callee_busy" ||
+            endReason.toUpperCase().includes("BUSY"));
+
+        // Peer-busy is a caller-side event. Ignore if we weren't calling out.
+        if (peerBusy) {
+          const phaseNow = phaseRef.current;
+          if (phaseNow !== "outgoing" && phaseNow !== "connecting") {
+            return;
+          }
+        }
+
+        // Don't tear down a ringing inbound UI on unrelated failed noise.
+        if (
+          phaseRef.current === "incoming" &&
+          name === "call.failed" &&
+          !peerBusy
+        ) {
+          // Still allow fail for this same inbound call id.
+          if (callIdRef.current !== parsed.id) return;
+        }
+
+        stopIncomingRingtone();
         const label =
           name === "call.rejected"
             ? "Call rejected"
             : name === "call.timeout" || name === "call.missed"
               ? "No answer"
-              : name === "call.failed" &&
-                  (endReason === "callee_busy" ||
-                    endReason.toUpperCase().includes("BUSY"))
+              : peerBusy
                 ? "They’re on another call right now."
                 : name === "call.failed"
                   ? "Call failed"
