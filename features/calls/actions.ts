@@ -1,14 +1,40 @@
 "use server";
 
 import { callsApi } from "@/lib/api/calls";
+import { isApiError } from "@/lib/api/errors";
 import { toUserMessage } from "@/lib/api/error-handler";
 import type { Call, CallType, LivekitCreds } from "@/types/call";
 
 export type CallActionResult<T> =
   | { ok: true; data: T }
-  | { ok: false; message: string };
+  | { ok: false; message: string; code?: string };
 
-function fail(error: unknown): { ok: false; message: string } {
+function fail(error: unknown): { ok: false; message: string; code?: string } {
+  if (isApiError(error)) {
+    const nestish = `${error.code} ${error.message}`.toUpperCase();
+    if (
+      error.status === 409 ||
+      nestish.includes("CALLER_BUSY") ||
+      nestish.includes("ALREADY_IN_CALL")
+    ) {
+      return {
+        ok: false,
+        code: "CALLER_BUSY",
+        message:
+          "You’re already on a call. End it before starting another.",
+      };
+    }
+    if (
+      nestish.includes("CALLEE_BUSY") ||
+      nestish.includes("BUSY")
+    ) {
+      return {
+        ok: false,
+        code: "CALLEE_BUSY",
+        message: "They’re on another call right now. Try again shortly.",
+      };
+    }
+  }
   return { ok: false, message: toUserMessage(error) };
 }
 

@@ -25,6 +25,10 @@ import {
 } from "@/features/calls/actions";
 import { IncomingCallModal } from "@/features/calls/components/incoming-call-modal";
 import { ActiveCallOverlay } from "@/features/calls/components/active-call-overlay";
+import {
+  startIncomingRingtone,
+  stopIncomingRingtone,
+} from "@/features/calls/ringtone";
 import { useOps } from "@/features/ops/ops-provider";
 import { useToast } from "@/components/providers/toast-provider";
 import { getAgentSocket } from "@/lib/realtime/agent-socket";
@@ -78,6 +82,8 @@ const SOCKET_EVENTS = [
   "call_missed",
   "call.failed",
   "call_failed",
+  "call.busy",
+  "call_busy",
   "notification.created",
   "notification_created",
 ] as const;
@@ -137,6 +143,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
   }, [clearRefreshTimer]);
 
   const resetToIdle = useCallback(async () => {
+    stopIncomingRingtone();
     await detachRoom();
     setPhase("idle");
     setCall(null);
@@ -246,14 +253,19 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const startCall = useCallback(
     async (taskId: string, type: CallType = "AUDIO") => {
       if (phaseRef.current !== "idle" || busy) {
-        toast("Finish the current call first.", "error");
+        toast("End your current call before starting another.", "error");
         return false;
       }
       setBusy(true);
       const result = await startCallAction(taskId, type);
       setBusy(false);
       if (!result.ok) {
-        toast(result.message, "error");
+        toast(
+          result.code === "CALLER_BUSY"
+            ? "End your current call before starting another."
+            : result.message,
+          "error",
+        );
         return false;
       }
       setCall(result.data);
@@ -270,12 +282,19 @@ export function CallProvider({ children }: { children: ReactNode }) {
 
   const acceptIncoming = useCallback(async () => {
     const current = call;
+    // Single-call product: only accept while in incoming (not mid-call).
     if (!current || phase !== "incoming" || busy) return;
+    stopIncomingRingtone();
     setBusy(true);
     const result = await acceptCallAction(current.id);
     setBusy(false);
     if (!result.ok) {
-      toast(result.message, "error");
+      toast(
+        result.code === "CALLER_BUSY"
+          ? "End your current call before accepting another."
+          : result.message,
+        "error",
+      );
       return;
     }
     setCall(result.data);
@@ -286,6 +305,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const rejectIncoming = useCallback(async () => {
     const current = call;
     if (!current || busy) return;
+    stopIncomingRingtone();
     setBusy(true);
     const result = await rejectCallAction(current.id);
     setBusy(false);
@@ -355,11 +375,28 @@ export function CallProvider({ children }: { children: ReactNode }) {
       }
 
       const parsed = parseCallPayload(effectivePayload);
-      if (!parsed) return;
       const name =
         normalized === "notification.created" ? "call.invite" : normalized;
 
+      // Caller hears busy even if payload is minimal.
+      if (name === "call.busy") {
+        const busyId =
+          parsed?.id ??
+          (effectivePayload &&
+          typeof effectivePayload === "object" &&
+          typeof (effectivePayload as { id?: unknown }).id === "string"
+            ? (effectivePayload as { id: string }).id
+            : null);
+        if (callIdRef.current && busyId && callIdRef.current !== busyId) return;
+        toast("They’re on another call right now.", "error");
+        void resetToIdle();
+        return;
+      }
+
+      if (!parsed) return;
+
       if (name === "call.invite") {
+        // Backend only invites when free; still guard against overlapping UI.
         if (phaseRef.current !== "idle" && callIdRef.current !== parsed.id) {
           return;
         }
@@ -367,6 +404,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
         setDirection("incoming");
         setPhase("incoming");
         setConnectionLabel("Incoming call");
+        startIncomingRingtone();
         return;
       }
 
@@ -381,6 +419,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
 
       if (name === "call.accepted" || name === "call.connected") {
         if (callIdRef.current && callIdRef.current !== parsed.id) return;
+        stopIncomingRingtone();
         const merged = { ...(callRef.current ?? parsed), ...parsed };
         setCall(merged);
         if (merged.livekit?.token && !roomRef.current) {
@@ -403,14 +442,25 @@ export function CallProvider({ children }: { children: ReactNode }) {
         name === "call.failed"
       ) {
         if (callIdRef.current && callIdRef.current !== parsed.id) return;
+        stopIncomingRingtone();
+        const endReason =
+          effectivePayload &&
+          typeof effectivePayload === "object" &&
+          "endReason" in effectivePayload
+            ? String((effectivePayload as { endReason?: unknown }).endReason ?? "")
+            : "";
         const label =
           name === "call.rejected"
             ? "Call rejected"
             : name === "call.timeout" || name === "call.missed"
               ? "No answer"
-              : name === "call.failed"
-                ? "Call failed"
-                : "Call ended";
+              : name === "call.failed" &&
+                  (endReason === "callee_busy" ||
+                    endReason.toUpperCase().includes("BUSY"))
+                ? "They’re on another call right now."
+                : name === "call.failed"
+                  ? "Call failed"
+                  : "Call ended";
         toast(label, name === "call.ended" ? "success" : "error");
         void resetToIdle();
       }
@@ -429,8 +479,18 @@ export function CallProvider({ children }: { children: ReactNode }) {
     };
   }, [connected, joinLivekit, resetToIdle, toast]);
 
+  // Keep ringtone in sync with incoming phase (covers remount / late invite).
+  useEffect(() => {
+    if (phase === "incoming") {
+      startIncomingRingtone();
+      return () => stopIncomingRingtone();
+    }
+    stopIncomingRingtone();
+  }, [phase]);
+
   useEffect(() => {
     return () => {
+      stopIncomingRingtone();
       void detachRoom();
     };
   }, [detachRoom]);
