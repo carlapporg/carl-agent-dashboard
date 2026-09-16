@@ -11,12 +11,6 @@ import {
   type ReactNode,
 } from "react";
 import {
-  ConnectionState,
-  Room,
-  RoomEvent,
-  Track,
-} from "livekit-client";
-import {
   acceptCallAction,
   endCallAction,
   refreshCallTokenAction,
@@ -25,6 +19,16 @@ import {
 } from "@/features/calls/actions";
 import { IncomingCallModal } from "@/features/calls/components/incoming-call-modal";
 import { ActiveCallOverlay } from "@/features/calls/components/active-call-overlay";
+import {
+  disconnectLivekitSession,
+  getLivekitCallId,
+  isLivekitJoined,
+  joinLivekitSession,
+  refreshLivekitSession,
+  setLivekitMicrophoneEnabled,
+  setLivekitRemoteAudioElement,
+  setLivekitSessionHandlers,
+} from "@/features/calls/livekit-session";
 import {
   startIncomingRingtone,
   stopIncomingRingtone,
@@ -119,22 +123,21 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const [elapsedSec, setElapsedSec] = useState(0);
   const [busy, setBusy] = useState(false);
 
-  const roomRef = useRef<Room | null>(null);
-  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+  const roomAudioRef = useRef<HTMLAudioElement | null>(null);
   const callIdRef = useRef<string | null>(null);
   const callRef = useRef<Call | null>(null);
   const activeStartedRef = useRef<number | null>(null);
   const refreshTimerRef = useRef<number | null>(null);
-  /** Prevents double join from accept API + call.accepted + call.connected. */
-  const joiningRef = useRef(false);
-  const joinPromiseRef = useRef<Promise<boolean> | null>(null);
-  const joinedCallIdRef = useRef<string | null>(null);
   /** When we end/reject locally, ignore the matching socket toast. */
   const quietHangupIdsRef = useRef<Set<string>>(new Set());
   /** Dedupe terminal socket events (ended + underscore alias, etc.). */
   const handledTerminalIdsRef = useRef<Set<string>>(new Set());
   const phaseRef = useRef(phase);
+  const directionRef = useRef(direction);
+  const ensureJoinedRef = useRef<(call: Call) => Promise<void>>(async () => {});
+  const resetToIdleRef = useRef<() => Promise<void>>(async () => {});
   phaseRef.current = phase;
+  directionRef.current = direction;
   callIdRef.current = call?.id ?? null;
   callRef.current = call;
 
@@ -153,29 +156,10 @@ export function CallProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const detachRoom = useCallback(async () => {
-    clearRefreshTimer();
-    const room = roomRef.current;
-    roomRef.current = null;
-    if (room) {
-      try {
-        room.removeAllListeners();
-        await room.disconnect(true);
-      } catch {
-        /* ignore */
-      }
-    }
-    if (remoteAudioRef.current) {
-      remoteAudioRef.current.srcObject = null;
-    }
-  }, [clearRefreshTimer]);
-
   const resetToIdle = useCallback(async () => {
     stopIncomingRingtone();
-    joiningRef.current = false;
-    joinPromiseRef.current = null;
-    joinedCallIdRef.current = null;
-    await detachRoom();
+    clearRefreshTimer();
+    await disconnectLivekitSession();
     setPhase("idle");
     setCall(null);
     setDirection(null);
@@ -184,7 +168,8 @@ export function CallProvider({ children }: { children: ReactNode }) {
     setElapsedSec(0);
     setBusy(false);
     activeStartedRef.current = null;
-  }, [detachRoom]);
+  }, [clearRefreshTimer]);
+  resetToIdleRef.current = resetToIdle;
 
   const scheduleTokenRefresh = useCallback(
     (callId: string, expiresAt?: string | null) => {
@@ -198,183 +183,78 @@ export function CallProvider({ children }: { children: ReactNode }) {
       }
       refreshTimerRef.current = window.setTimeout(() => {
         void (async () => {
-          // Don't tear down a live call for token refresh races.
-          if (joinedCallIdRef.current !== callId || !roomRef.current) return;
+          if (!isLivekitJoined(callId)) return;
           const result = await refreshCallTokenAction(callId);
-          if (!result.ok) return;
-          const room = roomRef.current;
-          if (!room || joinedCallIdRef.current !== callId) return;
-          try {
-            await room.disconnect();
-            if (joinedCallIdRef.current !== callId) return;
-            await room.connect(result.data.url, result.data.token);
-            scheduleTokenRefresh(callId, result.data.expiresAt);
-          } catch {
+          if (!result.ok || !isLivekitJoined(callId)) return;
+          const ok = await refreshLivekitSession({
+            callId,
+            creds: result.data,
+          });
+          if (!ok) {
             toast("Call reconnect failed. Try ending and calling again.", "error");
+            return;
           }
+          scheduleTokenRefresh(callId, result.data.expiresAt);
         })();
       }, waitMs);
     },
     [clearRefreshTimer, toast],
   );
 
-  const joinLivekit = useCallback(
-    async (next: Call) => {
-      // Already in this call's room — never disconnect/rejoin.
-      if (
-        joinedCallIdRef.current === next.id &&
-        roomRef.current &&
-        roomRef.current.state !== ConnectionState.Disconnected
-      ) {
-        return true;
-      }
-
-      const creds = next.livekit;
-      if (!creds?.token || !creds.url) {
-        toast("Missing LiveKit token from server.", "error");
-        return false;
-      }
-
-      joiningRef.current = true;
-      setPhase("connecting");
-      setConnectionLabel("Connecting…");
-
-      const room = new Room({
-        adaptiveStream: true,
-        dynacast: true,
-      });
-      // Replace any stale room without racing a second connect.
-      const previous = roomRef.current;
-      roomRef.current = room;
-      if (previous) {
-        try {
-          previous.removeAllListeners();
-          await previous.disconnect(true);
-        } catch {
-          /* ignore */
-        }
-      }
-
-      room.on(RoomEvent.ConnectionStateChanged, (state) => {
-        if (roomRef.current !== room) return;
-        if (state === ConnectionState.Connected) {
-          setConnectionLabel("Connected");
-          setPhase("active");
-          if (!activeStartedRef.current) {
-            activeStartedRef.current = Date.now();
-          }
-        } else if (state === ConnectionState.Reconnecting) {
-          setConnectionLabel("Reconnecting…");
-        } else if (state === ConnectionState.Disconnected) {
-          setConnectionLabel("Disconnected");
-        }
-      });
-
-      room.on(RoomEvent.TrackSubscribed, (track) => {
-        if (track.kind !== Track.Kind.Audio) return;
-        const el = remoteAudioRef.current;
-        if (!el) return;
-        track.attach(el);
-        void el.play().catch(() => undefined);
-      });
-
-      room.on(RoomEvent.Disconnected, () => {
-        if (roomRef.current !== room) return;
-        setConnectionLabel("Disconnected");
-      });
-
-      try {
-        await room.connect(creds.url, creds.token);
-        // Hangup or a newer join replaced this room — exit quietly.
-        if (roomRef.current !== room) {
-          try {
-            room.removeAllListeners();
-            await room.disconnect(true);
-          } catch {
-            /* ignore */
-          }
-          return false;
-        }
-        await room.localParticipant.setMicrophoneEnabled(true);
-        setMuted(false);
-        joinedCallIdRef.current = next.id;
+  const ensureJoined = useCallback(
+    async (incoming: Call) => {
+      if (isLivekitJoined(incoming.id)) {
         setPhase("active");
         setConnectionLabel("Connected");
         if (!activeStartedRef.current) {
           activeStartedRef.current = Date.now();
         }
-        scheduleTokenRefresh(next.id, creds.expiresAt);
-        return true;
-      } catch {
-        if (roomRef.current === room) {
+        return;
+      }
+
+      let next = mergeCallPreserveName(callRef.current, incoming);
+      setCall(next);
+      setPhase("connecting");
+      setConnectionLabel("Connecting…");
+
+      if (!next.livekit?.token || !next.livekit?.url) {
+        const tokenResult = await refreshCallTokenAction(next.id);
+        if (!tokenResult.ok) return;
+        next = { ...next, livekit: tokenResult.data };
+        setCall(next);
+      }
+
+      if (!next.livekit?.token || !next.livekit?.url) {
+        toast("Missing LiveKit token from server.", "error");
+        return;
+      }
+
+      const ok = await joinLivekitSession({
+        callId: next.id,
+        creds: next.livekit,
+      });
+      if (!ok) {
+        if (getLivekitCallId() !== next.id) {
           toast("Could not join the call room.", "error");
-          await detachRoom();
-          setPhase(direction === "incoming" ? "incoming" : "outgoing");
+          setPhase(
+            directionRef.current === "incoming" ? "incoming" : "outgoing",
+          );
           setConnectionLabel("Failed to connect");
         }
-        return false;
-      } finally {
-        joiningRef.current = false;
-      }
-    },
-    [detachRoom, direction, scheduleTokenRefresh, toast],
-  );
-
-  const ensureJoined = useCallback(
-    async (incoming: Call) => {
-      if (
-        joinedCallIdRef.current === incoming.id &&
-        roomRef.current &&
-        roomRef.current.state !== ConnectionState.Disconnected
-      ) {
         return;
       }
 
-      if (joinPromiseRef.current) {
-        await joinPromiseRef.current;
-        return;
+      setMuted(false);
+      setPhase("active");
+      setConnectionLabel("Connected");
+      if (!activeStartedRef.current) {
+        activeStartedRef.current = Date.now();
       }
-
-      // Reserve the slot synchronously before any await.
-      let settle!: (value: boolean) => void;
-      const run = new Promise<boolean>((resolve) => {
-        settle = resolve;
-      });
-      joinPromiseRef.current = run;
-
-      try {
-        let next = mergeCallPreserveName(callRef.current, incoming);
-        setCall(next);
-        if (!next.livekit?.token || !next.livekit?.url) {
-          const tokenResult = await refreshCallTokenAction(next.id);
-          if (!tokenResult.ok) {
-            settle(false);
-            return;
-          }
-          next = { ...next, livekit: tokenResult.data };
-          setCall(next);
-        }
-        if (
-          joinedCallIdRef.current === next.id &&
-          roomRef.current &&
-          roomRef.current.state !== ConnectionState.Disconnected
-        ) {
-          settle(true);
-          return;
-        }
-        settle(await joinLivekit(next));
-      } catch {
-        settle(false);
-      } finally {
-        if (joinPromiseRef.current === run) {
-          joinPromiseRef.current = null;
-        }
-      }
-
-      await run;
+      scheduleTokenRefresh(next.id, next.livekit.expiresAt);
     },
-    [joinLivekit],
+    [scheduleTokenRefresh, toast],
   );
+  ensureJoinedRef.current = ensureJoined;
 
   const startCall = useCallback(
     async (
@@ -387,7 +267,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
       const inLiveCall =
         phaseNow === "active" ||
         phaseNow === "incoming" ||
-        Boolean(roomRef.current);
+        isLivekitJoined();
       if (inLiveCall) {
         toast("End your current call before starting another.", "error");
         return false;
@@ -407,7 +287,6 @@ export function CallProvider({ children }: { children: ReactNode }) {
       setBusy(false);
       if (!result.ok) {
         if (result.code === "CALLER_BUSY") {
-          // Nest still has an open call for this agent — clear local and explain.
           await resetToIdle();
           toast(
             "Server still has an open call for you. Wait a few seconds, or end it from the call bar if you see one, then try again.",
@@ -418,8 +297,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
         toast(result.message, "error");
         return false;
       }
-      // Stay on "Ringing…" until callee accepts. Seed client name from the task
-      // because Nest often omits it (or sends the placeholder "Client").
+      // Stay on "Calling…" until callee accepts. Do NOT join LiveKit yet.
       const seeded: Call = {
         ...result.data,
         customerName:
@@ -427,6 +305,9 @@ export function CallProvider({ children }: { children: ReactNode }) {
           result.data.customerName,
         taskTitle: meta?.taskTitle ?? result.data.taskTitle ?? null,
         taskNumber: meta?.taskNumber ?? result.data.taskNumber ?? null,
+        // Drop any premature LiveKit creds from POST /calls — joining early
+        // causes DUPLICATE_IDENTITY when accepted/connected also join.
+        livekit: null,
       };
       setCall(seeded);
       setDirection("outgoing");
@@ -439,9 +320,8 @@ export function CallProvider({ children }: { children: ReactNode }) {
 
   const acceptIncoming = useCallback(async () => {
     const current = call;
-    // Single-call product: only accept while in incoming (not mid-call).
     if (!current || phase !== "incoming") return;
-    if (roomRef.current || joiningRef.current) return;
+    if (isLivekitJoined()) return;
     stopIncomingRingtone();
     setBusy(true);
     const result = await acceptCallAction(current.id);
@@ -451,8 +331,6 @@ export function CallProvider({ children }: { children: ReactNode }) {
         toast("End your current call before accepting another.", "error");
         return;
       }
-      // HTTP may have succeeded but body parse failed — still try to connect.
-      // Socket call.accepted will also drive join; avoid a scary false toast.
       await ensureJoined(current);
       return;
     }
@@ -485,7 +363,6 @@ export function CallProvider({ children }: { children: ReactNode }) {
     setBusy(true);
     setPhase("ending");
     if (current?.id) {
-      // Ignore result errors — Nest may return odd bodies or "already ended".
       await endCallAction(current.id);
     }
     setBusy(false);
@@ -493,13 +370,12 @@ export function CallProvider({ children }: { children: ReactNode }) {
   }, [markQuietHangup, resetToIdle]);
 
   const toggleMute = useCallback(() => {
-    const room = roomRef.current;
-    const next = !muted;
-    setMuted(next);
-    if (room) {
-      void room.localParticipant.setMicrophoneEnabled(!next);
-    }
-  }, [muted]);
+    setMuted((prev) => {
+      const next = !prev;
+      void setLivekitMicrophoneEnabled(!next);
+      return next;
+    });
+  }, []);
 
   // Elapsed timer while active / outgoing connected
   useEffect(() => {
@@ -603,23 +479,32 @@ export function CallProvider({ children }: { children: ReactNode }) {
         const merged = mergeCallPreserveName(callRef.current, parsed);
         setCall(merged);
 
-        // Outbound: Nest often emits accepted then connected. Join on connected
-        // (or on accepted only when LiveKit creds are already present).
         const outbound =
+          directionRef.current === "outgoing" ||
           phaseRef.current === "outgoing" ||
-          phaseRef.current === "connecting" ||
-          phaseRef.current === "active";
-        if (outbound && name === "call.accepted" && !merged.livekit?.token) {
+          phaseRef.current === "connecting";
+
+        // Outbound: Nest fires accepted then connected. Join ONLY on connected
+        // so we never open two LiveKit sessions (DUPLICATE_IDENTITY / leave 2).
+        if (outbound && name === "call.accepted") {
           setConnectionLabel("Connecting…");
+          setPhase("connecting");
+          // Fallback if connected never arrives (some Nest builds skip it).
+          window.setTimeout(() => {
+            if (isLivekitJoined(merged.id)) return;
+            if (
+              phaseRef.current !== "connecting" &&
+              phaseRef.current !== "outgoing"
+            ) {
+              return;
+            }
+            if (callIdRef.current !== merged.id) return;
+            void ensureJoinedRef.current(merged);
+          }, 2500);
           return;
         }
 
-        if (
-          roomRef.current ||
-          joiningRef.current ||
-          joinPromiseRef.current ||
-          joinedCallIdRef.current === merged.id
-        ) {
+        if (isLivekitJoined(merged.id)) {
           setPhase("active");
           setConnectionLabel("Connected");
           if (!activeStartedRef.current) {
@@ -627,7 +512,8 @@ export function CallProvider({ children }: { children: ReactNode }) {
           }
           return;
         }
-        void ensureJoined(merged);
+
+        void ensureJoinedRef.current(merged);
         return;
       }
 
@@ -715,7 +601,28 @@ export function CallProvider({ children }: { children: ReactNode }) {
         socket.off(eventName, fn);
       }
     };
-  }, [connected, ensureJoined, resetToIdle, toast]);
+  }, [connected, toast]);
+
+  // Wire remote <audio> + session UI callbacks once.
+  useEffect(() => {
+    setLivekitRemoteAudioElement(roomAudioRef.current);
+    setLivekitSessionHandlers({
+      onState: (label, active) => {
+        setConnectionLabel(label);
+        if (active) {
+          setPhase("active");
+          if (!activeStartedRef.current) {
+            activeStartedRef.current = Date.now();
+          }
+        }
+      },
+    });
+    return () => {
+      setLivekitSessionHandlers({});
+      // Intentionally do NOT disconnect LiveKit on unmount — React Strict Mode
+      // remounts would drop a live call and cause DUPLICATE_IDENTITY on rejoin.
+    };
+  }, []);
 
   // Keep ringtone in sync with incoming phase (covers remount / late invite).
   useEffect(() => {
@@ -729,9 +636,8 @@ export function CallProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     return () => {
       stopIncomingRingtone();
-      void detachRoom();
     };
-  }, [detachRoom]);
+  }, []);
 
   const value = useMemo<CallContextValue>(
     () => ({
@@ -775,7 +681,15 @@ export function CallProvider({ children }: { children: ReactNode }) {
     <CallContext.Provider value={value}>
       {children}
       {/* Remote participant audio */}
-      <audio ref={remoteAudioRef} autoPlay playsInline className="hidden" />
+      <audio
+        ref={(el) => {
+          roomAudioRef.current = el;
+          setLivekitRemoteAudioElement(el);
+        }}
+        autoPlay
+        playsInline
+        className="hidden"
+      />
 
       {phase === "incoming" && call ? (
         <IncomingCallModal
