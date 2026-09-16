@@ -8,6 +8,7 @@ import {
   type CallType,
   type LivekitCreds,
 } from "@/types/call";
+import { parseCallPayload } from "@/lib/realtime/parse-call";
 
 function unwrapCall(data: unknown): Call {
   if (data && typeof data === "object") {
@@ -30,6 +31,11 @@ function unwrapCall(data: unknown): Call {
   }
   const parsed = callSchema.safeParse(data);
   if (parsed.success) return parsed.data;
+
+  // Nest sometimes returns odd envelopes; keep the call usable.
+  const loose = parseCallPayload(data);
+  if (loose) return loose;
+
   throw new Error("Invalid call response");
 }
 
@@ -43,6 +49,29 @@ function unwrapLivekit(data: unknown): LivekitCreds {
         (record.data as { livekit?: unknown }).livekit ?? record.data,
       );
       if (nested.success) return nested.data;
+    }
+    // token + url at top level under different keys
+    const token =
+      typeof record.token === "string"
+        ? record.token
+        : typeof record.accessToken === "string"
+          ? record.accessToken
+          : null;
+    const url =
+      typeof record.url === "string"
+        ? record.url
+        : typeof record.wsUrl === "string"
+          ? record.wsUrl
+          : typeof record.livekitUrl === "string"
+            ? record.livekitUrl
+            : null;
+    if (token && url) {
+      return {
+        token,
+        url,
+        expiresAt:
+          typeof record.expiresAt === "string" ? record.expiresAt : null,
+      };
     }
   }
   throw new Error("Invalid LiveKit token response");

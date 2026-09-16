@@ -135,8 +135,20 @@ function resolveConfirmationPrefill(
 export function mapAgentTaskToUi(task: AgentTask): Task {
   const backendStatus = inferBackendStatus(task);
   const summary = task.description?.trim() ?? "";
-  const alias = task.client?.alias ?? "Client";
-  const clientName = task.client?.firstName?.trim() || alias;
+  const alias = task.client?.alias?.trim() || "";
+  const first = task.client?.firstName?.trim() || "";
+  const last = task.client?.lastName?.trim() || "";
+  const fromParts = [first, last].filter(Boolean).join(" ").trim();
+  const named =
+    fromParts ||
+    task.client?.displayName?.trim() ||
+    task.client?.fullName?.trim() ||
+    task.client?.name?.trim() ||
+    "";
+  const clientName =
+    named ||
+    (alias && !/^client$/i.test(alias) ? alias : "") ||
+    "Client";
   const created = new Date(task.createdAt);
   const stamp = Number.isNaN(created.getTime())
     ? "000000"

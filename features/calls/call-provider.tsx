@@ -34,7 +34,9 @@ import { useToast } from "@/components/providers/toast-provider";
 import { getAgentSocket } from "@/lib/realtime/agent-socket";
 import {
   callPeerLabel,
+  mergeCallPreserveName,
   parseCallPayload,
+  preferPeerName,
 } from "@/lib/realtime/parse-call";
 import type { Call, CallDirection, CallType } from "@/types/call";
 
@@ -46,6 +48,12 @@ type CallPhase =
   | "active"
   | "ending";
 
+type CallStartMeta = {
+  customerName?: string | null;
+  taskTitle?: string | null;
+  taskNumber?: string | number | null;
+};
+
 type CallContextValue = {
   phase: CallPhase;
   call: Call | null;
@@ -54,7 +62,11 @@ type CallContextValue = {
   connectionLabel: string;
   elapsedSec: number;
   busy: boolean;
-  startCall: (taskId: string, type?: CallType) => Promise<boolean>;
+  startCall: (
+    taskId: string,
+    type?: CallType,
+    meta?: CallStartMeta,
+  ) => Promise<boolean>;
   acceptIncoming: () => Promise<void>;
   rejectIncoming: () => Promise<void>;
   endActive: () => Promise<void>;
@@ -113,10 +125,24 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const callRef = useRef<Call | null>(null);
   const activeStartedRef = useRef<number | null>(null);
   const refreshTimerRef = useRef<number | null>(null);
+  /** Prevents double join from accept API + call.accepted socket. */
+  const joiningRef = useRef(false);
+  /** When we end/reject locally, ignore the matching socket toast. */
+  const quietHangupIdsRef = useRef<Set<string>>(new Set());
+  /** Dedupe terminal socket events (ended + underscore alias, etc.). */
+  const handledTerminalIdsRef = useRef<Set<string>>(new Set());
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
   callIdRef.current = call?.id ?? null;
   callRef.current = call;
+
+  const markQuietHangup = useCallback((callId: string | null | undefined) => {
+    if (!callId) return;
+    quietHangupIdsRef.current.add(callId);
+    window.setTimeout(() => {
+      quietHangupIdsRef.current.delete(callId);
+    }, 8_000);
+  }, []);
 
   const clearRefreshTimer = useCallback(() => {
     if (refreshTimerRef.current != null) {
@@ -144,6 +170,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
 
   const resetToIdle = useCallback(async () => {
     stopIncomingRingtone();
+    joiningRef.current = false;
     await detachRoom();
     setPhase("idle");
     setCall(null);
@@ -186,12 +213,16 @@ export function CallProvider({ children }: { children: ReactNode }) {
 
   const joinLivekit = useCallback(
     async (next: Call) => {
+      if (roomRef.current || joiningRef.current) {
+        return true;
+      }
       const creds = next.livekit;
       if (!creds?.token || !creds.url) {
         toast("Missing LiveKit token from server.", "error");
         return false;
       }
 
+      joiningRef.current = true;
       await detachRoom();
       setPhase("connecting");
       setConnectionLabel("Connecting…");
@@ -238,8 +269,10 @@ export function CallProvider({ children }: { children: ReactNode }) {
           activeStartedRef.current = Date.now();
         }
         scheduleTokenRefresh(next.id, creds.expiresAt);
+        joiningRef.current = false;
         return true;
       } catch {
+        joiningRef.current = false;
         toast("Could not join the call room.", "error");
         await detachRoom();
         setPhase(direction === "incoming" ? "incoming" : "outgoing");
@@ -250,8 +283,31 @@ export function CallProvider({ children }: { children: ReactNode }) {
     [detachRoom, direction, scheduleTokenRefresh, toast],
   );
 
+  const ensureJoined = useCallback(
+    async (incoming: Call) => {
+      if (roomRef.current || joiningRef.current) return;
+      let next = mergeCallPreserveName(callRef.current, incoming);
+      setCall(next);
+      if (!next.livekit?.token || !next.livekit?.url) {
+        const tokenResult = await refreshCallTokenAction(next.id);
+        if (!tokenResult.ok) {
+          // Socket may deliver creds a moment later — don't spam fail toasts.
+          return;
+        }
+        next = { ...next, livekit: tokenResult.data };
+        setCall(next);
+      }
+      await joinLivekit(next);
+    },
+    [joinLivekit],
+  );
+
   const startCall = useCallback(
-    async (taskId: string, type: CallType = "AUDIO") => {
+    async (
+      taskId: string,
+      type: CallType = "AUDIO",
+      meta?: CallStartMeta,
+    ) => {
       // Real in-progress call — block.
       const phaseNow = phaseRef.current;
       const inLiveCall =
@@ -288,69 +344,79 @@ export function CallProvider({ children }: { children: ReactNode }) {
         toast(result.message, "error");
         return false;
       }
-      setCall(result.data);
+      // Stay on "Ringing…" until callee accepts. Seed client name from the task
+      // because Nest often omits it (or sends the placeholder "Client").
+      const seeded: Call = {
+        ...result.data,
+        customerName:
+          preferPeerName(meta?.customerName, result.data.customerName) ??
+          result.data.customerName,
+        taskTitle: meta?.taskTitle ?? result.data.taskTitle ?? null,
+        taskNumber: meta?.taskNumber ?? result.data.taskNumber ?? null,
+      };
+      setCall(seeded);
       setDirection("outgoing");
       setPhase("outgoing");
-      setConnectionLabel("Ringing…");
-      if (result.data.livekit?.token) {
-        void joinLivekit(result.data);
-      }
+      setConnectionLabel("Calling…");
       return true;
     },
-    [joinLivekit, resetToIdle, toast],
+    [resetToIdle, toast],
   );
 
   const acceptIncoming = useCallback(async () => {
     const current = call;
     // Single-call product: only accept while in incoming (not mid-call).
     if (!current || phase !== "incoming") return;
-    if (roomRef.current) {
-      toast("End your current call before accepting another.", "error");
-      return;
-    }
+    if (roomRef.current || joiningRef.current) return;
     stopIncomingRingtone();
     setBusy(true);
     const result = await acceptCallAction(current.id);
     setBusy(false);
     if (!result.ok) {
-      toast(
-        result.code === "CALLER_BUSY"
-          ? "End your current call before accepting another."
-          : result.message,
-        "error",
-      );
+      if (result.code === "CALLER_BUSY") {
+        toast("End your current call before accepting another.", "error");
+        return;
+      }
+      // HTTP may have succeeded but body parse failed — still try to connect.
+      // Socket call.accepted will also drive join; avoid a scary false toast.
+      await ensureJoined(current);
       return;
     }
-    setCall(result.data);
+    const merged = mergeCallPreserveName(current, result.data);
+    setCall(merged);
     setDirection("incoming");
-    await joinLivekit(result.data);
-  }, [call, joinLivekit, phase, toast]);
+    await ensureJoined(merged);
+  }, [call, ensureJoined, phase, toast]);
 
   const rejectIncoming = useCallback(async () => {
     const current = call;
     if (!current) return;
     stopIncomingRingtone();
+    markQuietHangup(current.id);
     setBusy(true);
-    const result = await rejectCallAction(current.id);
+    await rejectCallAction(current.id);
     setBusy(false);
-    if (!result.ok) toast(result.message, "error");
     await resetToIdle();
-  }, [call, resetToIdle, toast]);
+  }, [call, markQuietHangup, resetToIdle]);
 
   const endActive = useCallback(async () => {
     const current = callRef.current;
+    markQuietHangup(current?.id);
+    if (current?.id) {
+      handledTerminalIdsRef.current.add(current.id);
+      window.setTimeout(() => {
+        if (current.id) handledTerminalIdsRef.current.delete(current.id);
+      }, 8_000);
+    }
     setBusy(true);
     setPhase("ending");
     if (current?.id) {
-      const result = await endCallAction(current.id);
-      if (!result.ok) {
-        // Still clear local UI so the agent isn't stuck.
-        toast(result.message, "error");
-      }
+      // Ignore result errors — Nest may return odd bodies or "already ended".
+      await endCallAction(current.id);
     }
     setBusy(false);
     await resetToIdle();
-  }, [resetToIdle, toast]);
+  }, [markQuietHangup, resetToIdle]);
 
   const toggleMute = useCallback(() => {
     const room = roomRef.current;
@@ -434,7 +500,11 @@ export function CallProvider({ children }: { children: ReactNode }) {
         if (phaseRef.current !== "idle" && callIdRef.current !== parsed.id) {
           return;
         }
-        setCall(parsed);
+        setCall((prev) =>
+          callIdRef.current === parsed.id
+            ? mergeCallPreserveName(prev, parsed)
+            : parsed,
+        );
         setDirection("incoming");
         setPhase("incoming");
         setConnectionLabel("Incoming call");
@@ -446,27 +516,28 @@ export function CallProvider({ children }: { children: ReactNode }) {
         // Ringing ack is for the caller. Don't flip an incoming invite into "outgoing".
         if (phaseRef.current === "incoming") return;
         if (callIdRef.current && callIdRef.current !== parsed.id) return;
-        setCall((prev) => ({ ...(prev ?? parsed), ...parsed }));
+        setCall((prev) => mergeCallPreserveName(prev, parsed));
         setDirection("outgoing");
         setPhase((p) => (p === "idle" || p === "outgoing" ? "outgoing" : p));
-        setConnectionLabel("Ringing…");
+        setConnectionLabel("Calling…");
         return;
       }
 
       if (name === "call.accepted" || name === "call.connected") {
         if (callIdRef.current && callIdRef.current !== parsed.id) return;
+        // Caller: only connect after the other side accepts (not while ringing).
         stopIncomingRingtone();
-        const merged = { ...(callRef.current ?? parsed), ...parsed };
+        const merged = mergeCallPreserveName(callRef.current, parsed);
         setCall(merged);
-        if (merged.livekit?.token && !roomRef.current) {
-          void joinLivekit(merged);
-        } else {
+        if (roomRef.current || joiningRef.current) {
           setPhase("active");
           setConnectionLabel("Connected");
           if (!activeStartedRef.current) {
             activeStartedRef.current = Date.now();
           }
+          return;
         }
+        void ensureJoined(merged);
         return;
       }
 
@@ -478,6 +549,11 @@ export function CallProvider({ children }: { children: ReactNode }) {
         name === "call.failed"
       ) {
         if (callIdRef.current && callIdRef.current !== parsed.id) return;
+        if (handledTerminalIdsRef.current.has(parsed.id)) return;
+        handledTerminalIdsRef.current.add(parsed.id);
+        window.setTimeout(() => {
+          handledTerminalIdsRef.current.delete(parsed.id);
+        }, 8_000);
 
         const endReason =
           effectivePayload &&
@@ -511,6 +587,18 @@ export function CallProvider({ children }: { children: ReactNode }) {
         }
 
         stopIncomingRingtone();
+
+        // We hung up / rejected — UI already cleared; skip duplicate popups.
+        if (quietHangupIdsRef.current.has(parsed.id)) {
+          void resetToIdle();
+          return;
+        }
+
+        // Already idle after local end — skip leftover socket noise.
+        if (phaseRef.current === "idle" && !callIdRef.current) {
+          return;
+        }
+
         const label =
           name === "call.rejected"
             ? "Call rejected"
@@ -537,7 +625,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
         socket.off(eventName, fn);
       }
     };
-  }, [connected, joinLivekit, resetToIdle, toast]);
+  }, [connected, ensureJoined, resetToIdle, toast]);
 
   // Keep ringtone in sync with incoming phase (covers remount / late invite).
   useEffect(() => {
@@ -617,9 +705,10 @@ export function CallProvider({ children }: { children: ReactNode }) {
         <ActiveCallOverlay
           peerName={peer}
           taskHint={taskHint}
+          mode={phase}
           statusLabel={
             phase === "outgoing"
-              ? "Calling…"
+              ? "Waiting for them to answer…"
               : phase === "connecting"
                 ? "Connecting…"
                 : phase === "ending"

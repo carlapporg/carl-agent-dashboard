@@ -1,7 +1,10 @@
 /**
- * Incoming call ringtone (Web Audio). Loops until stopIncomingRingtone().
+ * Incoming call ringtone. Uses a looping telephone WAV; falls back to Web Audio.
  */
 
+const RINGTONE_SRC = "/sounds/incoming-ring.wav";
+
+let audioEl: HTMLAudioElement | null = null;
 let audioCtx: AudioContext | null = null;
 let loopTimer: number | null = null;
 let playing = false;
@@ -37,12 +40,10 @@ function tone(
   oscillator.stop(start + duration + 0.03);
 }
 
-/** One classic dual-tone ring burst (~1.2s). */
 function playBurst(ctx: AudioContext) {
   const t = ctx.currentTime;
-  // US-style ring: 440 + 480 Hz together
-  tone(ctx, 440, t, 0.9, 0.07);
-  tone(ctx, 480, t, 0.9, 0.07);
+  tone(ctx, 440, t, 1.8, 0.09);
+  tone(ctx, 480, t, 1.8, 0.09);
 }
 
 function ensureRunning(ctx: AudioContext): Promise<void> {
@@ -52,31 +53,60 @@ function ensureRunning(ctx: AudioContext): Promise<void> {
   return Promise.resolve();
 }
 
-export function startIncomingRingtone() {
-  if (typeof window === "undefined") return;
-  if (playing) return;
+function stopFallback() {
+  if (loopTimer != null) {
+    window.clearInterval(loopTimer);
+    loopTimer = null;
+  }
+}
+
+function startFallback() {
   const ctx = getContext();
   if (!ctx) return;
-  playing = true;
-
   void ensureRunning(ctx).then(() => {
     if (!playing) return;
     playBurst(ctx);
+    stopFallback();
     loopTimer = window.setInterval(() => {
       if (!playing) return;
       void ensureRunning(ctx).then(() => {
         if (playing) playBurst(ctx);
       });
-    }, 2200);
+    }, 5000);
+  });
+}
+
+function stopFile() {
+  if (!audioEl) return;
+  audioEl.pause();
+  audioEl.currentTime = 0;
+  audioEl.src = "";
+  audioEl = null;
+}
+
+export function startIncomingRingtone() {
+  if (typeof window === "undefined") return;
+  if (playing) return;
+  playing = true;
+
+  const el = new Audio(RINGTONE_SRC);
+  el.loop = true;
+  el.preload = "auto";
+  el.volume = 0.85;
+  audioEl = el;
+
+  void el.play().then(() => {
+    stopFallback();
+  }).catch(() => {
+    stopFile();
+    if (playing) startFallback();
   });
 }
 
 export function stopIncomingRingtone() {
   playing = false;
-  if (loopTimer != null) {
-    window.clearInterval(loopTimer);
-    loopTimer = null;
-  }
+  stopFile();
+  stopFallback();
 }
 
 export function isIncomingRingtonePlaying() {

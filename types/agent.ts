@@ -110,10 +110,16 @@ export function isInProgressStatus(status?: string | null): boolean {
   return status === "IN_PROGRESS";
 }
 
-export const agentClientSchema = z.object({
-  alias: z.string().nullable().optional(),
-  firstName: z.string().nullable().optional(),
-});
+export const agentClientSchema = z
+  .object({
+    alias: z.string().nullable().optional(),
+    firstName: z.string().nullable().optional(),
+    lastName: z.string().nullable().optional(),
+    name: z.string().nullable().optional(),
+    fullName: z.string().nullable().optional(),
+    displayName: z.string().nullable().optional(),
+  })
+  .passthrough();
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)

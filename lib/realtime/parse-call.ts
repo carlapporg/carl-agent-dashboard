@@ -15,6 +15,59 @@ function candidateObjects(payload: unknown): unknown[] {
   return out;
 }
 
+function asString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+/** Skip placeholder labels Nest sometimes sends. */
+export function isGenericPeerLabel(name: string | null | undefined): boolean {
+  if (!name?.trim()) return true;
+  return /^(client|customer|user|unknown|caller|callee)$/i.test(name.trim());
+}
+
+export function preferPeerName(
+  ...names: Array<string | null | undefined>
+): string | null {
+  for (const name of names) {
+    const trimmed = name?.trim();
+    if (trimmed && !isGenericPeerLabel(trimmed)) return trimmed;
+  }
+  for (const name of names) {
+    const trimmed = name?.trim();
+    if (trimmed) return trimmed;
+  }
+  return null;
+}
+
+function pickNameFromRecord(record: Record<string, unknown>): string | null {
+  const client =
+    record.client && typeof record.client === "object"
+      ? (record.client as Record<string, unknown>)
+      : null;
+  const fromParts = [asString(client?.firstName), asString(client?.lastName)]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+
+  return preferPeerName(
+    asString(record.customerName),
+    asString(record.clientName),
+    asString(record.calleeName),
+    asString(record.callerName),
+    asString(record.fromName),
+    asString(record.toName),
+    asString(record.peerName),
+    asString(record.displayName),
+    asString(record.fullName),
+    asString(record.name),
+    fromParts || null,
+    asString(client?.displayName),
+    asString(client?.fullName),
+    asString(client?.name),
+    asString(client?.alias),
+  );
+}
+
 export function parseCallPayload(payload: unknown): Call | null {
   for (const candidate of candidateObjects(payload)) {
     const parsed = callSchema.safeParse(candidate);
@@ -27,7 +80,21 @@ export function parseCallPayload(payload: unknown): Call | null {
         record && record.livekit && typeof record.livekit === "object"
           ? (record.livekit as Call["livekit"])
           : parsed.data.livekit;
-      return { ...parsed.data, livekit: livekit ?? parsed.data.livekit };
+      const nameFromPayload = record ? pickNameFromRecord(record) : null;
+      const nameFromCandidate =
+        candidate && typeof candidate === "object"
+          ? pickNameFromRecord(candidate as Record<string, unknown>)
+          : null;
+      return {
+        ...parsed.data,
+        customerName:
+          preferPeerName(
+            nameFromPayload,
+            nameFromCandidate,
+            parsed.data.customerName,
+          ) ?? parsed.data.customerName,
+        livekit: livekit ?? parsed.data.livekit,
+      };
     }
   }
 
@@ -60,12 +127,7 @@ export function parseCallPayload(payload: unknown): Call | null {
           typeof record.calleeUserId === "string"
             ? record.calleeUserId
             : null,
-        customerName:
-          typeof record.customerName === "string"
-            ? record.customerName
-            : typeof record.fromName === "string"
-              ? record.fromName
-              : null,
+        customerName: pickNameFromRecord(record),
         agentName:
           typeof record.agentName === "string" ? record.agentName : null,
         taskTitle:
@@ -88,8 +150,22 @@ export function parseCallPayload(payload: unknown): Call | null {
 }
 
 export function callPeerLabel(call: Call, direction: "incoming" | "outgoing") {
-  if (direction === "incoming") {
-    return call.customerName?.trim() || "Customer";
-  }
-  return call.customerName?.trim() || "Customer";
+  const name = preferPeerName(call.customerName, call.agentName);
+  if (name) return name;
+  return direction === "incoming" ? "Customer" : "Customer";
+}
+
+/** Keep a good local name when Nest omits or sends "Client". */
+export function mergeCallPreserveName(prev: Call | null, next: Call): Call {
+  return {
+    ...prev,
+    ...next,
+    customerName:
+      preferPeerName(next.customerName, prev?.customerName) ??
+      next.customerName ??
+      prev?.customerName ??
+      null,
+    taskTitle: next.taskTitle ?? prev?.taskTitle ?? null,
+    taskNumber: next.taskNumber ?? prev?.taskNumber ?? null,
+  };
 }

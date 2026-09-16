@@ -1224,7 +1224,13 @@ const TaskChatThreadBody = forwardRef<
             ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            {!disabled ? <CallButton taskId={taskId} /> : null}
+            {!disabled ? (
+              <CallButton
+                taskId={taskId}
+                customerName={clientLabel}
+                taskTitle={title}
+              />
+            ) : null}
             {newBanner ? (
               <span className="rounded-full bg-accent px-2 py-0.5 text-[11px] font-semibold text-accent-foreground">
                 New

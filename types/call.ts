@@ -1,16 +1,29 @@
 import { z } from "zod";
 
 export const callTypeSchema = z.enum(["AUDIO", "VIDEO"]);
-export const callStatusSchema = z.enum([
+
+const KNOWN_CALL_STATUSES = [
   "RINGING",
   "ACTIVE",
   "CONNECTED",
+  "ACCEPTED",
+  "ENDING",
   "ENDED",
   "REJECTED",
   "TIMEOUT",
   "MISSED",
   "FAILED",
-]);
+  "BUSY",
+] as const;
+
+export const callStatusSchema = z.preprocess((value) => {
+  if (typeof value !== "string" || !value.trim()) return "RINGING";
+  return value.trim().toUpperCase().replace(/[\s-]+/g, "_");
+}, z.string()).transform((value) => {
+  return (KNOWN_CALL_STATUSES as readonly string[]).includes(value)
+    ? (value as (typeof KNOWN_CALL_STATUSES)[number])
+    : "ACTIVE";
+});
 
 export const livekitCredsSchema = z.object({
   token: z.string().min(1),
@@ -19,9 +32,17 @@ export const livekitCredsSchema = z.object({
 });
 
 export const callSchema = z.object({
-  id: z.string().min(1),
-  taskId: z.string().min(1),
-  type: callTypeSchema.default("AUDIO"),
+  id: z.union([z.string(), z.number()]).transform(String),
+  taskId: z
+    .union([z.string(), z.number()])
+    .optional()
+    .nullable()
+    .transform((value) => (value == null ? "" : String(value))),
+  type: z
+    .enum(["AUDIO", "VIDEO"])
+    .optional()
+    .default("AUDIO")
+    .catch("AUDIO"),
   status: callStatusSchema,
   roomName: z.string().optional().nullable(),
   callerUserId: z.string().optional().nullable(),

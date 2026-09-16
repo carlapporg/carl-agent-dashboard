@@ -523,6 +523,9 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
                   <div className="flex items-center gap-2">
                     <CallButton
                       taskId={task.id}
+                      customerName={task.customerName}
+                      taskTitle={task.title}
+                      taskNumber={task.number}
                       disabled={!canMessageClient(task)}
                     />
                     <Link

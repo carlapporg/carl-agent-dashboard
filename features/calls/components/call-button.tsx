@@ -2,14 +2,27 @@
 
 import { useCall } from "@/features/calls/call-provider";
 import { cn } from "@/lib/utils/cn";
+import type { CallType } from "@/types/call";
 
 type CallButtonProps = {
   taskId: string;
+  customerName?: string | null;
+  taskTitle?: string | null;
+  taskNumber?: string | number | null;
   disabled?: boolean;
   className?: string;
+  callType?: CallType;
 };
 
-export function CallButton({ taskId, disabled, className }: CallButtonProps) {
+export function CallButton({
+  taskId,
+  customerName,
+  taskTitle,
+  taskNumber,
+  disabled,
+  className,
+  callType = "AUDIO",
+}: CallButtonProps) {
   const call = useCall();
   const busy = Boolean(call && call.phase !== "idle") || Boolean(call?.busy);
 
@@ -17,10 +30,22 @@ export function CallButton({ taskId, disabled, className }: CallButtonProps) {
     <button
       type="button"
       disabled={disabled || !call || busy}
-      title="Start audio call"
-      aria-label="Start audio call"
+      title={
+        customerName?.trim()
+          ? `Call ${customerName.trim()}`
+          : "Start audio call"
+      }
+      aria-label={
+        customerName?.trim()
+          ? `Call ${customerName.trim()}`
+          : "Start audio call"
+      }
       onClick={() => {
-        void call?.startCall(taskId, "AUDIO");
+        void call?.startCall(taskId, callType, {
+          customerName,
+          taskTitle,
+          taskNumber,
+        });
       }}
       className={cn(
         "inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-border text-muted transition-colors",
