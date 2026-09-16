@@ -1,7 +1,6 @@
 /**
  * Module-level LiveKit session.
- * Survives React remounts and guarantees one room join per call id
- * (avoids LiveKit DUPLICATE_IDENTITY / leave reason 2).
+ * One room max. Survives React remounts. Avoids DUPLICATE_IDENTITY (leave 2).
  */
 
 import {
@@ -15,7 +14,6 @@ import type { LivekitCreds } from "@/types/call";
 
 type SessionHandlers = {
   onState?: (label: string, active: boolean) => void;
-  onDisconnected?: () => void;
 };
 
 let room: Room | null = null;
@@ -23,6 +21,8 @@ let activeCallId: string | null = null;
 let joinPromise: Promise<boolean> | null = null;
 let remoteAudioEl: HTMLAudioElement | null = null;
 let handlers: SessionHandlers = {};
+/** True while we intentionally hang up — ignore Disconnect noise. */
+let intentionalDisconnect = false;
 
 function attachRemoteAudio(track: RemoteTrack) {
   if (track.kind !== Track.Kind.Audio) return;
@@ -42,6 +42,12 @@ function attachExistingRemoteTracks(current: Room) {
   }
 }
 
+function clearSessionPointers() {
+  room = null;
+  activeCallId = null;
+  joinPromise = null;
+}
+
 export function setLivekitRemoteAudioElement(el: HTMLAudioElement | null) {
   remoteAudioEl = el;
 }
@@ -55,26 +61,35 @@ export function getLivekitCallId() {
 }
 
 export function isLivekitJoined(callId?: string) {
-  if (!room || room.state === ConnectionState.Disconnected) return false;
+  if (!room) return false;
+  if (room.state === ConnectionState.Disconnected) return false;
   if (callId) return activeCallId === callId;
   return Boolean(activeCallId);
 }
 
+/** True if this call already owns the session (even while connecting). */
+export function isLivekitBoundToCall(callId: string) {
+  return activeCallId === callId || joinPromise != null;
+}
+
 export async function disconnectLivekitSession() {
+  intentionalDisconnect = true;
   const current = room;
-  room = null;
-  activeCallId = null;
-  joinPromise = null;
+  clearSessionPointers();
   if (remoteAudioEl) {
     remoteAudioEl.srcObject = null;
   }
-  if (!current) return;
+  if (!current) {
+    intentionalDisconnect = false;
+    return;
+  }
   try {
     current.removeAllListeners();
     await current.disconnect(true);
   } catch {
     /* ignore */
   }
+  intentionalDisconnect = false;
 }
 
 export async function setLivekitMicrophoneEnabled(enabled: boolean) {
@@ -86,6 +101,10 @@ export async function setLivekitMicrophoneEnabled(enabled: boolean) {
   }
 }
 
+/**
+ * Soft credential refresh on the same Room instance.
+ * Never creates a second Room (that causes DUPLICATE_IDENTITY).
+ */
 export async function refreshLivekitSession(input: {
   callId: string;
   creds: LivekitCreds;
@@ -93,15 +112,19 @@ export async function refreshLivekitSession(input: {
   const { callId, creds } = input;
   if (activeCallId !== callId || !room) return false;
   if (!creds.token || !creds.url) return false;
+  const current = room;
   try {
-    await room.disconnect();
-    if (activeCallId !== callId || !room) return false;
-    await room.connect(creds.url, creds.token);
-    await room.localParticipant.setMicrophoneEnabled(true);
-    attachExistingRemoteTracks(room);
+    intentionalDisconnect = true;
+    await current.disconnect();
+    intentionalDisconnect = false;
+    if (activeCallId !== callId || room !== current) return false;
+    await current.connect(creds.url, creds.token);
+    await current.localParticipant.setMicrophoneEnabled(true);
+    attachExistingRemoteTracks(current);
     handlers.onState?.("Connected", true);
     return true;
   } catch {
+    intentionalDisconnect = false;
     return false;
   }
 }
@@ -112,31 +135,21 @@ export async function joinLivekitSession(input: {
 }): Promise<boolean> {
   const { callId, creds } = input;
 
-  if (
-    activeCallId === callId &&
-    room &&
-    room.state !== ConnectionState.Disconnected
-  ) {
-    return true;
-  }
+  if (isLivekitJoined(callId)) return true;
 
   if (joinPromise) {
     await joinPromise;
-    return (
-      activeCallId === callId &&
-      Boolean(room) &&
-      room!.state !== ConnectionState.Disconnected
-    );
+    return isLivekitJoined(callId);
   }
 
   if (!creds.token || !creds.url) return false;
 
-  // Different call still connected — hang it up first.
+  // Different call still attached — hang it up first.
   if (room && activeCallId && activeCallId !== callId) {
     await disconnectLivekitSession();
   }
 
-  // Same call already has a room object mid-connect — do not start another.
+  // Same call, room exists (connecting or connected) — never open a second one.
   if (room && activeCallId === callId) {
     return room.state !== ConnectionState.Disconnected;
   }
@@ -145,6 +158,7 @@ export async function joinLivekitSession(input: {
   joinPromise = new Promise<boolean>((resolve) => {
     settle = resolve;
   });
+  activeCallId = callId;
 
   try {
     handlers.onState?.("Connecting…", false);
@@ -172,16 +186,21 @@ export async function joinLivekitSession(input: {
     nextRoom.on(RoomEvent.Disconnected, () => {
       if (room !== nextRoom) return;
       handlers.onState?.("Disconnected", false);
-      handlers.onDisconnected?.();
+      // Server kicked us (e.g. DUPLICATE_IDENTITY) — drop zombie pointers
+      // so the next call can join cleanly.
+      if (!intentionalDisconnect) {
+        if (room === nextRoom) {
+          room = null;
+          if (activeCallId === callId) activeCallId = null;
+        }
+      }
     });
 
     room = nextRoom;
-    activeCallId = callId;
 
     await nextRoom.connect(creds.url, creds.token);
 
-    // Replaced or hung up while connecting.
-    if (room !== nextRoom) {
+    if (room !== nextRoom || activeCallId !== callId) {
       try {
         nextRoom.removeAllListeners();
         await nextRoom.disconnect(true);

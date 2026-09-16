@@ -135,6 +135,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const phaseRef = useRef(phase);
   const directionRef = useRef(direction);
   const ensureJoinedRef = useRef<(call: Call) => Promise<void>>(async () => {});
+  const ensureJoinedInflightRef = useRef<Promise<void> | null>(null);
   const resetToIdleRef = useRef<() => Promise<void>>(async () => {});
   phaseRef.current = phase;
   directionRef.current = direction;
@@ -212,45 +213,77 @@ export function CallProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      let next = mergeCallPreserveName(callRef.current, incoming);
-      setCall(next);
-      setPhase("connecting");
-      setConnectionLabel("Connecting…");
-
-      if (!next.livekit?.token || !next.livekit?.url) {
-        const tokenResult = await refreshCallTokenAction(next.id);
-        if (!tokenResult.ok) return;
-        next = { ...next, livekit: tokenResult.data };
-        setCall(next);
-      }
-
-      if (!next.livekit?.token || !next.livekit?.url) {
-        toast("Missing LiveKit token from server.", "error");
+      if (ensureJoinedInflightRef.current) {
+        await ensureJoinedInflightRef.current;
         return;
       }
 
-      const ok = await joinLivekitSession({
-        callId: next.id,
-        creds: next.livekit,
-      });
-      if (!ok) {
-        if (getLivekitCallId() !== next.id) {
-          toast("Could not join the call room.", "error");
+      const run = (async () => {
+        const next = mergeCallPreserveName(callRef.current, incoming);
+        setCall(next);
+        setPhase("connecting");
+        setConnectionLabel("Connecting…");
+
+        // Always mint a token as the logged-in agent via POST /calls/:id/token.
+        // Socket/start payloads can carry the peer's LiveKit identity; joining
+        // with that causes DUPLICATE_IDENTITY (leave reason 2) on outbound calls.
+        const tokenResult = await refreshCallTokenAction(next.id);
+        if (!tokenResult.ok) {
+          toast(
+            tokenResult.message || "Could not get call audio credentials.",
+            "error",
+          );
           setPhase(
             directionRef.current === "incoming" ? "incoming" : "outgoing",
           );
           setConnectionLabel("Failed to connect");
+          return;
         }
-        return;
-      }
 
-      setMuted(false);
-      setPhase("active");
-      setConnectionLabel("Connected");
-      if (!activeStartedRef.current) {
-        activeStartedRef.current = Date.now();
+        if (isLivekitJoined(next.id)) {
+          setPhase("active");
+          setConnectionLabel("Connected");
+          return;
+        }
+
+        const withCreds: Call = { ...next, livekit: tokenResult.data };
+        setCall(withCreds);
+
+        const ok = await joinLivekitSession({
+          callId: withCreds.id,
+          creds: tokenResult.data,
+        });
+        if (!ok) {
+          if (
+            getLivekitCallId() !== withCreds.id &&
+            !isLivekitJoined(withCreds.id)
+          ) {
+            toast("Could not join the call room.", "error");
+            setPhase(
+              directionRef.current === "incoming" ? "incoming" : "outgoing",
+            );
+            setConnectionLabel("Failed to connect");
+          }
+          return;
+        }
+
+        setMuted(false);
+        setPhase("active");
+        setConnectionLabel("Connected");
+        if (!activeStartedRef.current) {
+          activeStartedRef.current = Date.now();
+        }
+        scheduleTokenRefresh(withCreds.id, tokenResult.data.expiresAt);
+      })();
+
+      ensureJoinedInflightRef.current = run;
+      try {
+        await run;
+      } finally {
+        if (ensureJoinedInflightRef.current === run) {
+          ensureJoinedInflightRef.current = null;
+        }
       }
-      scheduleTokenRefresh(next.id, next.livekit.expiresAt);
     },
     [scheduleTokenRefresh, toast],
   );
@@ -479,31 +512,8 @@ export function CallProvider({ children }: { children: ReactNode }) {
         const merged = mergeCallPreserveName(callRef.current, parsed);
         setCall(merged);
 
-        const outbound =
-          directionRef.current === "outgoing" ||
-          phaseRef.current === "outgoing" ||
-          phaseRef.current === "connecting";
-
-        // Outbound: Nest fires accepted then connected. Join ONLY on connected
-        // so we never open two LiveKit sessions (DUPLICATE_IDENTITY / leave 2).
-        if (outbound && name === "call.accepted") {
-          setConnectionLabel("Connecting…");
-          setPhase("connecting");
-          // Fallback if connected never arrives (some Nest builds skip it).
-          window.setTimeout(() => {
-            if (isLivekitJoined(merged.id)) return;
-            if (
-              phaseRef.current !== "connecting" &&
-              phaseRef.current !== "outgoing"
-            ) {
-              return;
-            }
-            if (callIdRef.current !== merged.id) return;
-            void ensureJoinedRef.current(merged);
-          }, 2500);
-          return;
-        }
-
+        // Join once via agent-scoped POST /calls/:id/token (see ensureJoined).
+        // accepted + connected may both fire; the LiveKit singleton de-dupes.
         if (isLivekitJoined(merged.id)) {
           setPhase("active");
           setConnectionLabel("Connected");
