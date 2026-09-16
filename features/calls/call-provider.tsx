@@ -37,7 +37,6 @@ import { useOps } from "@/features/ops/ops-provider";
 import { useToast } from "@/components/providers/toast-provider";
 import { getAgentSocket } from "@/lib/realtime/agent-socket";
 import {
-  callPeerLabel,
   mergeCallPreserveName,
   parseCallPayload,
   preferPeerName,
@@ -137,10 +136,27 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const ensureJoinedRef = useRef<(call: Call) => Promise<void>>(async () => {});
   const ensureJoinedInflightRef = useRef<Promise<void> | null>(null);
   const resetToIdleRef = useRef<() => Promise<void>>(async () => {});
+  /** Call ids we started (outbound) — never show Accept/Reject for these. */
+  const outboundCallIdsRef = useRef<Set<string>>(new Set());
+  /** Task ids with an in-flight POST /calls (invite may arrive before response). */
+  const pendingOutboundTaskIdsRef = useRef<Set<string>>(new Set());
+  const liveTasksRef = useRef(ops?.liveTasks ?? []);
+  liveTasksRef.current = ops?.liveTasks ?? [];
   phaseRef.current = phase;
   directionRef.current = direction;
   callIdRef.current = call?.id ?? null;
   callRef.current = call;
+
+  const resolveCustomerName = useCallback((row: Call): string => {
+    const fromTask = liveTasksRef.current.find((t) => t.id === row.taskId);
+    return (
+      preferPeerName(
+        row.customerName,
+        fromTask?.customerName,
+        row.agentName,
+      ) || "Customer"
+    );
+  }, []);
 
   const markQuietHangup = useCallback((callId: string | null | undefined) => {
     if (!callId) return;
@@ -161,6 +177,9 @@ export function CallProvider({ children }: { children: ReactNode }) {
     stopIncomingRingtone();
     clearRefreshTimer();
     await disconnectLivekitSession();
+    if (callIdRef.current) {
+      outboundCallIdsRef.current.delete(callIdRef.current);
+    }
     setPhase("idle");
     setCall(null);
     setDirection(null);
@@ -171,6 +190,21 @@ export function CallProvider({ children }: { children: ReactNode }) {
     activeStartedRef.current = null;
   }, [clearRefreshTimer]);
   resetToIdleRef.current = resetToIdle;
+
+  const applyOutboundRinging = useCallback((row: Call) => {
+    outboundCallIdsRef.current.add(row.id);
+    pendingOutboundTaskIdsRef.current.delete(row.taskId);
+    const named = {
+      ...row,
+      customerName: resolveCustomerName(row),
+      livekit: null,
+    };
+    setCall((prev) => mergeCallPreserveName(prev, named));
+    setDirection("outgoing");
+    setPhase("outgoing");
+    setConnectionLabel("Calling…");
+    stopIncomingRingtone();
+  }, [resolveCustomerName]);
 
   const scheduleTokenRefresh = useCallback(
     (callId: string, expiresAt?: string | null) => {
@@ -315,10 +349,12 @@ export function CallProvider({ children }: { children: ReactNode }) {
         await resetToIdle();
       }
 
+      pendingOutboundTaskIdsRef.current.add(taskId);
       setBusy(true);
       const result = await startCallAction(taskId, type);
       setBusy(false);
       if (!result.ok) {
+        pendingOutboundTaskIdsRef.current.delete(taskId);
         if (result.code === "CALLER_BUSY") {
           await resetToIdle();
           toast(
@@ -330,25 +366,19 @@ export function CallProvider({ children }: { children: ReactNode }) {
         toast(result.message, "error");
         return false;
       }
-      // Stay on "Calling…" until callee accepts. Do NOT join LiveKit yet.
-      const seeded: Call = {
+      // Stay on outbound ringing UI until callee accepts. Never show Accept/Reject.
+      applyOutboundRinging({
         ...result.data,
         customerName:
           preferPeerName(meta?.customerName, result.data.customerName) ??
           result.data.customerName,
         taskTitle: meta?.taskTitle ?? result.data.taskTitle ?? null,
         taskNumber: meta?.taskNumber ?? result.data.taskNumber ?? null,
-        // Drop any premature LiveKit creds from POST /calls — joining early
-        // causes DUPLICATE_IDENTITY when accepted/connected also join.
         livekit: null,
-      };
-      setCall(seeded);
-      setDirection("outgoing");
-      setPhase("outgoing");
-      setConnectionLabel("Calling…");
+      });
       return true;
     },
-    [resetToIdle, toast],
+    [applyOutboundRinging, resetToIdle, toast],
   );
 
   const acceptIncoming = useCallback(async () => {
@@ -373,21 +403,11 @@ export function CallProvider({ children }: { children: ReactNode }) {
     await ensureJoined(merged);
   }, [call, ensureJoined, phase, toast]);
 
-  const rejectIncoming = useCallback(async () => {
-    const current = call;
-    if (!current) return;
-    stopIncomingRingtone();
-    markQuietHangup(current.id);
-    setBusy(true);
-    await rejectCallAction(current.id);
-    setBusy(false);
-    await resetToIdle();
-  }, [call, markQuietHangup, resetToIdle]);
-
   const endActive = useCallback(async () => {
     const current = callRef.current;
     markQuietHangup(current?.id);
     if (current?.id) {
+      outboundCallIdsRef.current.delete(current.id);
       handledTerminalIdsRef.current.add(current.id);
       window.setTimeout(() => {
         if (current.id) handledTerminalIdsRef.current.delete(current.id);
@@ -401,6 +421,25 @@ export function CallProvider({ children }: { children: ReactNode }) {
     setBusy(false);
     await resetToIdle();
   }, [markQuietHangup, resetToIdle]);
+
+  const rejectIncoming = useCallback(async () => {
+    const current = call;
+    if (!current) return;
+    // Safety: outbound must END (stops mobile ring). Reject only dismisses UI.
+    if (
+      direction === "outgoing" ||
+      outboundCallIdsRef.current.has(current.id)
+    ) {
+      await endActive();
+      return;
+    }
+    stopIncomingRingtone();
+    markQuietHangup(current.id);
+    setBusy(true);
+    await rejectCallAction(current.id);
+    setBusy(false);
+    await resetToIdle();
+  }, [call, direction, endActive, markQuietHangup, resetToIdle]);
 
   const toggleMute = useCallback(() => {
     setMuted((prev) => {
@@ -479,15 +518,35 @@ export function CallProvider({ children }: { children: ReactNode }) {
       if (!parsed) return;
 
       if (name === "call.invite") {
-        // Backend only invites when free; still guard against overlapping UI.
-        if (phaseRef.current !== "idle" && callIdRef.current !== parsed.id) {
+        // Nest often echoes invite to the agent who just started the call.
+        // That must stay outbound (ringing + Cancel), never Accept/Reject.
+        const isOurOutbound =
+          outboundCallIdsRef.current.has(parsed.id) ||
+          pendingOutboundTaskIdsRef.current.has(parsed.taskId) ||
+          directionRef.current === "outgoing" ||
+          phaseRef.current === "outgoing" ||
+          phaseRef.current === "connecting" ||
+          phaseRef.current === "active" ||
+          phaseRef.current === "ending";
+
+        if (isOurOutbound) {
+          applyOutboundRinging({
+            ...parsed,
+            customerName: resolveCustomerName(
+              mergeCallPreserveName(callRef.current, parsed),
+            ),
+          });
           return;
         }
-        setCall((prev) =>
-          callIdRef.current === parsed.id
-            ? mergeCallPreserveName(prev, parsed)
-            : parsed,
-        );
+
+        // True inbound: only from idle.
+        if (phaseRef.current !== "idle") return;
+
+        const named = {
+          ...parsed,
+          customerName: resolveCustomerName(parsed),
+        };
+        setCall(named);
         setDirection("incoming");
         setPhase("incoming");
         setConnectionLabel("Incoming call");
@@ -496,13 +555,29 @@ export function CallProvider({ children }: { children: ReactNode }) {
       }
 
       if (name === "call.ringing") {
-        // Ringing ack is for the caller. Don't flip an incoming invite into "outgoing".
+        // Ringing ack is for the caller.
+        if (
+          outboundCallIdsRef.current.has(parsed.id) ||
+          pendingOutboundTaskIdsRef.current.has(parsed.taskId) ||
+          directionRef.current === "outgoing" ||
+          phaseRef.current === "outgoing" ||
+          phaseRef.current === "idle" ||
+          phaseRef.current === "connecting"
+        ) {
+          if (callIdRef.current && callIdRef.current !== parsed.id) {
+            // Different call while we're already on one — ignore.
+            if (phaseRef.current !== "idle") return;
+          }
+          applyOutboundRinging({
+            ...parsed,
+            customerName: resolveCustomerName(
+              mergeCallPreserveName(callRef.current, parsed),
+            ),
+          });
+          return;
+        }
+        // Don't flip a real inbound invite into outbound.
         if (phaseRef.current === "incoming") return;
-        if (callIdRef.current && callIdRef.current !== parsed.id) return;
-        setCall((prev) => mergeCallPreserveName(prev, parsed));
-        setDirection("outgoing");
-        setPhase((p) => (p === "idle" || p === "outgoing" ? "outgoing" : p));
-        setConnectionLabel("Calling…");
         return;
       }
 
@@ -611,7 +686,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
         socket.off(eventName, fn);
       }
     };
-  }, [connected, toast]);
+  }, [connected, toast, applyOutboundRinging, resolveCustomerName]);
 
   // Wire remote <audio> + session UI callbacks once.
   useEffect(() => {
@@ -680,12 +755,34 @@ export function CallProvider({ children }: { children: ReactNode }) {
     ],
   );
 
-  const peer = call && direction ? callPeerLabel(call, direction) : "Customer";
+  const peer =
+    call && direction
+      ? resolveCustomerName(call)
+      : "Customer";
   const taskHint = call
-    ? [call.taskTitle, call.taskNumber != null ? `#${call.taskNumber}` : null]
+    ? [
+        call.taskTitle,
+        call.taskNumber != null ? `#${call.taskNumber}` : null,
+        (() => {
+          const task = liveTasksRef.current.find((t) => t.id === call.taskId);
+          return task?.title && task.title !== call.taskTitle
+            ? task.title
+            : null;
+        })(),
+      ]
         .filter(Boolean)
+        .filter((v, i, arr) => arr.indexOf(v) === i)
         .join(" · ")
     : "";
+
+  const showIncoming =
+    phase === "incoming" && direction === "incoming" && Boolean(call);
+  const showOutboundBar =
+    direction === "outgoing" ||
+    phase === "outgoing" ||
+    phase === "connecting" ||
+    phase === "active" ||
+    phase === "ending";
 
   return (
     <CallContext.Provider value={value}>
@@ -701,7 +798,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
         className="hidden"
       />
 
-      {phase === "incoming" && call ? (
+      {showIncoming && call ? (
         <IncomingCallModal
           peerName={peer}
           taskHint={taskHint || "Support call"}
@@ -712,17 +809,24 @@ export function CallProvider({ children }: { children: ReactNode }) {
         />
       ) : null}
 
-      {phase === "outgoing" ||
-      phase === "connecting" ||
-      phase === "active" ||
-      phase === "ending" ? (
+      {!showIncoming && showOutboundBar && call ? (
         <ActiveCallOverlay
           peerName={peer}
           taskHint={taskHint}
-          mode={phase}
+          mode={
+            phase === "outgoing" ||
+            (phase === "connecting" && direction === "outgoing")
+              ? "outgoing"
+              : phase === "connecting"
+                ? "connecting"
+                : phase === "ending"
+                  ? "ending"
+                  : "active"
+          }
           statusLabel={
-            phase === "outgoing"
-              ? "Waiting for them to answer…"
+            phase === "outgoing" ||
+            (phase === "connecting" && direction === "outgoing" && !isLivekitJoined())
+              ? "Ringing… waiting for answer"
               : phase === "connecting"
                 ? "Connecting…"
                 : phase === "ending"

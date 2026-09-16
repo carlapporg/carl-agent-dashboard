@@ -85,18 +85,18 @@ export function ActiveCallOverlay({
               </>
             )}
           </div>
-          {!isOutboundRing ? (
+          {!isOutboundRing && !isConnecting ? (
             <p className="shrink-0 font-mono text-sm tabular-nums text-foreground">
               {elapsedLabel}
             </p>
           ) : null}
         </div>
         <div className="flex items-center justify-center gap-3 px-4 py-3">
-          {!isOutboundRing ? (
+          {!isOutboundRing && mode === "active" ? (
             <button
               type="button"
               onClick={onToggleMute}
-              disabled={busy || mode === "ending"}
+              disabled={busy}
               className={`flex h-11 min-w-24 items-center justify-center rounded-full px-4 text-sm font-semibold ${
                 muted
                   ? "bg-warning-soft text-warning-foreground"

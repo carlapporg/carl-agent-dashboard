@@ -44,10 +44,38 @@ function pickNameFromRecord(record: Record<string, unknown>): string | null {
     record.client && typeof record.client === "object"
       ? (record.client as Record<string, unknown>)
       : null;
-  const fromParts = [asString(client?.firstName), asString(client?.lastName)]
-    .filter(Boolean)
-    .join(" ")
-    .trim();
+  const caller =
+    record.caller && typeof record.caller === "object"
+      ? (record.caller as Record<string, unknown>)
+      : null;
+  const fromUser =
+    record.fromUser && typeof record.fromUser === "object"
+      ? (record.fromUser as Record<string, unknown>)
+      : null;
+  const user =
+    record.user && typeof record.user === "object"
+      ? (record.user as Record<string, unknown>)
+      : null;
+
+  const parts = (...objs: Array<Record<string, unknown> | null>) => {
+    for (const obj of objs) {
+      if (!obj) continue;
+      const joined = [asString(obj.firstName), asString(obj.lastName)]
+        .filter(Boolean)
+        .join(" ")
+        .trim();
+      const single = preferPeerName(
+        joined || null,
+        asString(obj.displayName),
+        asString(obj.fullName),
+        asString(obj.name),
+        asString(obj.alias),
+        asString(obj.customerName),
+      );
+      if (single) return single;
+    }
+    return null;
+  };
 
   return preferPeerName(
     asString(record.customerName),
@@ -60,11 +88,7 @@ function pickNameFromRecord(record: Record<string, unknown>): string | null {
     asString(record.displayName),
     asString(record.fullName),
     asString(record.name),
-    fromParts || null,
-    asString(client?.displayName),
-    asString(client?.fullName),
-    asString(client?.name),
-    asString(client?.alias),
+    parts(client, caller, fromUser, user),
   );
 }
 
