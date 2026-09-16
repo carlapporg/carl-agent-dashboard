@@ -71,8 +71,8 @@ function defaultChrome(pathname: string, name: string, email: string) {
   }
   if (pathname.startsWith(ROUTES.adminChat)) {
     return {
-      title: "Admin Chat",
-      subtitle: "Message Carl ops directly. Separate from client task chats.",
+      title: "Support Tickets",
+      subtitle: "Open tickets with Carl ops. Separate from client task chats.",
     };
   }
   if (pathname.startsWith(ROUTES.inbox)) {

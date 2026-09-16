@@ -30,6 +30,7 @@ export async function listAdminChatsAction(): Promise<
 export async function openAdminChatAction(input?: {
   subject?: string;
   message?: string;
+  forceNew?: boolean;
 }): Promise<AdminChatActionResult<OpenAdminChatResult>> {
   try {
     return { ok: true, data: await adminChatsApi.open(input ?? {}) };

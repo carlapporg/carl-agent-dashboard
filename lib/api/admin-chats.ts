@@ -82,12 +82,20 @@ export const adminChatsApi = {
   async open(input: {
     subject?: string;
     message?: string;
+    /** Ask Nest for a brand-new ticket instead of reusing an OPEN chat. */
+    forceNew?: boolean;
   } = {}): Promise<OpenAdminChatResult> {
-    const body: Record<string, string> = {};
+    const body: Record<string, string | boolean> = {};
     const subject = input.subject?.trim();
     const message = input.message?.trim();
     if (subject) body.subject = subject;
     if (message) body.message = message;
+    // Ticket mode — several Nest field names are sent for compatibility.
+    if (input.forceNew) {
+      body.forceNew = true;
+      body.createNew = true;
+      body.newTicket = true;
+    }
 
     const data = await apiRequest(API_ENDPOINTS.agents.adminChats, {
       method: "POST",

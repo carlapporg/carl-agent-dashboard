@@ -142,4 +142,14 @@ export const API_ENDPOINTS = {
     /** PUT { token } — FCM push only (not the in-app list). */
     fcmToken: "/notifications/fcm-token",
   },
+
+  /** LiveKit calls (agent ↔ customer on a task). */
+  calls: {
+    root: "/calls",
+    one: (id: string) => `/calls/${id}` as const,
+    accept: (id: string) => `/calls/${id}/accept` as const,
+    reject: (id: string) => `/calls/${id}/reject` as const,
+    end: (id: string) => `/calls/${id}/end` as const,
+    token: (id: string) => `/calls/${id}/token` as const,
+  },
 } as const;

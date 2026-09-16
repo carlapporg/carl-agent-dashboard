@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { CallProvider } from "@/features/calls/call-provider";
 import { AgentOpsProvider } from "@/features/ops/ops-provider";
 import { OfferToast } from "@/features/ops/offer-toast";
 import type { AgentPresence } from "@/types/agent";
@@ -27,8 +28,10 @@ export function AgentSocketProvider({
       openTaskId={openTaskId}
       initialPresence={initialPresence}
     >
-      <OfferToast />
-      {children}
+      <CallProvider>
+        <OfferToast />
+        {children}
+      </CallProvider>
     </AgentOpsProvider>
   );
 }

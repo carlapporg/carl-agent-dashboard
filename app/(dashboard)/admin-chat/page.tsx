@@ -5,7 +5,7 @@ import { PageShell } from "@/components/ui/page-shell";
 import { adminChatsApi } from "@/lib/api/admin-chats";
 
 export const metadata: Metadata = {
-  title: "Admin chat",
+  title: "Support Tickets",
 };
 
 export default async function AdminChatPage() {

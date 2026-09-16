@@ -15,6 +15,7 @@ import {
 import { sendUpdateAction } from "@/features/tasks/actions/task-actions";
 import { ChatAudioPlayer } from "@/features/tasks/components/chat-audio-player";
 import { LiveVoiceWaveform } from "@/features/tasks/components/live-voice-waveform";
+import { CallButton } from "@/features/calls/components/call-button";
 import {
   ChatImageBubble,
   ChatImageLightbox,
@@ -1222,11 +1223,14 @@ const TaskChatThreadBody = forwardRef<
               <p className="truncate text-[11px] text-muted">{subtitle}</p>
             ) : null}
           </div>
-          {newBanner ? (
-            <span className="shrink-0 rounded-full bg-accent px-2 py-0.5 text-[11px] font-semibold text-accent-foreground">
-              New
-            </span>
-          ) : null}
+          <div className="flex shrink-0 items-center gap-2">
+            {!disabled ? <CallButton taskId={taskId} /> : null}
+            {newBanner ? (
+              <span className="rounded-full bg-accent px-2 py-0.5 text-[11px] font-semibold text-accent-foreground">
+                New
+              </span>
+            ) : null}
+          </div>
         </header>
       ) : null}
 

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { AvailabilityToggle } from "@/features/dashboard/components/availability-toggle";
 import { TaskChatThread } from "@/features/tasks/components/task-chat-thread";
+import { CallButton } from "@/features/calls/components/call-button";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { listTaskMessagesAction } from "@/features/tasks/actions/task-actions";
 import {
@@ -519,12 +520,18 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
                       Ticket #T-{task.number}
                     </p>
                   )}
-                  <Link
-                    href={ROUTES.taskPanel(task.id, "chat")}
-                    className="text-[12px] font-semibold text-accent hover:text-accent-hover"
-                  >
-                    Open workspace
-                  </Link>
+                  <div className="flex items-center gap-2">
+                    <CallButton
+                      taskId={task.id}
+                      disabled={!canMessageClient(task)}
+                    />
+                    <Link
+                      href={ROUTES.taskPanel(task.id, "chat")}
+                      className="text-[12px] font-semibold text-accent hover:text-accent-hover"
+                    >
+                      Open workspace
+                    </Link>
+                  </div>
                 </div>
               </header>
               <div className="h-px w-full shrink-0 bg-border" />
