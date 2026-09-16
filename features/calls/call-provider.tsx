@@ -125,8 +125,10 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const callRef = useRef<Call | null>(null);
   const activeStartedRef = useRef<number | null>(null);
   const refreshTimerRef = useRef<number | null>(null);
-  /** Prevents double join from accept API + call.accepted socket. */
+  /** Prevents double join from accept API + call.accepted + call.connected. */
   const joiningRef = useRef(false);
+  const joinPromiseRef = useRef<Promise<boolean> | null>(null);
+  const joinedCallIdRef = useRef<string | null>(null);
   /** When we end/reject locally, ignore the matching socket toast. */
   const quietHangupIdsRef = useRef<Set<string>>(new Set());
   /** Dedupe terminal socket events (ended + underscore alias, etc.). */
@@ -171,6 +173,8 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const resetToIdle = useCallback(async () => {
     stopIncomingRingtone();
     joiningRef.current = false;
+    joinPromiseRef.current = null;
+    joinedCallIdRef.current = null;
     await detachRoom();
     setPhase("idle");
     setCall(null);
@@ -194,12 +198,15 @@ export function CallProvider({ children }: { children: ReactNode }) {
       }
       refreshTimerRef.current = window.setTimeout(() => {
         void (async () => {
+          // Don't tear down a live call for token refresh races.
+          if (joinedCallIdRef.current !== callId || !roomRef.current) return;
           const result = await refreshCallTokenAction(callId);
           if (!result.ok) return;
           const room = roomRef.current;
-          if (!room) return;
+          if (!room || joinedCallIdRef.current !== callId) return;
           try {
             await room.disconnect();
+            if (joinedCallIdRef.current !== callId) return;
             await room.connect(result.data.url, result.data.token);
             scheduleTokenRefresh(callId, result.data.expiresAt);
           } catch {
@@ -213,9 +220,15 @@ export function CallProvider({ children }: { children: ReactNode }) {
 
   const joinLivekit = useCallback(
     async (next: Call) => {
-      if (roomRef.current || joiningRef.current) {
+      // Already in this call's room — never disconnect/rejoin.
+      if (
+        joinedCallIdRef.current === next.id &&
+        roomRef.current &&
+        roomRef.current.state !== ConnectionState.Disconnected
+      ) {
         return true;
       }
+
       const creds = next.livekit;
       if (!creds?.token || !creds.url) {
         toast("Missing LiveKit token from server.", "error");
@@ -223,7 +236,6 @@ export function CallProvider({ children }: { children: ReactNode }) {
       }
 
       joiningRef.current = true;
-      await detachRoom();
       setPhase("connecting");
       setConnectionLabel("Connecting…");
 
@@ -231,9 +243,20 @@ export function CallProvider({ children }: { children: ReactNode }) {
         adaptiveStream: true,
         dynacast: true,
       });
+      // Replace any stale room without racing a second connect.
+      const previous = roomRef.current;
       roomRef.current = room;
+      if (previous) {
+        try {
+          previous.removeAllListeners();
+          await previous.disconnect(true);
+        } catch {
+          /* ignore */
+        }
+      }
 
       room.on(RoomEvent.ConnectionStateChanged, (state) => {
+        if (roomRef.current !== room) return;
         if (state === ConnectionState.Connected) {
           setConnectionLabel("Connected");
           setPhase("active");
@@ -256,28 +279,42 @@ export function CallProvider({ children }: { children: ReactNode }) {
       });
 
       room.on(RoomEvent.Disconnected, () => {
+        if (roomRef.current !== room) return;
         setConnectionLabel("Disconnected");
       });
 
       try {
         await room.connect(creds.url, creds.token);
+        // Hangup or a newer join replaced this room — exit quietly.
+        if (roomRef.current !== room) {
+          try {
+            room.removeAllListeners();
+            await room.disconnect(true);
+          } catch {
+            /* ignore */
+          }
+          return false;
+        }
         await room.localParticipant.setMicrophoneEnabled(true);
         setMuted(false);
+        joinedCallIdRef.current = next.id;
         setPhase("active");
         setConnectionLabel("Connected");
         if (!activeStartedRef.current) {
           activeStartedRef.current = Date.now();
         }
         scheduleTokenRefresh(next.id, creds.expiresAt);
-        joiningRef.current = false;
         return true;
       } catch {
-        joiningRef.current = false;
-        toast("Could not join the call room.", "error");
-        await detachRoom();
-        setPhase(direction === "incoming" ? "incoming" : "outgoing");
-        setConnectionLabel("Failed to connect");
+        if (roomRef.current === room) {
+          toast("Could not join the call room.", "error");
+          await detachRoom();
+          setPhase(direction === "incoming" ? "incoming" : "outgoing");
+          setConnectionLabel("Failed to connect");
+        }
         return false;
+      } finally {
+        joiningRef.current = false;
       }
     },
     [detachRoom, direction, scheduleTokenRefresh, toast],
@@ -285,19 +322,56 @@ export function CallProvider({ children }: { children: ReactNode }) {
 
   const ensureJoined = useCallback(
     async (incoming: Call) => {
-      if (roomRef.current || joiningRef.current) return;
-      let next = mergeCallPreserveName(callRef.current, incoming);
-      setCall(next);
-      if (!next.livekit?.token || !next.livekit?.url) {
-        const tokenResult = await refreshCallTokenAction(next.id);
-        if (!tokenResult.ok) {
-          // Socket may deliver creds a moment later — don't spam fail toasts.
+      if (
+        joinedCallIdRef.current === incoming.id &&
+        roomRef.current &&
+        roomRef.current.state !== ConnectionState.Disconnected
+      ) {
+        return;
+      }
+
+      if (joinPromiseRef.current) {
+        await joinPromiseRef.current;
+        return;
+      }
+
+      // Reserve the slot synchronously before any await.
+      let settle!: (value: boolean) => void;
+      const run = new Promise<boolean>((resolve) => {
+        settle = resolve;
+      });
+      joinPromiseRef.current = run;
+
+      try {
+        let next = mergeCallPreserveName(callRef.current, incoming);
+        setCall(next);
+        if (!next.livekit?.token || !next.livekit?.url) {
+          const tokenResult = await refreshCallTokenAction(next.id);
+          if (!tokenResult.ok) {
+            settle(false);
+            return;
+          }
+          next = { ...next, livekit: tokenResult.data };
+          setCall(next);
+        }
+        if (
+          joinedCallIdRef.current === next.id &&
+          roomRef.current &&
+          roomRef.current.state !== ConnectionState.Disconnected
+        ) {
+          settle(true);
           return;
         }
-        next = { ...next, livekit: tokenResult.data };
-        setCall(next);
+        settle(await joinLivekit(next));
+      } catch {
+        settle(false);
+      } finally {
+        if (joinPromiseRef.current === run) {
+          joinPromiseRef.current = null;
+        }
       }
-      await joinLivekit(next);
+
+      await run;
     },
     [joinLivekit],
   );
@@ -525,11 +599,27 @@ export function CallProvider({ children }: { children: ReactNode }) {
 
       if (name === "call.accepted" || name === "call.connected") {
         if (callIdRef.current && callIdRef.current !== parsed.id) return;
-        // Caller: only connect after the other side accepts (not while ringing).
         stopIncomingRingtone();
         const merged = mergeCallPreserveName(callRef.current, parsed);
         setCall(merged);
-        if (roomRef.current || joiningRef.current) {
+
+        // Outbound: Nest often emits accepted then connected. Join on connected
+        // (or on accepted only when LiveKit creds are already present).
+        const outbound =
+          phaseRef.current === "outgoing" ||
+          phaseRef.current === "connecting" ||
+          phaseRef.current === "active";
+        if (outbound && name === "call.accepted" && !merged.livekit?.token) {
+          setConnectionLabel("Connecting…");
+          return;
+        }
+
+        if (
+          roomRef.current ||
+          joiningRef.current ||
+          joinPromiseRef.current ||
+          joinedCallIdRef.current === merged.id
+        ) {
           setPhase("active");
           setConnectionLabel("Connected");
           if (!activeStartedRef.current) {
