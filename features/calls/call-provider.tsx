@@ -239,6 +239,8 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const ensureJoined = useCallback(
     async (incoming: Call) => {
       if (isLivekitJoined(incoming.id)) {
+        // Re-assert mic publish — outbound calls were connecting without audio.
+        void setLivekitMicrophoneEnabled(true);
         setPhase("active");
         setConnectionLabel("Connected");
         if (!activeStartedRef.current) {
@@ -249,6 +251,11 @@ export function CallProvider({ children }: { children: ReactNode }) {
 
       if (ensureJoinedInflightRef.current) {
         await ensureJoinedInflightRef.current;
+        if (isLivekitJoined(incoming.id)) {
+          void setLivekitMicrophoneEnabled(true);
+          setPhase("active");
+          setConnectionLabel("Connected");
+        }
         return;
       }
 
@@ -258,34 +265,38 @@ export function CallProvider({ children }: { children: ReactNode }) {
         setPhase("connecting");
         setConnectionLabel("Connecting…");
 
-        // Always mint a token as the logged-in agent via POST /calls/:id/token.
-        // Socket/start payloads can carry the peer's LiveKit identity; joining
-        // with that causes DUPLICATE_IDENTITY (leave reason 2) on outbound calls.
-        const tokenResult = await refreshCallTokenAction(next.id);
-        if (!tokenResult.ok) {
-          toast(
-            tokenResult.message || "Could not get call audio credentials.",
-            "error",
-          );
-          setPhase(
-            directionRef.current === "incoming" ? "incoming" : "outgoing",
-          );
-          setConnectionLabel("Failed to connect");
-          return;
+        // Prefer LiveKit creds from accept/connected (these publish correctly).
+        // Fall back to POST /calls/:id/token only when the event/API omitted them.
+        let creds = next.livekit;
+        if (!creds?.token || !creds?.url) {
+          const tokenResult = await refreshCallTokenAction(next.id);
+          if (!tokenResult.ok) {
+            toast(
+              tokenResult.message || "Could not get call audio credentials.",
+              "error",
+            );
+            setPhase(
+              directionRef.current === "incoming" ? "incoming" : "outgoing",
+            );
+            setConnectionLabel("Failed to connect");
+            return;
+          }
+          creds = tokenResult.data;
         }
 
         if (isLivekitJoined(next.id)) {
+          void setLivekitMicrophoneEnabled(true);
           setPhase("active");
           setConnectionLabel("Connected");
           return;
         }
 
-        const withCreds: Call = { ...next, livekit: tokenResult.data };
+        const withCreds: Call = { ...next, livekit: creds };
         setCall(withCreds);
 
         const ok = await joinLivekitSession({
           callId: withCreds.id,
-          creds: tokenResult.data,
+          creds,
         });
         if (!ok) {
           if (
@@ -301,13 +312,14 @@ export function CallProvider({ children }: { children: ReactNode }) {
           return;
         }
 
+        void setLivekitMicrophoneEnabled(true);
         setMuted(false);
         setPhase("active");
         setConnectionLabel("Connected");
         if (!activeStartedRef.current) {
           activeStartedRef.current = Date.now();
         }
-        scheduleTokenRefresh(withCreds.id, tokenResult.data.expiresAt);
+        scheduleTokenRefresh(withCreds.id, creds.expiresAt);
       })();
 
       ensureJoinedInflightRef.current = run;
@@ -524,10 +536,18 @@ export function CallProvider({ children }: { children: ReactNode }) {
           outboundCallIdsRef.current.has(parsed.id) ||
           pendingOutboundTaskIdsRef.current.has(parsed.taskId) ||
           directionRef.current === "outgoing" ||
-          phaseRef.current === "outgoing" ||
+          phaseRef.current === "outgoing";
+
+        // After we move past ringing, ignore invite echoes — re-applying
+        // "outgoing" was interrupting the connected mic session.
+        if (
           phaseRef.current === "connecting" ||
           phaseRef.current === "active" ||
-          phaseRef.current === "ending";
+          phaseRef.current === "ending" ||
+          isLivekitJoined(parsed.id)
+        ) {
+          return;
+        }
 
         if (isOurOutbound) {
           applyOutboundRinging({
@@ -555,17 +575,23 @@ export function CallProvider({ children }: { children: ReactNode }) {
       }
 
       if (name === "call.ringing") {
-        // Ringing ack is for the caller.
+        // Only while still ringing — never after connect.
+        if (
+          phaseRef.current === "connecting" ||
+          phaseRef.current === "active" ||
+          phaseRef.current === "ending" ||
+          isLivekitJoined(parsed.id)
+        ) {
+          return;
+        }
         if (
           outboundCallIdsRef.current.has(parsed.id) ||
           pendingOutboundTaskIdsRef.current.has(parsed.taskId) ||
           directionRef.current === "outgoing" ||
           phaseRef.current === "outgoing" ||
-          phaseRef.current === "idle" ||
-          phaseRef.current === "connecting"
+          phaseRef.current === "idle"
         ) {
           if (callIdRef.current && callIdRef.current !== parsed.id) {
-            // Different call while we're already on one — ignore.
             if (phaseRef.current !== "idle") return;
           }
           applyOutboundRinging({
@@ -576,7 +602,6 @@ export function CallProvider({ children }: { children: ReactNode }) {
           });
           return;
         }
-        // Don't flip a real inbound invite into outbound.
         if (phaseRef.current === "incoming") return;
         return;
       }
