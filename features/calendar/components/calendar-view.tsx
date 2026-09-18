@@ -78,6 +78,54 @@ function formatDayLabel(date: string): string {
   });
 }
 
+/**
+ * Split hours stop at "now". An open shift must not fill later UTC days as 24h.
+ */
+function clipDayAvailability(
+  availability: CalendarAvailabilitySummary,
+  day: string,
+): CalendarAvailabilitySummary {
+  const dayStart = Date.parse(`${day}T00:00:00.000Z`);
+  const dayEnd = dayStart + 86_400_000;
+  const now = Date.now();
+  if (!Number.isFinite(dayStart)) return availability;
+
+  let availableMs = 0;
+  let busyMs = 0;
+  const intervals: CalendarAvailabilitySummary["intervals"] = [];
+
+  for (const row of availability.intervals) {
+    const start = Date.parse(row.startedAt);
+    const rawEnd = row.endedAt ? Date.parse(row.endedAt) : now;
+    if (!Number.isFinite(start) || !Number.isFinite(rawEnd)) continue;
+    const clippedStart = Math.max(start, dayStart);
+    const clippedEnd = Math.min(rawEnd, dayEnd);
+    if (clippedEnd <= clippedStart) continue;
+
+    const ms = clippedEnd - clippedStart;
+    if (row.status === "AVAILABLE") availableMs += ms;
+    else if (row.status === "BUSY") busyMs += ms;
+
+    intervals.push({
+      ...row,
+      startedAt: new Date(clippedStart).toISOString(),
+      endedAt:
+        !row.endedAt && clippedEnd >= now
+          ? null
+          : new Date(clippedEnd).toISOString(),
+    });
+  }
+
+  const round = (ms: number) => Math.round((ms / 3_600_000) * 100) / 100;
+  return {
+    ...availability,
+    availableHours: round(availableMs),
+    busyHours: round(busyMs),
+    totalOnlineHours: round(availableMs + busyMs),
+    intervals,
+  };
+}
+
 function daysInclusive(from: string, to: string): number {
   const a = Date.parse(`${from}T00:00:00.000Z`);
   const b = Date.parse(`${to}T00:00:00.000Z`);
@@ -573,7 +621,11 @@ function WeekGrid({
                 </span>
               </div>
               <p className="mt-2 text-[11px] text-muted">
-                Online {formatHours(day.availability.totalOnlineHours)}
+                Online{" "}
+                {formatHours(
+                  clipDayAvailability(day.availability, day.date)
+                    .totalOnlineHours,
+                )}
               </p>
               <ul className="mt-2 space-y-0.5">
                 {day.events.slice(0, 3).map((event) => (
@@ -995,7 +1047,10 @@ export function CalendarView() {
                     emptyLabel="No events this day."
                   />
                   <AvailabilitySummaryBlock
-                    availability={selectedWeekDay.availability}
+                    availability={clipDayAvailability(
+                      selectedWeekDay.availability,
+                      selectedWeekDay.date,
+                    )}
                   />
                 </div>
               ) : null}

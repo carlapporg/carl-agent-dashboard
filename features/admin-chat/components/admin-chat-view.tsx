@@ -101,12 +101,12 @@ function mergeMessages(
 
 function threadTitle(row: ConversationRow): string {
   const subject = row.subject?.trim();
-  if (subject) return subject;
+  if (subject && !/^untitled(\s+ticket)?$/i.test(subject)) return subject;
   const preview = row.preview?.trim();
   if (preview && preview !== "No messages yet" && preview !== "Message") {
     return preview.length > 48 ? `${preview.slice(0, 48)}…` : preview;
   }
-  return "Untitled ticket";
+  return "Admin support";
 }
 
 function ticketStatusLabel(status: ConversationRow["status"]): string {
