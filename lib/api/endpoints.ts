@@ -123,6 +123,19 @@ export const API_ENDPOINTS = {
     notificationRead: (id: string) =>
       `/agents/me/notifications/${id}/read` as const,
     notificationsReadAll: "/agents/me/notifications/read-all",
+    /** GET Work Diary / timesheet (?date= or ?from=&to=, max 31 days). */
+    timesheet: "/agents/me/timesheet",
+    /** Agent calendar (schedule events + presence). */
+    calendar: "/agents/me/calendar",
+    calendarWeek: "/agents/me/calendar/week",
+    calendarDay: "/agents/me/calendar/day",
+    calendarUpcoming: "/agents/me/calendar/upcoming",
+    calendarAvailability: "/agents/me/calendar/availability",
+    /** GET earnings summary / tips / rate / ledger. Read-only for agents. */
+    earnings: "/agents/me/earnings",
+    earningsTips: "/agents/me/earnings/tips",
+    earningsHourlyRate: "/agents/me/earnings/hourly-rate",
+    earningsLedger: "/agents/me/earnings/ledger",
     /** Profile extras until Nest expands /agents/me. */
     profileStats: "/agents/me/profile/stats",
     profileDetails: "/agents/me/profile/details",

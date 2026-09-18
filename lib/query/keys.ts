@@ -24,9 +24,37 @@ export const queryKeys = {
     all: ["history"] as const,
     logs: () => [...queryKeys.history.all, "logs"] as const,
   },
+  timesheet: {
+    all: ["timesheet"] as const,
+    byQuery: (query: { date: string } | { from: string; to: string }) =>
+      [...queryKeys.timesheet.all, query] as const,
+  },
+  calendar: {
+    all: ["calendar"] as const,
+    month: (query: { year: number; month: number }) =>
+      [...queryKeys.calendar.all, "month", query] as const,
+    week: (date: string) =>
+      [...queryKeys.calendar.all, "week", date] as const,
+    day: (date: string) => [...queryKeys.calendar.all, "day", date] as const,
+    upcoming: (limit: number) =>
+      [...queryKeys.calendar.all, "upcoming", limit] as const,
+    availability: (
+      query: { date: string } | { from: string; to: string },
+    ) => [...queryKeys.calendar.all, "availability", query] as const,
+  },
   payments: {
     all: ["payments"] as const,
     byTask: (taskId: string) => [...queryKeys.payments.all, taskId] as const,
+  },
+  earnings: {
+    all: ["earnings"] as const,
+    summary: (range: { from: string; to: string }) =>
+      [...queryKeys.earnings.all, "summary", range] as const,
+    tips: (range: { from: string; to: string }) =>
+      [...queryKeys.earnings.all, "tips", range] as const,
+    ledger: (range: { from: string; to: string }) =>
+      [...queryKeys.earnings.all, "ledger", range] as const,
+    hourlyRate: () => [...queryKeys.earnings.all, "hourly-rate"] as const,
   },
   adminChats: {
     all: ["admin-chats"] as const,

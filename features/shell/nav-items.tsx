@@ -7,7 +7,10 @@ export type NavIconId =
   | "messages"
   | "adminChat"
   | "payments"
+  | "earnings"
   | "history"
+  | "workDiary"
+  | "calendar"
   | "notifications"
   | "profile"
   | "settings";
@@ -22,7 +25,11 @@ export const DASHBOARD_NAV: Array<{
   { href: ROUTES.messages, label: "Messages", icon: "messages" },
   { href: ROUTES.adminChat, label: "Support Tickets", icon: "adminChat" },
   { href: ROUTES.payments, label: "Payments", icon: "payments" },
+  { href: ROUTES.earnings, label: "Earnings", icon: "earnings" },
   { href: ROUTES.history, label: "History", icon: "history" },
+  // Work Diary is redundant — Calendar Day / Availability already shows the same hours.
+  // { href: ROUTES.workDiary, label: "Work Diary", icon: "workDiary" },
+  { href: ROUTES.calendar, label: "Calendar", icon: "calendar" },
   { href: ROUTES.notifications, label: "Notifications", icon: "notifications" },
   { href: ROUTES.profile, label: "Profile", icon: "profile" },
   { href: ROUTES.settings, label: "Settings", icon: "settings" },
@@ -35,7 +42,10 @@ const FIGMA_PRIMARY_HREFS = new Set<string>([
   ROUTES.messages,
   ROUTES.adminChat,
   ROUTES.payments,
+  ROUTES.earnings,
   ROUTES.history,
+  // ROUTES.workDiary,
+  ROUTES.calendar,
   ROUTES.notifications,
   ROUTES.profile,
 ]);
@@ -53,6 +63,10 @@ export function navDisplayLabel(href: string, fallback: string): string {
   if (href === ROUTES.dashboard) return "Dashboard";
   if (href === ROUTES.tasks) return "Task";
   if (href === ROUTES.adminChat) return "Support Tickets";
+  if (href === ROUTES.payments) return "Payments";
+  if (href === ROUTES.earnings) return "Earnings";
+  // if (href === ROUTES.workDiary) return "Work Diary";
+  if (href === ROUTES.calendar) return "Calendar";
   if (href === ROUTES.notifications) return "Notifications";
   return fallback;
 }
@@ -112,11 +126,34 @@ export function NavIcon({ id }: { id: NavIconId }) {
           <path d="M3 10h18" />
         </>,
       );
+    case "earnings":
+      return strokeIcon(
+        <>
+          <circle cx="12" cy="12" r="8" />
+          <path d="M12 7v10M9.5 9.5c.6-.8 1.4-1.2 2.5-1.2 1.6 0 2.6.9 2.6 2.1 0 2.6-5.2 1.4-5.2 4 0 1.2 1.1 2.1 2.6 2.1 1.1 0 2-.4 2.6-1.2" />
+        </>,
+      );
     case "history":
       return strokeIcon(
         <>
           <circle cx="12" cy="12" r="8" />
           <path d="M12 8v4l3 2" />
+        </>,
+      );
+    case "workDiary":
+      return strokeIcon(
+        <>
+          <rect x="4" y="5" width="16" height="15" rx="2" />
+          <path d="M8 3v4M16 3v4M4 10h16" />
+          <path d="M8 14h3M13 14h3M8 17h3" />
+        </>,
+      );
+    case "calendar":
+      return strokeIcon(
+        <>
+          <rect x="3" y="5" width="18" height="16" rx="2" />
+          <path d="M8 3v4M16 3v4M3 11h18" />
+          <path d="M8 15h2M12 15h2M16 15h2M8 18h2M12 18h2" />
         </>,
       );
     case "notifications":
