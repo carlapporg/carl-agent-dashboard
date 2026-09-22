@@ -136,6 +136,13 @@ export const API_ENDPOINTS = {
     earningsTips: "/agents/me/earnings/tips",
     earningsHourlyRate: "/agents/me/earnings/hourly-rate",
     earningsLedger: "/agents/me/earnings/ledger",
+    /** Agent payout / Stripe Connect + manual ACH bank. */
+    payoutSettings: "/agents/me/payout-settings",
+    payoutConnectLink: "/agents/me/payout-settings/connect-link",
+    payoutLoginLink: "/agents/me/payout-settings/login-link",
+    payoutBank: "/agents/me/payout-settings/bank",
+    payoutBankClear: "/agents/me/payout-settings/bank/clear",
+    payoutDisconnect: "/agents/me/payout-settings/disconnect",
     /** Profile extras until Nest expands /agents/me. */
     profileStats: "/agents/me/profile/stats",
     profileDetails: "/agents/me/profile/details",

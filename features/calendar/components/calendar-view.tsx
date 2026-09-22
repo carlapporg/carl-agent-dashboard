@@ -818,7 +818,7 @@ export function CalendarView() {
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            Calendar
+            Timesheet
           </h1>
           <p className="mt-1 max-w-xl text-sm text-muted">
             Scheduled tasks and presence for you. Total Online = Available +
@@ -980,7 +980,7 @@ export function CalendarView() {
 
       {!rangeError && isError && !active.data ? (
         <EmptyState
-          title="Can't load calendar"
+          title="Can't load timesheet"
           description={
             error instanceof Error
               ? error.message

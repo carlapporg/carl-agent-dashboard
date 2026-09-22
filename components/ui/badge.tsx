@@ -4,11 +4,11 @@ import type { HTMLAttributes } from "react";
 const variants = {
   default: "bg-surface-hover text-foreground-soft border-border",
   accent: "bg-accent/10 text-accent border-accent/25",
-  warning: "bg-amber-50 text-amber-800 border-amber-200",
-  danger: "bg-red-50 text-red-700 border-red-200",
-  success: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  warning: "bg-warning-soft text-warning-foreground border-warning/30",
+  danger: "bg-danger-soft text-danger border-danger/30",
+  success: "bg-success-soft text-success-foreground border-success/30",
   muted: "bg-surface-hover text-muted border-border",
-  info: "bg-blue-50 text-blue-700 border-blue-200",
+  info: "bg-accent-soft text-info-foreground border-accent/25",
 } as const;
 
 type BadgeProps = HTMLAttributes<HTMLSpanElement> & {

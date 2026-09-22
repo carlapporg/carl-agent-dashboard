@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 import {
   getAgentMetricsAction,
@@ -10,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/providers/toast-provider";
+import { ROUTES } from "@/lib/constants/routes";
 
 type Prefs = Awaited<ReturnType<typeof getAgentPreferencesAction>>;
 type Metrics = Awaited<ReturnType<typeof getAgentMetricsAction>>;
@@ -81,7 +83,11 @@ export function AgentPrefsPanel() {
       <div>
         <p className="text-sm font-semibold text-foreground">Skill tags</p>
         <p className="mt-1 text-sm text-muted">
-          Used later for matching. Payout settings are not shown here.
+          Used later for matching.{" "}
+          <Link href={ROUTES.payoutSettings} className="font-medium text-accent hover:underline">
+            Payout settings
+          </Link>{" "}
+          are on their own page.
         </p>
         <div className="mt-2 flex flex-wrap gap-1.5">
           {prefs.skills.map((s) => (

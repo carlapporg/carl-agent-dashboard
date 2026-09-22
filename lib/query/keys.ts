@@ -56,6 +56,9 @@ export const queryKeys = {
       [...queryKeys.earnings.all, "ledger", range] as const,
     hourlyRate: () => [...queryKeys.earnings.all, "hourly-rate"] as const,
   },
+  payoutSettings: {
+    all: ["payout-settings"] as const,
+  },
   adminChats: {
     all: ["admin-chats"] as const,
     lists: () => [...queryKeys.adminChats.all, "list"] as const,

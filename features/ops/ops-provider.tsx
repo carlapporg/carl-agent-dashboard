@@ -45,7 +45,6 @@ import { parseIncomingTaskMessage, previewForIncomingMessage } from "@/lib/realt
 import {
   connectAgentSocket,
   emitAgentAvailability,
-  ensureAgentSocketConnected,
   joinTaskRoom,
   leaveTaskRoom,
   releaseAgentSocket,
@@ -643,12 +642,16 @@ export function AgentOpsProvider({
 
     const socket = connectAgentSocket(socketUrl, socketTokenRef.current);
     socketRef.current = socket;
-    let lastAuthRefresh = 0;
     let cancelled = false;
     let hydrated = didInitialCatchUpGlobal;
     let disconnectedAt = 0;
     let dropBannerTimer = 0;
     let catchUpTimer = 0;
+    let lastReconnectAttempt = 0;
+    let refreshInFlight: Promise<
+      | { ok: true; token: string }
+      | { ok: false; reason: "invalid" | "network" }
+    > | null = null;
     const seenIds = new Set<string>();
 
     function rejoinRooms() {
@@ -662,23 +665,60 @@ export function AgentOpsProvider({
       }
     }
 
-    async function refreshAuth(): Promise<string | null> {
+    async function refreshAuth(): Promise<
+      | { ok: true; token: string }
+      | { ok: false; reason: "invalid" | "network" }
+    > {
+      if (refreshInFlight) return refreshInFlight;
+      refreshInFlight = (async () => {
+        try {
+          const response = await fetch("/api/auth/refresh", {
+            method: "POST",
+            credentials: "same-origin",
+          });
+          if (response.status === 503) {
+            return { ok: false as const, reason: "network" as const };
+          }
+          if (!response.ok) {
+            return { ok: false as const, reason: "invalid" as const };
+          }
+          const token = accessTokenFromUnknown(await response.json());
+          if (!token) {
+            return { ok: false as const, reason: "invalid" as const };
+          }
+          publishAccessToken(token);
+          updateAgentSocketAuth(token);
+          return { ok: true as const, token };
+        } catch {
+          return { ok: false as const, reason: "network" as const };
+        } finally {
+          refreshInFlight = null;
+        }
+      })();
+      return refreshInFlight;
+    }
+
+    function forceLogout() {
+      window.location.assign("/session/clear?reason=expired");
+    }
+
+    /** Refresh first, then connect. Never reconnect with a dead token. */
+    async function reconnectWithFreshToken() {
+      if (cancelled || socket.connected || socket.active) return;
       const now = Date.now();
-      if (now - lastAuthRefresh < 4_000) return socketTokenRef.current || null;
-      lastAuthRefresh = now;
-      try {
-        const response = await fetch("/api/auth/refresh", {
-          method: "POST",
-          credentials: "same-origin",
-        });
-        if (!response.ok) return null;
-        const token = accessTokenFromUnknown(await response.json());
-        if (!token) return null;
-        publishAccessToken(token);
-        updateAgentSocketAuth(token);
-        return token;
-      } catch {
-        return null;
+      if (now - lastReconnectAttempt < 3_000) return;
+      lastReconnectAttempt = now;
+
+      const result = await refreshAuth();
+      if (cancelled) return;
+      if (!result.ok) {
+        if (result.reason === "invalid") forceLogout();
+        // network: wait for online/visibility — do not hammer connect
+        return;
+      }
+      updateAgentSocketAuth(result.token);
+      if (!socket.connected && !socket.active) {
+        socket.connect();
       }
     }
 
@@ -787,13 +827,9 @@ export function AgentOpsProvider({
         if (cancelled || socket.connected) return;
         setConnected(false);
       }, 1_500);
-      if (reason === "io server disconnect") {
-        void refreshAuth().finally(() => {
-          if (!cancelled && !socket.connected && !socket.active) {
-            socket.connect();
-          }
-        });
-      }
+      // Intentional client disconnect (logout / HMR teardown) — do not refresh.
+      if (reason === "io client disconnect") return;
+      void reconnectWithFreshToken();
     }
 
     function forgetIfRejecting(taskId: string | undefined): boolean {
@@ -1056,22 +1092,14 @@ export function AgentOpsProvider({
       pulseQueue();
     }
 
-    function onConnectError(error: unknown) {
+    function onConnectError(_error: unknown) {
       setConnected(false);
-      const message =
-        error && typeof error === "object" && "message" in error
-          ? String((error as { message: unknown }).message)
-          : String(error ?? "");
-      if (!/auth|unauthorized|jwt|token|forbidden/i.test(message)) return;
-      void refreshAuth().then((token) => {
-        if (!token || cancelled) return;
-        if (!socket.connected && !socket.active) socket.connect();
-      });
+      void reconnectWithFreshToken();
     }
 
     function onVisibleOrOnline() {
       if (document.visibilityState === "hidden") return;
-      ensureAgentSocketConnected();
+      void reconnectWithFreshToken();
       void syncPresenceRef.current();
     }
 

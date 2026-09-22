@@ -134,11 +134,8 @@ export function connectAgentSocket(origin: string, token: string): Socket {
     transports,
     rememberUpgrade: !viaSameOriginProxy,
     upgrade: !viaSameOriginProxy,
-    reconnection: true,
-    reconnectionAttempts: Infinity,
-    reconnectionDelay: 1_000,
-    reconnectionDelayMax: 8_000,
-    randomizationFactor: 0.5,
+    // Manual reconnect after POST /auth/refresh — never hammer with a dead JWT.
+    reconnection: false,
     timeout: 20_000,
     autoConnect: true,
   });

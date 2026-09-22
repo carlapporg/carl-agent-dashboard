@@ -39,6 +39,18 @@ function defaultChrome(pathname: string, name: string, email: string) {
       subtitle: "",
     };
   }
+  if (pathname.startsWith(ROUTES.earnings)) {
+    return {
+      title: "Earnings",
+      subtitle: "",
+    };
+  }
+  if (pathname.startsWith(ROUTES.payoutSettings)) {
+    return {
+      title: "Payout Settings",
+      subtitle: "",
+    };
+  }
   if (pathname.startsWith(ROUTES.history)) {
     return {
       title: "History",

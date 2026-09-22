@@ -20,7 +20,7 @@ import {
 } from "@/types/calendar";
 
 const SHAPE_ERROR =
-  "Calendar data from the server didn't match the expected shape. Refresh and try again.";
+  "Timesheet data from the server didn't match the expected shape. Refresh and try again.";
 
 function emptyAvailabilitySummary() {
   return {

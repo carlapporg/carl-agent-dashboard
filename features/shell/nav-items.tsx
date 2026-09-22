@@ -8,6 +8,7 @@ export type NavIconId =
   | "adminChat"
   | "payments"
   | "earnings"
+  | "payouts"
   | "history"
   | "workDiary"
   | "calendar"
@@ -26,10 +27,11 @@ export const DASHBOARD_NAV: Array<{
   { href: ROUTES.adminChat, label: "Support Tickets", icon: "adminChat" },
   { href: ROUTES.payments, label: "Payments", icon: "payments" },
   { href: ROUTES.earnings, label: "Earnings", icon: "earnings" },
+  { href: ROUTES.payoutSettings, label: "Payout Settings", icon: "payouts" },
   { href: ROUTES.history, label: "History", icon: "history" },
-  // Work Diary is redundant — Calendar Day / Availability already shows the same hours.
+  // Work Diary is redundant — Timesheet already shows the same hours.
   // { href: ROUTES.workDiary, label: "Work Diary", icon: "workDiary" },
-  { href: ROUTES.calendar, label: "Calendar", icon: "calendar" },
+  { href: ROUTES.timesheet, label: "Timesheet", icon: "calendar" },
   { href: ROUTES.notifications, label: "Notifications", icon: "notifications" },
   { href: ROUTES.profile, label: "Profile", icon: "profile" },
   { href: ROUTES.settings, label: "Settings", icon: "settings" },
@@ -43,9 +45,10 @@ const FIGMA_PRIMARY_HREFS = new Set<string>([
   ROUTES.adminChat,
   ROUTES.payments,
   ROUTES.earnings,
+  ROUTES.payoutSettings,
   ROUTES.history,
   // ROUTES.workDiary,
-  ROUTES.calendar,
+  ROUTES.timesheet,
   ROUTES.notifications,
   ROUTES.profile,
 ]);
@@ -65,8 +68,9 @@ export function navDisplayLabel(href: string, fallback: string): string {
   if (href === ROUTES.adminChat) return "Support Tickets";
   if (href === ROUTES.payments) return "Payments";
   if (href === ROUTES.earnings) return "Earnings";
+  if (href === ROUTES.payoutSettings) return "Payout Settings";
   // if (href === ROUTES.workDiary) return "Work Diary";
-  if (href === ROUTES.calendar) return "Calendar";
+  if (href === ROUTES.timesheet) return "Timesheet";
   if (href === ROUTES.notifications) return "Notifications";
   return fallback;
 }
@@ -131,6 +135,14 @@ export function NavIcon({ id }: { id: NavIconId }) {
         <>
           <circle cx="12" cy="12" r="8" />
           <path d="M12 7v10M9.5 9.5c.6-.8 1.4-1.2 2.5-1.2 1.6 0 2.6.9 2.6 2.1 0 2.6-5.2 1.4-5.2 4 0 1.2 1.1 2.1 2.6 2.1 1.1 0 2-.4 2.6-1.2" />
+        </>,
+      );
+    case "payouts":
+      return strokeIcon(
+        <>
+          <rect x="3" y="6" width="18" height="12" rx="2" />
+          <path d="M3 10h18" />
+          <path d="M7 15h4" />
         </>,
       );
     case "history":
