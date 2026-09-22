@@ -158,14 +158,36 @@ function SupportIcon({ className }: { className?: string }) {
   );
 }
 
-function PlusIcon() {
+function PlusIcon({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 16 16" fill="none" className="size-4" aria-hidden>
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      className={cn("size-4 shrink-0", className)}
+      aria-hidden
+    >
       <path
-        d="M8 3.5v9M3.5 8h9"
+        d="M8 3v10M3 8h10"
         stroke="currentColor"
-        strokeWidth="1.75"
+        strokeWidth="2"
         strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function SearchIcon() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      className="size-4 shrink-0 text-muted"
+      aria-hidden
+    >
+      <path
+        d="M8.47 3.33a6.74 6.74 0 0 1 6.81 6.74c0 .77-.13 1.5-.38 2.2a6.6 6.6 0 0 1-1.02 1.88l4.17 4.16a.96.96 0 0 1-.7 1.69c-.14 0-.27-.03-.4-.08a.96.96 0 0 1-.33-.21l-4.2-4.17a6.7 6.7 0 0 1-3.95 1.27 6.74 6.74 0 1 1 0-13.48Zm0 1.45a5.29 5.29 0 1 0 0 10.59 5.29 5.29 0 0 0 0-10.59Z"
+        fill="currentColor"
+        fillOpacity="0.7"
       />
     </svg>
   );
@@ -173,9 +195,9 @@ function PlusIcon() {
 
 function SendIcon() {
   return (
-    <svg viewBox="0 0 16 16" fill="none" className="size-4" aria-hidden>
+    <svg viewBox="0 0 16 16" fill="none" className="size-4 shrink-0" aria-hidden>
       <path
-        d="m2.5 8 11-5.5L9.5 8l4 5.5-11-5.5Z"
+        d="M2.6 8.1 13.2 3.2l-3.8 10.2-1.9-4.3-4.9-1Z"
         stroke="currentColor"
         strokeWidth="1.5"
         strokeLinejoin="round"
@@ -215,6 +237,7 @@ export function AdminChatView({
   const [openSubject, setOpenSubject] = useState("");
   const [openMessage, setOpenMessage] = useState("");
   const [ticketFilter, setTicketFilter] = useState<TicketFilter>("open");
+  const [ticketSearch, setTicketSearch] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const fetchGen = useRef(0);
   const stickToBottom = useRef(true);
@@ -565,10 +588,21 @@ export function AdminChatView({
 
   const openCount = conversations.filter((row) => row.status === "OPEN").length;
   const closedCount = conversations.filter((row) => row.status === "CLOSED").length;
+  const searchNeedle = ticketSearch.trim().toLowerCase();
   const filteredConversations = conversations.filter((row) => {
-    if (ticketFilter === "open") return row.status === "OPEN";
-    if (ticketFilter === "closed") return row.status === "CLOSED";
-    return true;
+    if (ticketFilter === "open" && row.status !== "OPEN") return false;
+    if (ticketFilter === "closed" && row.status !== "CLOSED") return false;
+    if (!searchNeedle) return true;
+    const haystack = [
+      row.subject ?? "",
+      row.preview ?? "",
+      ticketCode(row.id),
+      row.id,
+      row.status,
+    ]
+      .join(" ")
+      .toLowerCase();
+    return haystack.includes(searchNeedle);
   });
   const hasConversations = conversations.length > 0;
   const showNewChatComposer = composerOpen && !selectedId;
@@ -603,13 +637,27 @@ export function AdminChatView({
             </div>
             <Button
               type="button"
-              variant="secondary"
-              className="h-9 gap-1.5 px-3 text-xs"
+              variant="primary"
+              className="h-9 shrink-0 gap-1.5 px-3 text-xs"
               onClick={startNewChat}
+              aria-label="New ticket"
             >
               <PlusIcon />
-              New ticket
+              <span className="hidden sm:inline">New ticket</span>
             </Button>
+          </div>
+          <div className="flex items-center gap-2 rounded-[var(--radius-md)] border border-border bg-surface-muted px-3 py-2">
+            <SearchIcon />
+            <input
+              value={ticketSearch}
+              onChange={(event) => setTicketSearch(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") event.preventDefault();
+              }}
+              placeholder="Search tickets"
+              aria-label="Search tickets"
+              className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted"
+            />
           </div>
           <div className="flex gap-1 rounded-[var(--radius-md)] bg-surface-muted p-1">
             {(
@@ -693,11 +741,13 @@ export function AdminChatView({
         ) : (
           <div className="flex flex-1 items-center justify-center px-4 py-8 text-center">
             <p className="text-sm text-muted">
-              {ticketFilter === "open"
-                ? "No open tickets"
-                : ticketFilter === "closed"
-                  ? "No closed tickets"
-                  : "No tickets yet"}
+              {searchNeedle
+                ? "No tickets match this search."
+                : ticketFilter === "open"
+                  ? "No open tickets"
+                  : ticketFilter === "closed"
+                    ? "No closed tickets"
+                    : "No tickets yet"}
             </p>
           </div>
         )}

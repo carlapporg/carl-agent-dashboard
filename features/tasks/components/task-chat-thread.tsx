@@ -24,8 +24,10 @@ import { useOps } from "@/features/ops/ops-provider";
 import { CHAT_TEMPLATES } from "@/features/tasks/lib/workflow";
 import { useToast } from "@/components/providers/toast-provider";
 import {
+  CHAT_ATTACH_ACCEPT,
   formatClockMs,
   isImageFile,
+  isVoiceFile,
   pickRecorderMime,
   TASK_MEDIA,
   uploadTaskMedia,
@@ -289,30 +291,6 @@ function MicIcon({ className }: { className?: string }) {
         stroke="currentColor"
         strokeWidth="1.8"
         strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-function ImageIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden className={className}>
-      <rect
-        x="3.5"
-        y="5"
-        width="17"
-        height="14"
-        rx="2.5"
-        stroke="currentColor"
-        strokeWidth="1.8"
-      />
-      <circle cx="8.75" cy="10" r="1.45" fill="currentColor" />
-      <path
-        d="M3.8 16.4 8.2 12.5l3.4 3 3.1-2.6 5.5 5.1"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
       />
     </svg>
   );
@@ -1116,24 +1094,46 @@ const TaskChatThreadBody = forwardRef<
     });
   }, [queueMedia]);
 
-  const pickImage = useCallback(
+  const pickAttachment = useCallback(
     (file: File) => {
-      if (!isImageFile(file)) {
-        toast("Please choose a JPG, PNG, GIF, or WebP image.", "error");
+      if (isImageFile(file)) {
+        if (file.size > TASK_MEDIA.maxImageBytes) {
+          toast("That image is too large. Please pick one under 10 MB.", "error");
+          return;
+        }
+        discardVoicePreview();
+        setImagePreview((current) => {
+          if (current?.url) URL.revokeObjectURL(current.url);
+          return { file, url: URL.createObjectURL(file) };
+        });
+        setError(null);
         return;
       }
-      if (file.size > TASK_MEDIA.maxImageBytes) {
-        toast("That image is too large. Please pick one under 10 MB.", "error");
+
+      if (isVoiceFile(file)) {
+        if (file.size > TASK_MEDIA.maxVoiceBytes) {
+          toast("That audio file is too large. Please pick one under 16 MB.", "error");
+          return;
+        }
+        discardImagePreview();
+        discardVoicePreview();
+        const url = URL.createObjectURL(file);
+        setVoicePreview({
+          blob: file,
+          url,
+          mime: file.type || "audio/mpeg",
+          durationMs: 0,
+        });
+        setError(null);
         return;
       }
-      discardVoicePreview();
-      setImagePreview((current) => {
-        if (current?.url) URL.revokeObjectURL(current.url);
-        return { file, url: URL.createObjectURL(file) };
-      });
-      setError(null);
+
+      toast(
+        "Chat can send photos and voice notes. For PDFs or docs, upload a receipt on the task.",
+        "error",
+      );
     },
-    [discardVoicePreview, toast],
+    [discardImagePreview, discardVoicePreview, toast],
   );
 
   const sendImagePreview = useCallback(() => {
@@ -1465,12 +1465,12 @@ const TaskChatThreadBody = forwardRef<
           <input
             ref={fileRef}
             type="file"
-            accept="image/jpeg,image/png,image/gif,image/webp"
+            accept={CHAT_ATTACH_ACCEPT}
             className="hidden"
             onChange={(event) => {
               const file = event.target.files?.[0];
               event.target.value = "";
-              if (file) pickImage(file);
+              if (file) pickAttachment(file);
             }}
           />
           {imagePreview ? (
@@ -1617,18 +1617,12 @@ const TaskChatThreadBody = forwardRef<
                 <button
                   type="button"
                   disabled={disabled}
-                  aria-label="Attach image"
+                  aria-label="Attach photo or voice file"
+                  title="Attach photo or voice file"
                   onClick={() => fileRef.current?.click()}
-                  className="inline-flex size-[18px] shrink-0 items-center justify-center disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex size-[18px] shrink-0 items-center justify-center text-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src="/figma/messages/icon-paperclip.svg"
-                    alt=""
-                    width={18}
-                    height={18}
-                    className="size-[18px]"
-                  />
+                  <PaperclipIcon className="size-[18px]" />
                 </button>
                 <textarea
                   ref={inputRef}
@@ -1696,12 +1690,12 @@ const TaskChatThreadBody = forwardRef<
             >
               <div className="mb-0.5 flex shrink-0 items-center gap-0.5">
                 <ComposerToolButton
-                  label="Send a picture"
-                  active={Boolean(imagePreview)}
+                  label="Attach photo or voice file"
+                  active={Boolean(imagePreview || voicePreview)}
                   disabled={disabled}
                   onClick={() => fileRef.current?.click()}
                 >
-                  <ImageIcon className="size-4.5" />
+                  <PaperclipIcon className="size-4.5" />
                 </ComposerToolButton>
                 <ComposerToolButton
                   label="Send a voice message"

@@ -337,7 +337,7 @@ function ConcentricRings({
   const CHART = 213;
 
   return (
-    <div className="relative h-[213px] w-[213px] shrink-0 grow-0">
+    <div className="relative h-[213px] w-[213px] shrink-0 grow-0 origin-center scale-[0.85] sm:scale-100">
       {rings.map((ring) => {
         const fillR = (ring.size - ring.stroke) / 2;
         const trackR = ring.trackSize / 2;
@@ -571,9 +571,9 @@ export function TasksPerHourPanel({
       )}
       style={style}
     >
-      <div className="relative z-[1] flex items-start justify-between gap-3">
-        <div>
-          <h3 className="text-[22px] font-semibold tracking-[-0.05em] text-foreground">
+      <div className="relative z-[1] flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h3 className="text-[20px] font-semibold tracking-[-0.05em] text-foreground sm:text-[22px]">
             Tasks Per Day
           </h3>
           <p className="mt-2 text-[12px] tracking-[-0.02em] text-muted">
@@ -581,20 +581,20 @@ export function TasksPerHourPanel({
             <span className="text-accent">Keep the streak going</span>
           </p>
         </div>
-        <span className="inline-flex h-[35px] items-center rounded-[40px] bg-surface-muted px-4 text-[12px] font-medium tracking-[-0.05em] text-foreground">
+        <span className="inline-flex h-[35px] shrink-0 items-center self-start rounded-[40px] bg-surface-muted px-4 text-[12px] font-medium tracking-[-0.05em] text-foreground">
           This week
         </span>
       </div>
 
       {/* Extra top room so hover tooltip stays inside the card */}
-      <div className="relative mt-6 flex min-h-0 flex-1 gap-3 pt-14">
-        <div className="flex w-8 flex-col justify-between pb-6 pt-1 text-right text-[12px] tracking-[-0.02em] text-muted-dim">
+      <div className="relative mt-4 flex min-h-[220px] flex-1 gap-2 overflow-x-auto pt-10 sm:mt-6 sm:min-h-0 sm:gap-3 sm:pt-14">
+        <div className="flex w-6 shrink-0 flex-col justify-between pb-6 pt-1 text-right text-[11px] tracking-[-0.02em] text-muted-dim sm:w-8 sm:text-[12px]">
           {chart.ticks.map((tick) => (
             <span key={tick}>{tick}</span>
           ))}
         </div>
 
-        <div className="relative min-w-0 flex-1">
+        <div className="relative min-w-[280px] flex-1 sm:min-w-0">
           <div className="absolute inset-x-0 bottom-6 top-0 flex flex-col justify-between">
             {chart.ticks.map((tick) => (
               <div key={`grid-${tick}`} className="border-t border-border" />
@@ -602,7 +602,7 @@ export function TasksPerHourPanel({
           </div>
 
           <div
-            className="absolute inset-x-0 bottom-6 top-2 flex items-end justify-between gap-4 overflow-visible px-1"
+            className="absolute inset-x-0 bottom-6 top-2 flex items-end justify-between gap-2 overflow-visible px-1 sm:gap-4"
             onMouseLeave={() => setHoverIndex(null)}
           >
             {chart.columns.map((column, index) => {
@@ -716,30 +716,25 @@ export function ShiftProgress({
   return (
     <div
       className={cn(
-        /* Figma Progress 200:24962 — 425×424 composition */
-        "relative h-[424px] w-full overflow-hidden rounded-[10px] border border-border bg-surface",
+        "relative flex h-auto min-h-[360px] w-full flex-col overflow-hidden rounded-[10px] border border-border bg-surface p-4 sm:min-h-[400px] sm:p-5 xl:h-[424px] xl:min-h-0 xl:p-0",
         className,
       )}
       style={style}
     >
-      <h3 className="absolute left-[15px] top-[29px] z-[1] text-[22px] font-semibold leading-[27px] tracking-[-0.05em] text-foreground">
-        Task Progress
-      </h3>
-
-      <div className="absolute top-[25px] right-[15px]">
+      <div className="relative z-[1] flex items-start justify-between gap-3 xl:absolute xl:inset-x-[15px] xl:top-[25px]">
+        <h3 className="text-[20px] font-semibold leading-[27px] tracking-[-0.05em] text-foreground sm:text-[22px] xl:pt-1">
+          Task Progress
+        </h3>
         <MonthFilterPill value={rangeLabel} onChange={onRangeChange} />
       </div>
 
-      <p className="absolute left-[15px] top-[93px] z-[1] text-[18px] font-semibold leading-[22px] tracking-[-0.05em] text-foreground">
+      <p className="relative z-[1] mt-4 text-[16px] font-semibold leading-[22px] tracking-[-0.05em] text-foreground sm:text-[18px] xl:absolute xl:left-[15px] xl:top-[93px] xl:mt-0">
         Total Task
         <br />
         {total}
       </p>
 
-      <div
-        className="absolute top-[136px]"
-        style={{ left: "min(197px, 46.35%)" }}
-      >
+      <div className="relative z-[1] mx-auto my-6 flex flex-1 items-center justify-center xl:absolute xl:top-[136px] xl:left-[min(197px,46.35%)] xl:my-0 xl:block xl:flex-none">
         <ConcentricRings
           completed={completed}
           inProgress={inProgress}
@@ -748,7 +743,7 @@ export function ShiftProgress({
         />
       </div>
 
-      <div className="absolute inset-x-[15px] top-[385px] flex items-center justify-between text-[12px] font-normal leading-[15px] tracking-[-0.05em] text-foreground">
+      <div className="relative z-[1] mt-auto flex flex-wrap items-center justify-between gap-x-3 gap-y-2 text-[11px] font-normal leading-[15px] tracking-[-0.05em] text-foreground sm:text-[12px] xl:absolute xl:inset-x-[15px] xl:top-[385px] xl:mt-0">
         <span className="inline-flex items-center gap-[10px]">
           <span className="size-2 shrink-0 rounded-full bg-[#c7ffc7]" />
           {completed} Task Done

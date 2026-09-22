@@ -97,14 +97,12 @@ export function MetricStatCard({
         className={cn(
           "absolute right-[15px] top-[15px] flex size-[46px] items-center justify-center rounded-full",
           featured
-            ? "bg-white text-[#1f1f21]"
-            : variant === "plain"
-              ? "bg-[#1f1f21] text-white"
-              : "bg-gradient-to-b from-[#4f7cff] to-[#85c9ff] text-accent-foreground shadow-[inset_0_3px_10px_rgba(255,255,255,0.45)]",
+            ? "bg-white text-[#4f7cff]"
+            : "bg-gradient-to-b from-[#4f7cff] to-[#85c9ff] text-accent-foreground shadow-[inset_0_3px_10px_rgba(255,255,255,0.45)]",
         )}
         aria-hidden
       >
-        <span className="relative block size-[26px] [&_img]:absolute [&_img]:inset-0 [&_img]:size-full [&_svg]:size-[26px]">
+        <span className="relative flex size-[26px] items-center justify-center [&_img]:absolute [&_img]:inset-0 [&_img]:size-full [&_svg]:size-[26px]">
           {icon}
         </span>
       </span>

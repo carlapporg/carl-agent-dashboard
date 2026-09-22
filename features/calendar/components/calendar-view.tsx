@@ -152,7 +152,7 @@ function HoursGrid({
   busyHours: number;
 }) {
   return (
-    <section className="grid gap-3 sm:grid-cols-3">
+    <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
       {[
         {
           label: "Total Online",
@@ -168,15 +168,15 @@ function HoursGrid({
       ].map((card) => (
         <div
           key={card.label}
-          className="rounded-[var(--radius-card)] border border-border bg-surface p-4 shadow-[var(--shadow-card)]"
+          className="rounded-[var(--radius-card)] border border-border bg-surface p-4 shadow-[var(--shadow-card)] sm:p-5"
         >
-          <p className="text-[12px] font-medium tracking-[-0.02em] text-muted">
+          <p className="text-sm font-medium tracking-[-0.02em] text-muted">
             {card.label}
           </p>
-          <p className="mt-2 text-[28px] font-semibold leading-none tracking-tight text-foreground">
+          <p className="mt-2 text-[28px] font-normal leading-none tracking-tight text-foreground sm:text-[32px]">
             {formatHours(card.value)}
           </p>
-          <p className="mt-3 text-[11px] text-muted">{card.hint}</p>
+          <p className="mt-3 text-[11px] text-muted sm:text-xs">{card.hint}</p>
         </div>
       ))}
     </section>
@@ -509,59 +509,63 @@ function MonthGrid({
           UTC month grid. Click a day to open Day view.
         </p>
       </div>
-      <div className="grid grid-cols-7 border-b border-border bg-surface-muted text-center text-[11px] font-semibold uppercase tracking-[0.04em] text-muted">
-        {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((label) => (
-          <div key={label} className="px-1 py-2">
-            {label}
+      <div className="overflow-x-auto">
+        <div className="min-w-[36rem]">
+          <div className="grid grid-cols-7 border-b border-border bg-surface-muted text-center text-[11px] font-semibold uppercase tracking-[0.04em] text-muted">
+            {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((label) => (
+              <div key={label} className="px-1 py-2">
+                {label}
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
-      <div className="grid grid-cols-7 auto-rows-fr">
-        {cells.map((cell) => {
-          const dayNum = Number(cell.date.slice(8, 10));
-          const isToday = cell.date === today;
-          return (
-            <button
-              key={cell.date}
-              type="button"
-              onClick={() => onSelectDate(cell.date)}
-              className={cn(
-                "min-h-[88px] border-b border-r border-border p-1.5 text-left align-top transition-colors hover:bg-surface-hover",
-                !cell.inMonth && "bg-surface-muted/40 text-muted",
-                isToday && "bg-accent/5",
-              )}
-            >
-              <span
-                className={cn(
-                  "inline-flex size-6 items-center justify-center rounded-full text-[12px] font-semibold",
-                  isToday
-                    ? "bg-accent text-accent-foreground"
-                    : cell.inMonth
-                      ? "text-foreground"
-                      : "text-muted",
-                )}
-              >
-                {dayNum}
-              </span>
-              <ul className="mt-1 space-y-0.5">
-                {cell.events.slice(0, 3).map((event) => (
-                  <li
-                    key={event.id}
-                    className="truncate rounded px-1 py-0.5 text-[10px] font-medium text-accent-foreground bg-accent/90"
-                    title={event.title}
+          <div className="grid grid-cols-7 auto-rows-fr">
+            {cells.map((cell) => {
+              const dayNum = Number(cell.date.slice(8, 10));
+              const isToday = cell.date === today;
+              return (
+                <button
+                  key={cell.date}
+                  type="button"
+                  onClick={() => onSelectDate(cell.date)}
+                  className={cn(
+                    "min-h-[72px] border-b border-r border-border p-1.5 text-left align-top transition-colors hover:bg-surface-hover sm:min-h-[88px]",
+                    !cell.inMonth && "bg-surface-muted/40 text-muted",
+                    isToday && "bg-accent/5",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "inline-flex size-6 items-center justify-center rounded-full text-[12px] font-semibold",
+                      isToday
+                        ? "bg-accent text-accent-foreground"
+                        : cell.inMonth
+                          ? "text-foreground"
+                          : "text-muted",
+                    )}
                   >
-                    {event.title}
-                  </li>
-                ))}
-                {cell.events.length > 3 ? (
-                  <li className="px-1 text-[10px] text-muted">
-                    +{cell.events.length - 3} more
-                  </li>
-                ) : null}
-              </ul>
-            </button>
-          );
-        })}
+                    {dayNum}
+                  </span>
+                  <ul className="mt-1 space-y-0.5">
+                    {cell.events.slice(0, 3).map((event) => (
+                      <li
+                        key={event.id}
+                        className="truncate rounded px-1 py-0.5 text-[10px] font-medium text-accent-foreground bg-accent/90"
+                        title={event.title}
+                      >
+                        {event.title}
+                      </li>
+                    ))}
+                    {cell.events.length > 3 ? (
+                      <li className="px-1 text-[10px] text-muted">
+                        +{cell.events.length - 3} more
+                      </li>
+                    ) : null}
+                  </ul>
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
     </section>
   );
@@ -588,67 +592,69 @@ function WeekGrid({
           Monday–Sunday UTC. Tap a day to see its bookings and presence.
         </p>
       </div>
-      <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4 lg:grid-cols-7">
-        {days.map((day, index) => {
-          const dayNum = Number(day.date.slice(8, 10));
-          const isToday = day.date === today;
-          const selected = day.date === selectedDate;
-          const label = WEEKDAY_LABELS[index] ?? formatDayLabel(day.date);
-          return (
-            <button
-              key={day.date}
-              type="button"
-              onClick={() => onSelectDate(day.date)}
-              className={cn(
-                "min-h-[120px] bg-surface p-2.5 text-left transition-colors hover:bg-surface-hover",
-                selected && "bg-accent/10 ring-2 ring-inset ring-accent",
-                isToday && !selected && "bg-accent/5",
-              )}
-            >
-              <div className="flex items-center justify-between gap-1">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.04em] text-muted">
-                  {label}
-                </span>
-                <span
-                  className={cn(
-                    "inline-flex size-6 items-center justify-center rounded-full text-[12px] font-semibold",
-                    selected || isToday
-                      ? "bg-accent text-accent-foreground"
-                      : "text-foreground",
-                  )}
-                >
-                  {dayNum}
-                </span>
-              </div>
-              <p className="mt-2 text-[11px] text-muted">
-                Online{" "}
-                {formatHours(
-                  clipDayAvailability(day.availability, day.date)
-                    .totalOnlineHours,
+      <div className="overflow-x-auto">
+        <div className="grid min-w-[40rem] grid-cols-7 gap-px bg-border lg:min-w-0">
+          {days.map((day, index) => {
+            const dayNum = Number(day.date.slice(8, 10));
+            const isToday = day.date === today;
+            const selected = day.date === selectedDate;
+            const label = WEEKDAY_LABELS[index] ?? formatDayLabel(day.date);
+            return (
+              <button
+                key={day.date}
+                type="button"
+                onClick={() => onSelectDate(day.date)}
+                className={cn(
+                  "min-h-[100px] bg-surface p-2.5 text-left transition-colors hover:bg-surface-hover sm:min-h-[120px]",
+                  selected && "bg-accent/10 ring-2 ring-inset ring-accent",
+                  isToday && !selected && "bg-accent/5",
                 )}
-              </p>
-              <ul className="mt-2 space-y-0.5">
-                {day.events.slice(0, 3).map((event) => (
-                  <li
-                    key={event.id}
-                    className="truncate rounded px-1 py-0.5 text-[10px] font-medium bg-accent/90 text-accent-foreground"
-                    title={event.title}
+              >
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.04em] text-muted">
+                    {label}
+                  </span>
+                  <span
+                    className={cn(
+                      "inline-flex size-6 items-center justify-center rounded-full text-[12px] font-semibold",
+                      selected || isToday
+                        ? "bg-accent text-accent-foreground"
+                        : "text-foreground",
+                    )}
                   >
-                    {event.title}
-                  </li>
-                ))}
-                {day.events.length > 3 ? (
-                  <li className="px-1 text-[10px] text-muted">
-                    +{day.events.length - 3} more
-                  </li>
-                ) : null}
-                {day.events.length === 0 ? (
-                  <li className="px-1 text-[10px] text-muted">No bookings</li>
-                ) : null}
-              </ul>
-            </button>
-          );
-        })}
+                    {dayNum}
+                  </span>
+                </div>
+                <p className="mt-2 text-[11px] text-muted">
+                  Online{" "}
+                  {formatHours(
+                    clipDayAvailability(day.availability, day.date)
+                      .totalOnlineHours,
+                  )}
+                </p>
+                <ul className="mt-2 space-y-0.5">
+                  {day.events.slice(0, 3).map((event) => (
+                    <li
+                      key={event.id}
+                      className="truncate rounded px-1 py-0.5 text-[10px] font-medium bg-accent/90 text-accent-foreground"
+                      title={event.title}
+                    >
+                      {event.title}
+                    </li>
+                  ))}
+                  {day.events.length > 3 ? (
+                    <li className="px-1 text-[10px] text-muted">
+                      +{day.events.length - 3} more
+                    </li>
+                  ) : null}
+                  {day.events.length === 0 ? (
+                    <li className="px-1 text-[10px] text-muted">No bookings</li>
+                  ) : null}
+                </ul>
+              </button>
+            );
+          })}
+        </div>
       </div>
     </section>
   );
@@ -815,7 +821,7 @@ export function CalendarView() {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <header className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
             Timesheet
@@ -826,15 +832,15 @@ export function CalendarView() {
             create or edit.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex flex-wrap rounded-[var(--radius-md)] border border-border bg-surface p-1">
+        <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto">
+          <div className="inline-flex max-w-full flex-wrap rounded-[var(--radius-md)] border border-border bg-surface p-1">
             {MODES.map((item) => (
               <button
                 key={item.id}
                 type="button"
                 onClick={() => setMode(item.id)}
                 className={cn(
-                  "rounded-[calc(var(--radius-md)-2px)] px-3 py-1.5 text-sm font-semibold",
+                  "rounded-[calc(var(--radius-md)-2px)] px-2.5 py-1.5 text-xs font-semibold sm:px-3 sm:text-sm",
                   mode === item.id
                     ? "bg-accent text-accent-foreground"
                     : "text-muted hover:text-foreground",

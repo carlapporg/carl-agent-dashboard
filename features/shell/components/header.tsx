@@ -136,6 +136,13 @@ export function DashboardHeader({ user }: DashboardHeaderProps) {
     router.push(`${ROUTES.tasks}?q=${encodeURIComponent(q)}`);
   }
 
+  /** Task-jump search only — not on Payout, Tickets, Earnings, etc. */
+  const showWorkspaceSearch =
+    isTaskHubPath(pathname) ||
+    isTaskDetailPath(pathname) ||
+    pathname === ROUTES.dashboard ||
+    pathname.startsWith(ROUTES.inbox);
+
   return (
     <header className="flex h-[68px] items-center justify-between gap-4 border-b border-border bg-surface px-5 md:px-6">
       <div className="min-w-0 flex-1">
@@ -148,14 +155,7 @@ export function DashboardHeader({ user }: DashboardHeaderProps) {
       </div>
 
       <div className="flex shrink-0 items-center gap-6">
-        {pathname !== ROUTES.dashboard &&
-        !isTaskHubPath(pathname) &&
-        !pathname.startsWith(ROUTES.messages) &&
-        !pathname.startsWith(ROUTES.payments) &&
-        !pathname.startsWith(ROUTES.history) &&
-        !pathname.startsWith(ROUTES.profile) &&
-        !pathname.startsWith(ROUTES.settings) &&
-        !pathname.startsWith(ROUTES.notifications) ? (
+        {showWorkspaceSearch ? (
           <form
             onSubmit={onWorkspaceSearch}
             className="relative hidden w-[min(100%,17.5rem)] lg:block xl:w-72"
@@ -181,8 +181,8 @@ export function DashboardHeader({ user }: DashboardHeaderProps) {
             <input
               value={workspaceQuery}
               onChange={(event) => setWorkspaceQuery(event.target.value)}
-              placeholder="Search workspace..."
-              aria-label="Search workspace"
+              placeholder="Search tasks..."
+              aria-label="Search tasks"
               className="h-11 w-full rounded-[var(--radius-pill)] border border-border bg-surface pl-11 pr-4 text-sm text-foreground outline-none placeholder:text-muted-dim focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/20"
             />
           </form>

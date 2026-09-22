@@ -46,7 +46,14 @@ export function Button({
           aria-hidden
         />
       ) : null}
-      <span className={cn(loading && "opacity-90")}>{children}</span>
+      <span
+        className={cn(
+          "inline-flex items-center justify-center gap-1.5",
+          loading && "opacity-90",
+        )}
+      >
+        {children}
+      </span>
     </button>
   );
 }

@@ -106,20 +106,34 @@ function Card({
   label,
   value,
   hint,
+  emphasize,
 }: {
   label: string;
   value: string;
   hint: string;
+  emphasize?: boolean;
 }) {
   return (
-    <div className="rounded-[var(--radius-card)] border border-border bg-surface p-4 shadow-[var(--shadow-card)]">
-      <p className="text-[12px] font-medium tracking-[-0.02em] text-muted">
+    <div className="rounded-[var(--radius-card)] border border-border bg-surface p-4 shadow-[var(--shadow-card)] sm:p-5">
+      <p
+        className={cn(
+          "font-bold tracking-[-0.02em] text-foreground",
+          emphasize ? "text-base sm:text-lg" : "text-sm",
+        )}
+      >
         {label}
       </p>
-      <p className="mt-2 text-[28px] font-semibold leading-none tracking-tight text-foreground">
+      <p
+        className={cn(
+          "mt-2 font-normal leading-none tracking-tight text-foreground",
+          emphasize
+            ? "text-[28px] sm:text-[32px]"
+            : "text-[22px] sm:text-[26px]",
+        )}
+      >
         {value}
       </p>
-      <p className="mt-3 text-[11px] text-muted">{hint}</p>
+      <p className="mt-3 text-sm text-muted">{hint}</p>
     </div>
   );
 }
@@ -189,8 +203,8 @@ export function EarningsView() {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
+      <header className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+        <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
             Earnings
           </h1>
@@ -199,27 +213,27 @@ export function EarningsView() {
             cannot change your rate or run payroll here.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-2 text-sm text-muted">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.04em]">
+        <div className="flex w-fit max-w-full flex-wrap items-end gap-3">
+          <label className="flex w-[9.75rem] shrink-0 flex-col gap-1.5">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.04em] text-muted">
               From
             </span>
             <input
               type="date"
               value={from}
               onChange={(event) => setFrom(event.target.value)}
-              className="h-10 rounded-[var(--radius-md)] border border-border bg-surface px-3 text-sm text-foreground"
+              className="box-border h-10 w-full rounded-[var(--radius-md)] border border-border bg-surface px-2.5 text-sm text-foreground"
             />
           </label>
-          <label className="flex items-center gap-2 text-sm text-muted">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.04em]">
+          <label className="flex w-[9.75rem] shrink-0 flex-col gap-1.5">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.04em] text-muted">
               To
             </span>
             <input
               type="date"
               value={to}
               onChange={(event) => setTo(event.target.value)}
-              className="h-10 rounded-[var(--radius-md)] border border-border bg-surface px-3 text-sm text-foreground"
+              className="box-border h-10 w-full rounded-[var(--radius-md)] border border-border bg-surface px-2.5 text-sm text-foreground"
             />
           </label>
           <button
@@ -231,9 +245,9 @@ export function EarningsView() {
               void tipsQuery.refetch();
               void rateQuery.refetch();
             }}
-            className="h-10 rounded-[var(--radius-md)] border border-border px-3 text-sm font-semibold text-foreground hover:bg-surface-hover disabled:opacity-50"
+            className="inline-flex h-9 w-auto shrink-0 items-center justify-center rounded-[var(--radius-md)] border border-border bg-surface px-3 text-xs font-semibold text-foreground hover:bg-surface-hover disabled:opacity-50"
           >
-            {isFetching ? "Refreshing…" : "Refresh"}
+            {isFetching ? "…" : "Refresh"}
           </button>
         </div>
       </header>
@@ -277,25 +291,28 @@ export function EarningsView() {
             </p>
           )}
 
-          <section className="grid gap-3 sm:grid-cols-3">
+          <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Card
               label="Pending"
               value={formatMoney(summary.payroll.pending)}
               hint="Earned, not approved yet"
+              emphasize
             />
             <Card
               label="Approved"
               value={formatMoney(summary.payroll.approved)}
               hint="Reviewed, not sent yet"
+              emphasize
             />
             <Card
               label="Paid"
               value={formatMoney(summary.payroll.paid)}
               hint="Marked paid"
+              emphasize
             />
           </section>
 
-          <section className="grid gap-3 sm:grid-cols-3">
+          <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Card
               label="Gross"
               value={formatMoney(summary.gross)}
@@ -313,7 +330,7 @@ export function EarningsView() {
             />
           </section>
 
-          <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {[
               { label: "Wages", value: summary.earned.wages, hint: "Hourly pay only. Tips are not included." },
               { label: "Tips", value: summary.earned.tips, hint: "Separate from wages." },
@@ -349,7 +366,7 @@ export function EarningsView() {
         ) : rateQuery.data ? (
           <div className="space-y-4 px-4 py-4">
             <div>
-              <p className="text-lg font-semibold text-foreground">
+              <p className="text-lg font-normal text-foreground">
                 {formatMoney(rateDollars(rateQuery.data.current))}
               </p>
               {rateQuery.data.current.source === "system_default" ? (
@@ -453,7 +470,7 @@ export function EarningsView() {
                     {formatStamp(row.createdAt)}
                   </p>
                 </div>
-                <p className="shrink-0 text-sm font-semibold text-foreground">
+                <p className="shrink-0 text-sm font-normal tabular-nums text-foreground">
                   {formatMoney(row.amount)}
                 </p>
               </li>
@@ -516,7 +533,7 @@ function TipRow({ tip }: { tip: EarningsTip }) {
           {tip.paidOutAt ? ` · Paid out ${formatStamp(tip.paidOutAt)}` : ""}
         </p>
       </div>
-      <p className="shrink-0 text-sm font-semibold text-foreground">
+      <p className="shrink-0 text-sm font-normal tabular-nums text-foreground">
         {formatMoney(tip.amount)}
       </p>
     </li>

@@ -33,6 +33,14 @@ export function isImageFile(file: File): boolean {
   return /\.(jpe?g|png|gif|webp|heic|heif)$/i.test(file.name);
 }
 
+export function isVoiceFile(file: File): boolean {
+  if (file.type.startsWith("audio/")) return true;
+  return /\.(webm|ogg|mp3|mp4|m4a|aac|wav)$/i.test(file.name);
+}
+
+export const CHAT_ATTACH_ACCEPT =
+  "image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,image/*,audio/*,audio/webm,audio/ogg,audio/mpeg,audio/mp4,audio/wav,audio/aac,.m4a";
+
 export function voiceFilename(mimeType: string): string {
   if (mimeType.includes("mp4") || mimeType.includes("m4a") || mimeType.includes("aac")) {
     return "voice.m4a";

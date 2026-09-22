@@ -165,17 +165,17 @@ export function LiveTaskQueue({
           Queue is quiet. New assignments will appear here live.
         </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="min-w-[920px] w-full border-collapse text-left">
+        <div className="overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]">
+          <table className="min-w-[640px] w-full border-collapse text-left md:min-w-[760px] xl:min-w-[920px]">
             <thead>
-              <tr className="bg-surface-muted text-[14px] font-medium tracking-[-0.05em] text-muted">
-                <th className="px-5 py-2.5 first:rounded-l-[5px]">ID</th>
+              <tr className="bg-surface-muted text-[12px] font-medium tracking-[-0.05em] text-muted sm:text-[14px]">
+                <th className="px-3 py-2.5 first:rounded-l-[5px] sm:px-5">ID</th>
                 <th className="px-3 py-2.5">Task</th>
-                <th className="px-3 py-2.5">Place</th>
+                <th className="hidden px-3 py-2.5 sm:table-cell">Place</th>
                 <th className="px-3 py-2.5">Time</th>
                 <th className="px-3 py-2.5">Status</th>
-                <th className="px-3 py-2.5">Date</th>
-                <th className="px-5 py-2.5 last:rounded-r-[5px]">Actions</th>
+                <th className="hidden px-3 py-2.5 md:table-cell">Date</th>
+                <th className="px-3 py-2.5 last:rounded-r-[5px] sm:px-5">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -218,11 +218,11 @@ export function LiveTaskQueue({
                     tabIndex={openable ? 0 : undefined}
                     role={openable ? "link" : undefined}
                   >
-                    <td className="px-5 py-5">#{index + 1}</td>
+                    <td className="px-3 py-5 sm:px-5">#{index + 1}</td>
                     <td className="max-w-[180px] truncate px-3 py-5">
                       {item.taskType?.replaceAll("_", " ") ?? item.title}
                     </td>
-                    <td className="max-w-[140px] truncate px-3 py-5">
+                    <td className="hidden max-w-[140px] truncate px-3 py-5 sm:table-cell">
                       {placeLabel(item)}
                     </td>
                     <td className="whitespace-nowrap px-3 py-5">
@@ -257,14 +257,14 @@ export function LiveTaskQueue({
                         {offered ? <OfferActions task={item} /> : null}
                       </div>
                     </td>
-                    <td className="whitespace-nowrap px-3 py-5">
+                    <td className="hidden whitespace-nowrap px-3 py-5 md:table-cell">
                       {receivedDate(
                         isCompletedQueueTask(item)
                           ? (item.completedAt ?? item.updatedAt)
                           : item.updatedAt,
                       )}
                     </td>
-                    <td className="px-5 py-5">
+                    <td className="px-3 py-5 sm:px-5">
                       <Link
                         href={ROUTES.task(item.id)}
                         className="inline-flex size-4 items-center justify-center text-muted hover:text-foreground"
