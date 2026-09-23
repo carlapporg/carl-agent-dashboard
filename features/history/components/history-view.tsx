@@ -555,9 +555,6 @@ export function HistoryView({ logs }: HistoryViewProps) {
           <h1 className="text-[34px] font-semibold leading-none tracking-[-0.04em] text-foreground">
             History
           </h1>
-          <p className="mt-3 text-[16px] font-normal tracking-[-0.02em] text-muted">
-            Your current sales summary and activity
-          </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <AvailabilityToggle activeTaskCount={activeTaskCount} />

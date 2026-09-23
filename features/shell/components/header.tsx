@@ -127,7 +127,7 @@ export function DashboardHeader({ user }: DashboardHeaderProps) {
       ? "Busy"
       : presence === "OFFLINE"
         ? "Offline"
-        : "Available";
+        : "Active";
 
   function onWorkspaceSearch(event: FormEvent) {
     event.preventDefault();

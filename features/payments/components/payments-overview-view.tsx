@@ -40,25 +40,25 @@ const METRIC_UI: Record<
 > = {
   revenue: {
     label: "Total Revenue",
-    hint: "Offered - Accept or reject in 30 seconds.",
+    hint: "Money earned from completed tasks in this period.",
     icon: "/figma/payments/coin-dollar.svg",
     variant: "plainCyan",
   },
   pending: {
     label: "Pending payouts",
-    hint: "13 tasks are currently being processed for customers.",
+    hint: "Approved earnings still waiting to be paid out.",
     icon: "/figma/dashboard/copy-03.svg",
     variant: "plain",
   },
   refunds: {
     label: "Refund triggered",
-    hint: "Waiting for users from Nest.",
+    hint: "Refunds started or completed in this period.",
     icon: "/figma/payments/refresh-04.svg",
     variant: "plainCyan",
   },
   escrows: {
     label: "Completed escrows",
-    hint: "Finished in this list.",
+    hint: "Escrow holds released after successful completion.",
     icon: "/figma/payments/wallet-01.svg",
     variant: "plainGreen",
   },
@@ -228,9 +228,6 @@ export function PaymentsOverviewView({
           <h1 className="text-[34px] font-semibold leading-none tracking-[-0.04em] text-foreground">
             Payments Overview
           </h1>
-          <p className="mt-3 text-[16px] font-normal tracking-[-0.02em] text-muted">
-            Your current sales summary and activity
-          </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <AvailabilityToggle activeTaskCount={activeTaskCount} />
@@ -278,6 +275,7 @@ export function PaymentsOverviewView({
             <span className="relative inline-flex items-center gap-2 rounded-[50px] bg-[rgba(61,188,61,0.2)] py-1 pl-6 pr-4 text-[12px] font-medium tracking-[-0.03em] text-[#3dbc3d]">
               <span className="absolute left-3.5 top-1/2 size-[5px] -translate-y-1/2 rounded-full bg-[#3dbc3d]" />
               {filteredTransactions.length} Live Task
+                {filteredTransactions.length === 1 ? "" : "s"}
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-3">

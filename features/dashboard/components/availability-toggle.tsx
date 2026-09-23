@@ -35,7 +35,7 @@ const OPTIONS: Array<{
 }> = [
   {
     value: "available",
-    label: "Available",
+    label: "Active",
     pillLabel: "Active",
     dot: "bg-[#27ca40]",
   },

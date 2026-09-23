@@ -96,10 +96,6 @@ export function WorkDiaryView() {
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
             Work Diary
           </h1>
-          <p className="mt-1 max-w-xl text-sm text-muted">
-            Automatic presence log. Total Online = Available + Busy. Online and
-            Offline do not count hours. Clock stops when Offline.
-          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="inline-flex rounded-[var(--radius-md)] border border-border bg-surface p-1">

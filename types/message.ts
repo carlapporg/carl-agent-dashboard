@@ -25,6 +25,8 @@ export const timelineEventSchema = z.object({
   durationMs: z.number().nullable().optional(),
   mimeType: z.string().nullable().optional(),
   previewUrl: z.string().nullable().optional(),
+  /** When the customer read this agent message (null / missing = delivered only). */
+  readAt: z.string().nullable().optional(),
 });
 
 export type TimelineEventKind = z.infer<typeof timelineEventKindSchema>;

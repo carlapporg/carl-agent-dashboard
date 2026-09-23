@@ -206,9 +206,6 @@ export function DashboardHome({ tasks }: DashboardHomeProps) {
           <h1 className="text-[28px] font-semibold leading-none tracking-[-0.04em] text-foreground sm:text-[34px]">
             Sales Overview
           </h1>
-          <p className="mt-2 text-sm font-normal tracking-[-0.02em] text-muted sm:mt-3 sm:text-[16px]">
-            Your current sales summary and activity
-          </p>
         </div>
         <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:gap-3">
           <AvailabilityToggle activeTaskCount={stats.activeTaskCount} />
@@ -238,7 +235,7 @@ export function DashboardHome({ tasks }: DashboardHomeProps) {
         <MetricStatCard
           label="Waiting on Customer"
           value={stats.waitingCustomer}
-          hint="Waiting for users from Nest."
+          hint="Waiting for customers for confirmation."
           icon={<MetricIconWaiting />}
           variant="plainCyan"
           className="dash-slide-in"

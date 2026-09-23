@@ -43,6 +43,18 @@ const SKIP_METADATA_KEYS = new Set([
   "socketId",
   "agentId",
   "userId",
+  // Venue pipeline internals — agent sees locked venue card, not these.
+  "venueChoice",
+  "venueSearchQuery",
+  "venueSearchWhat",
+  "venueSearchWhere",
+  "venueSuggestions",
+  "pickedSuggestionId",
+  "pickedSuggestionMapsUrl",
+  "pickedSuggestionRating",
+  "venuePlaceId",
+  "venueLat",
+  "venueLng",
 ]);
 
 function titleCase(value: string): string {

@@ -57,12 +57,18 @@ export const API_ENDPOINTS = {
      */
     taskConfirmation: (taskId: string) =>
       `/agents/me/tasks/${taskId}/confirmation` as const,
-    /** POST { notes?, cost, currency? } → DRAFT with backend preview rows. */
+    /** POST { notes?, cost, currency?, suggestionId?, …fields } → DRAFT with backend preview rows. */
     taskConfirmationDraft: (taskId: string) =>
       `/agents/me/tasks/${taskId}/confirmation/draft` as const,
     /** POST — DRAFT → PENDING; notifies user; task → WAITING_FOR_USER. */
     taskConfirmationSend: (taskId: string, confirmationId: string) =>
       `/agents/me/tasks/${taskId}/confirmation/${confirmationId}/send` as const,
+    /**
+     * POST — re-run Places/Nominatim search; stores results on task.metadata.venueSuggestions.
+     * Body empty. Returns { query, suggestions, metadata }.
+     */
+    taskVenueSuggestionsRefresh: (taskId: string) =>
+      `/agents/me/tasks/${taskId}/venue-suggestions/refresh` as const,
     /**
      * GET latest receipt/document (any status). 404 if none.
      * POST multipart { file, note? } — booking confirmation must be CONFIRMED.
@@ -79,6 +85,9 @@ export const API_ENDPOINTS = {
     /** GET list | POST { content } */
     taskMessages: (taskId: string) =>
       `/agents/me/tasks/${taskId}/messages` as const,
+    /** POST — mark unread customer messages as read */
+    taskMessagesRead: (taskId: string) =>
+      `/agents/me/tasks/${taskId}/messages/read` as const,
     /** POST multipart { file, durationMs? } */
     taskMessageVoice: (taskId: string) =>
       `/agents/me/tasks/${taskId}/messages/voice` as const,

@@ -10,17 +10,7 @@ export const metadata: Metadata = {
 
 export default function RegisterPage() {
   return (
-    <AuthCard
-      title="Create your account"
-      subtitle="Agent workspace"
-      description="Register as a Carl agent to manage customer requests and tasks."
-      footer={
-        <>
-          By creating an account, you agree to follow your team&apos;s security
-          guidelines.
-        </>
-      }
-    >
+    <AuthCard title="Create your account" subtitle="Agent workspace">
       <Suspense fallback={null}>
         <RegisterForm demoMode={!env.isApiConfigured} />
       </Suspense>

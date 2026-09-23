@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   getTasksPerDaySplitAction,
   getTasksPerHourAction,
@@ -487,37 +487,40 @@ export function TasksPerHourPanel({
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const loadingRef = useRef(false);
 
   const load = useCallback(async () => {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
     try {
-      const [row, splitRow] = await Promise.all([
-        getTasksPerHourAction("this_week"),
-        getTasksPerDaySplitAction().catch(() => null),
-      ]);
+      // Chart must not wait on the slow ACTIVE+HISTORY split (often 10–40s).
+      const row = await getTasksPerHourAction("this_week");
       setHourly(row);
-      setSplit(splitRow);
       setError(null);
+
+      void getTasksPerDaySplitAction()
+        .then((splitRow) => setSplit(splitRow))
+        .catch(() => {
+          /* keep bars from hourly totals */
+        });
     } catch {
       setError("Could not load tasks per day.");
+    } finally {
+      loadingRef.current = false;
     }
   }, []);
 
   useEffect(() => {
     void load();
-    const onFocus = () => {
-      void load();
-    };
-    window.addEventListener("focus", onFocus);
     const interval = window.setInterval(() => {
       void load();
     }, REFETCH_MS);
     return () => {
-      window.removeEventListener("focus", onFocus);
       window.clearInterval(interval);
     };
   }, [load]);
 
-  // Intentionally no queuePulse refetch — server actions + pulse caused a render loop.
+  // Intentionally no queuePulse / focus refetch — stacked server actions kept the page "Rendering".
 
   const chart = useMemo(() => {
     if (!hourly) return null;
@@ -729,7 +732,7 @@ export function ShiftProgress({
       </div>
 
       <p className="relative z-[1] mt-4 text-[16px] font-semibold leading-[22px] tracking-[-0.05em] text-foreground sm:text-[18px] xl:absolute xl:left-[15px] xl:top-[93px] xl:mt-0">
-        Total Task
+        Total Tasks
         <br />
         {total}
       </p>
@@ -746,15 +749,15 @@ export function ShiftProgress({
       <div className="relative z-[1] mt-auto flex flex-wrap items-center justify-between gap-x-3 gap-y-2 text-[11px] font-normal leading-[15px] tracking-[-0.05em] text-foreground sm:text-[12px] xl:absolute xl:inset-x-[15px] xl:top-[385px] xl:mt-0">
         <span className="inline-flex items-center gap-[10px]">
           <span className="size-2 shrink-0 rounded-full bg-[#c7ffc7]" />
-          {completed} Task Done
+          {completed} Tasks Done
         </span>
         <span className="inline-flex items-center gap-[10px]">
           <span className="size-2 shrink-0 rounded-full bg-[#d4f4ff]" />
-          {inProgress} Task in Progress
+          {inProgress} Tasks in Progress
         </span>
         <span className="inline-flex items-center gap-[10px]">
           <span className="size-2 shrink-0 rounded-full bg-[#c3d8ff]" />
-          {remaining} Task in Waiting
+          {remaining} Tasks in Waiting
         </span>
       </div>
     </div>

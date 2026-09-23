@@ -382,6 +382,46 @@ function ClockIcon({ className }: { className?: string }) {
   );
 }
 
+/** Single check = delivered; double blue = customer read (`readAt`). */
+function AgentDeliveryTicks({
+  readAt,
+  className,
+}: {
+  readAt?: string | null;
+  className?: string;
+}) {
+  const seen = Boolean(readAt && String(readAt).trim());
+  if (seen) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src="/figma/messages/icon-check-check.svg"
+        alt=""
+        width={14}
+        height={14}
+        className={cn("size-3.5", className)}
+        title="Seen"
+      />
+    );
+  }
+  return (
+    <svg
+      viewBox="0 0 14 14"
+      fill="none"
+      aria-label="Delivered"
+      className={cn("size-3.5 text-muted-dim", className)}
+    >
+      <path
+        d="M11.5 3.5 5.083 9.917 2.166 7"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 const ChatBubble = memo(function ChatBubble({
   event,
   role,
@@ -603,6 +643,8 @@ const TaskChatThreadBody = forwardRef<
 ) {
   const { toast } = useToast();
   const ops = useOps();
+  const liveChat = ops?.liveChat ?? null;
+  const taskReads = ops?.messageReads?.[taskId];
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState(false);
@@ -686,7 +728,6 @@ const TaskChatThreadBody = forwardRef<
     };
   }, [clearRecordTimer, stopStream]);
 
-  const liveChat = ops?.liveChat ?? null;
   const liveItem = useMemo<ChatItem | null>(() => {
     if (!liveChat || liveChat.taskId !== taskId) return null;
     if (liveChat.sender !== "USER") return null;
@@ -702,13 +743,18 @@ const TaskChatThreadBody = forwardRef<
     };
   }, [liveChat, taskId]);
 
-  const thread = useMemo(
-    () =>
-      mergeThread(timeline, liveItem ? [...extras, liveItem] : extras).filter(
-        isVisibleInThread,
-      ),
-    [extras, liveItem, timeline],
-  );
+  const thread = useMemo(() => {
+    const merged = mergeThread(
+      timeline,
+      liveItem ? [...extras, liveItem] : extras,
+    ).filter(isVisibleInThread);
+    if (!taskReads) return merged;
+    return merged.map((event) => {
+      if (event.kind !== "agent_message" || event.readAt) return event;
+      const fromReceipt = taskReads[event.id];
+      return fromReceipt ? { ...event, readAt: fromReceipt } : event;
+    });
+  }, [extras, liveItem, taskReads, timeline]);
   const blocks = useMemo(
     () => buildBlocks(thread, unreadFromId),
     [thread, unreadFromId],
@@ -1332,14 +1378,7 @@ const TaskChatThreadBody = forwardRef<
                         {fromAgent &&
                         last.delivery !== "failed" &&
                         last.delivery !== "sending" ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src="/figma/messages/icon-check-check.svg"
-                            alt=""
-                            width={14}
-                            height={14}
-                            className="size-3.5"
-                          />
+                          <AgentDeliveryTicks readAt={last.readAt} />
                         ) : null}
                       </div>
                     </div>

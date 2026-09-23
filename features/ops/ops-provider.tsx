@@ -23,7 +23,9 @@ import { offerWasAccepted, isRejectingOrRejected } from "@/features/ops/auto-acc
 import { useNotifications } from "@/features/notifications/notification-provider";
 import { useToast } from "@/components/providers/toast-provider";
 import { parseActivityPayload, type ActivityLogItem } from "@/lib/activity/parse-api";
+import { notificationFromOffer } from "@/lib/notifications/from-events";
 import { parseNotificationPayload } from "@/lib/notifications/parse-api";
+import { playNotificationChimeIfEnabled } from "@/lib/notifications/sound";
 import { mapSocketAssignedPayload, uiStatusFromAgent } from "@/lib/api/map-task";
 import {
   accessTokenFromUnknown,
@@ -241,6 +243,11 @@ type OpsContextValue = {
   queuePulse: number;
   livePulse: boolean;
   liveChat: LiveChatEvent | null;
+  /**
+   * Customer read receipts for agent messages: taskId → messageId → readAt ISO.
+   * Filled from Nest `message.read` (reader USER).
+   */
+  messageReads: Record<string, Record<string, string>>;
   liveConfirmation: TaskConfirmation | null;
   /** Confirmation rows keyed by task id (`null` = fetched, none). */
   confirmationsByTaskId: Record<string, TaskConfirmation | null>;
@@ -315,6 +322,9 @@ export function AgentOpsProvider({
   const [queuePulse, setQueuePulse] = useState(0);
   const [livePulse, setLivePulse] = useState(false);
   const [liveChat, setLiveChat] = useState<LiveChatEvent | null>(null);
+  const [messageReads, setMessageReads] = useState<
+    Record<string, Record<string, string>>
+  >({});
   const [liveConfirmation, setLiveConfirmationState] =
     useState<TaskConfirmation | null>(null);
   const [confirmationsByTaskId, setConfirmationsByTaskId] = useState<
@@ -751,7 +761,7 @@ export function AgentOpsProvider({
           const next = newOffers[0];
           if (next) {
             setOffer((current) => current ?? next);
-            // Bell/History: Nest `notification.created` only (no local duplicate).
+            notifyNewOffer(next);
             pulseQueue();
           }
         }
@@ -838,6 +848,26 @@ export function AgentOpsProvider({
       return true;
     }
 
+    /** Instant bell + chime on offer; Nest row replaces the local one (no double ding). */
+    function notifyNewOffer(task: Task) {
+      const api = notificationsRef.current;
+      const hasServerRow = api.items.some(
+        (row) =>
+          row.taskId === task.id &&
+          (row.kind === "task_offered" || row.kind === "task_assigned") &&
+          !row.id.startsWith("offer:"),
+      );
+      if (hasServerRow) {
+        playNotificationChimeIfEnabled();
+        return;
+      }
+      if (api.items.some((row) => row.id === `offer:${task.id}`)) {
+        playNotificationChimeIfEnabled();
+        return;
+      }
+      api.push(notificationFromOffer(task));
+    }
+
     function onIncomingTask(payload: unknown, eventName?: string) {
       const mapped = mapSocketAssignedPayload(payload);
       const fallbackStatus: AgentTaskStatus = eventName?.includes("assigned")
@@ -859,7 +889,9 @@ export function AgentOpsProvider({
         joinTaskRoom(socket, task.id);
         if (task.backendStatus === "OFFERED") {
           setOffer((current) => current ?? task);
-          // Bell/History: Nest `notification.created` only.
+          notifyNewOffer(task);
+        } else if (task.backendStatus === "ASSIGNED") {
+          notifyNewOffer(task);
         }
       } else if (task.backendStatus === "OFFERED" && !isRejectingOrRejected(task.id)) {
         setOffer((current) =>
@@ -1060,9 +1092,20 @@ export function AgentOpsProvider({
     function onNotificationCreated(payload: unknown) {
       const item = parseNotificationPayload(payload);
       if (!item) return;
-      notificationsRef.current.push(item, {
-        silent: item.read === true,
-      });
+      const api = notificationsRef.current;
+      const isOfferKind =
+        item.kind === "task_offered" || item.kind === "task_assigned";
+      const localOfferId = item.taskId ? `offer:${item.taskId}` : null;
+      let silent = item.read === true;
+      if (isOfferKind && localOfferId) {
+        const hadLocal = api.items.some((row) => row.id === localOfferId);
+        if (hadLocal) {
+          api.removeFromHistory(localOfferId);
+          // Local offer already chimed + showed in the bell.
+          silent = true;
+        }
+      }
+      api.push(item, { silent });
     }
 
     function onActivityCreated(payload: unknown) {
@@ -1071,6 +1114,35 @@ export function AgentOpsProvider({
       setLiveActivities((prev) => {
         if (prev.some((row) => row.id === item.id)) return prev;
         return [item, ...prev].slice(0, 50);
+      });
+    }
+
+    function onMessageRead(payload: unknown) {
+      if (!payload || typeof payload !== "object") return;
+      const root = payload as Record<string, unknown>;
+      const data =
+        root.data && typeof root.data === "object"
+          ? (root.data as Record<string, unknown>)
+          : root;
+      if (data.reader != null && data.reader !== "USER") return;
+      const taskId =
+        typeof data.taskId === "string"
+          ? data.taskId
+          : typeof root.taskId === "string"
+            ? root.taskId
+            : null;
+      const readAt =
+        typeof data.readAt === "string"
+          ? data.readAt
+          : new Date().toISOString();
+      const ids = Array.isArray(data.messageIds)
+        ? data.messageIds.filter((id): id is string => typeof id === "string")
+        : [];
+      if (!taskId || ids.length === 0) return;
+      setMessageReads((prev) => {
+        const nextTask = { ...(prev[taskId] ?? {}) };
+        for (const id of ids) nextTask[id] = readAt;
+        return { ...prev, [taskId]: nextTask };
       });
     }
 
@@ -1147,6 +1219,8 @@ export function AgentOpsProvider({
     socket.on("notification_created", onNotificationCreated);
     socket.on("activity.created", onActivityCreated);
     socket.on("activity_created", onActivityCreated);
+    socket.on("message.read", onMessageRead);
+    socket.on("message_read", onMessageRead);
     socket.on("task.updated", onTaskUpdated);
     socket.on("task_updated", onTaskUpdated);
     socket.on("queue.updated", onQueuePulse);
@@ -1195,6 +1269,8 @@ export function AgentOpsProvider({
       socket.off("notification_created", onNotificationCreated);
       socket.off("activity.created", onActivityCreated);
       socket.off("activity_created", onActivityCreated);
+      socket.off("message.read", onMessageRead);
+      socket.off("message_read", onMessageRead);
       socket.off("task.updated", onTaskUpdated);
       socket.off("task_updated", onTaskUpdated);
       socket.off("queue.updated", onQueuePulse);
@@ -1229,6 +1305,7 @@ export function AgentOpsProvider({
       queuePulse,
       livePulse,
       liveChat,
+      messageReads,
       liveConfirmation,
       confirmationsByTaskId,
       setLiveConfirmation,
@@ -1251,6 +1328,7 @@ export function AgentOpsProvider({
       liveReceipt,
       livePulse,
       liveTasks,
+      messageReads,
       offer,
       patchLiveTask,
       presence,

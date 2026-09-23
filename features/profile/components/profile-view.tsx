@@ -122,9 +122,6 @@ export function ProfileView({ initialUser }: ProfileViewProps) {
             <h1 className="text-[34px] font-semibold leading-none tracking-[-0.04em] text-foreground">
               Profile
             </h1>
-            <p className="mt-3 text-[16px] font-normal tracking-[-0.02em] text-muted">
-              Your current sales summary and activity
-            </p>
           </div>
           <Link
             href={ROUTES.profileEdit}
@@ -160,9 +157,6 @@ export function ProfileView({ initialUser }: ProfileViewProps) {
             <h2 className="text-[34px] font-semibold leading-none tracking-[-0.04em] text-foreground">
               Personal Info
             </h2>
-            <p className="mt-3 text-[16px] font-normal tracking-[-0.02em] text-muted">
-              Your current sales summary and activity
-            </p>
 
             <div className="mt-12 space-y-[35px]">
               <ProfileField label="Full Name" value={name} />

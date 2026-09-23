@@ -102,6 +102,8 @@ export const draftTaskConfirmationBodySchema = z
     cost: z.string().trim().min(1).max(40),
     currency: z.string().trim().min(1).max(10),
     notes: z.string().trim().max(5000).optional(),
+    /** Places / Nominatim suggestion id from task.metadata.venueSuggestions. */
+    suggestionId: z.string().trim().min(1).max(200).optional(),
   })
   .passthrough();
 
@@ -445,11 +447,15 @@ export function buildConfirmationDraftBody(
   values: ConfirmationFormValues,
   cost: string,
   currency: string,
+  suggestionId?: string | null,
 ): DraftTaskConfirmationBody {
   const body: Record<string, unknown> = {
     cost: cost.trim(),
     currency: currency.trim() || "USD",
   };
+
+  const sid = suggestionId?.trim();
+  if (sid) body.suggestionId = sid;
 
   for (const field of fields) {
     if (!isDraftConfirmationEditableField(field)) continue;

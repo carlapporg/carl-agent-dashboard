@@ -68,6 +68,8 @@ const DAY_FILTERS: Array<{ value: DayFilter; label: string }> = [
   { value: "all", label: "All time" },
 ];
 
+const DAY_FILTER_STORAGE_KEY = "carl.agent.task-hub-day";
+
 type TaskListProps = {
   tasks: Task[];
 };
@@ -78,6 +80,33 @@ function parseHubFilter(raw: string | null): HubFilter {
   if (raw === "failed") return "cancelled";
   if (raw === "queued") return "offered";
   return "all";
+}
+
+function parseDayFilter(raw: string | null | undefined): DayFilter {
+  if (raw === "today" || raw === "week" || raw === "month" || raw === "all") {
+    return raw;
+  }
+  return "today";
+}
+
+function readStoredDayFilter(): DayFilter | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(DAY_FILTER_STORAGE_KEY);
+    if (!raw) return null;
+    return parseDayFilter(raw);
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredDayFilter(value: DayFilter) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(DAY_FILTER_STORAGE_KEY, value);
+  } catch {
+    // Private mode / quota — ignore.
+  }
 }
 
 function matchesFilter(
@@ -132,16 +161,33 @@ export function TaskList({ tasks }: TaskListProps) {
   const [status, setStatus] = useState(() =>
     parseHubFilter(searchParams.get("status")),
   );
-  const [dayFilter, setDayFilter] = useState<DayFilter>("today");
+  const [dayFilter, setDayFilter] = useState<DayFilter>(() => {
+    const fromUrl = parseDayFilter(searchParams.get("day"));
+    if (searchParams.get("day")) return fromUrl;
+    return readStoredDayFilter() ?? "today";
+  });
   const search = searchParams.get("q") ?? "";
   const hasFilters =
-    status !== "all" || dayFilter !== "all" || Boolean(search.trim());
+    status !== "all" || dayFilter !== "today" || Boolean(search.trim());
   const rejectedTick = useRejectedOfferTick();
   const hydrateOpenTasks = ops?.hydrateOpenTasks;
 
   useEffect(() => {
     hydrateOpenTasks?.(tasks);
   }, [hydrateOpenTasks, tasks]);
+
+  // Restore day filter after client mount (SSR can't read sessionStorage).
+  useEffect(() => {
+    const fromUrl = searchParams.get("day");
+    if (fromUrl) {
+      const parsed = parseDayFilter(fromUrl);
+      setDayFilter(parsed);
+      writeStoredDayFilter(parsed);
+      return;
+    }
+    const stored = readStoredDayFilter();
+    if (stored) setDayFilter(stored);
+  }, [searchParams]);
 
   const allTasks = useMemo(
     () =>
@@ -184,14 +230,30 @@ export function TaskList({ tasks }: TaskListProps) {
 
   function updateParams(next: Record<string, string>) {
     if (next.status !== undefined) setStatus(parseHubFilter(next.status));
+    if (next.day !== undefined) {
+      const parsed = parseDayFilter(next.day);
+      setDayFilter(parsed);
+      writeStoredDayFilter(parsed);
+    }
     const params = new URLSearchParams(searchParams.toString());
     for (const [key, value] of Object.entries(next)) {
+      // Status "all" clears the param; day "today" is the default and clears too.
+      // Day "all" means all-time and must stay in the URL.
+      if (key === "day") {
+        if (!value || value === "today") params.delete("day");
+        else params.set("day", value);
+        continue;
+      }
       if (!value || value === "all") params.delete(key);
       else params.set(key, value);
     }
     if (!("status" in next)) {
       if (status === "all") params.delete("status");
       else params.set("status", status);
+    }
+    if (!("day" in next)) {
+      if (dayFilter === "today") params.delete("day");
+      else params.set("day", dayFilter);
     }
     const qs = params.toString();
     const url = qs ? `${ROUTES.tasks}?${qs}` : ROUTES.tasks;
@@ -214,9 +276,6 @@ export function TaskList({ tasks }: TaskListProps) {
           <h2 className="text-[34px] font-semibold leading-none tracking-[-0.05em] text-foreground">
             Task Overview
           </h2>
-          <p className="mt-3 text-[14px] tracking-[-0.02em] text-muted">
-            Your current sales summary and activity
-          </p>
         </div>
         <AvailabilityToggle />
       </div>
@@ -240,7 +299,7 @@ export function TaskList({ tasks }: TaskListProps) {
               value={dayFilter}
               options={DAY_FILTERS}
               compact
-              onChange={setDayFilter}
+              onChange={(next) => updateParams({ day: next })}
             />
           </div>
         </div>
@@ -262,8 +321,9 @@ export function TaskList({ tasks }: TaskListProps) {
                     type="button"
                     variant="secondary"
                     onClick={() => {
-                      setDayFilter("all");
-                      updateParams({ status: "all", q: "", type: "all" });
+                      writeStoredDayFilter("today");
+                      setDayFilter("today");
+                      updateParams({ status: "all", q: "", type: "all", day: "today" });
                     }}
                   >
                     Clear filters

@@ -383,3 +383,35 @@ export async function getTaskReceiptAction(
   }
 }
 
+export type VenueRefreshActionResult =
+  | {
+      ok: true;
+      query: string | null;
+      suggestions: import("@/types/venue").VenueSuggestion[];
+      metadata: Record<string, unknown> | null;
+    }
+  | { ok: false; message: string };
+
+export async function refreshVenueSuggestionsAction(
+  taskId: string,
+): Promise<VenueRefreshActionResult> {
+  try {
+    const { venueSuggestionsApi } = await import(
+      "@/lib/api/venue-suggestions"
+    );
+    const result = await venueSuggestionsApi.refresh(taskId);
+    revalidateTaskPage(taskId);
+    return {
+      ok: true,
+      query: result.query ?? null,
+      suggestions: result.suggestions,
+      metadata:
+        result.metadata && typeof result.metadata === "object"
+          ? (result.metadata as Record<string, unknown>)
+          : null,
+    };
+  } catch (error) {
+    return fail(error);
+  }
+}
+

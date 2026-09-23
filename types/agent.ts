@@ -256,7 +256,15 @@ export const agentTaskMessageSchema = z
     imageUrl: z.string().nullable().optional(),
     caption: z.string().nullable().optional(),
     metadata: z.unknown().nullable().optional(),
-    readAt: z.string().nullable().optional(),
+    readAt: z
+      .union([z.string(), z.date(), z.null()])
+      .optional()
+      .transform((value) => {
+        if (value == null) return null;
+        if (value instanceof Date) return value.toISOString();
+        const text = String(value).trim();
+        return text || null;
+      }),
     createdAt: z.string().optional().default(""),
   })
   .passthrough();

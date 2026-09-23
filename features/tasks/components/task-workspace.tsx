@@ -23,6 +23,7 @@ import {
   type TaskChatThreadHandle,
 } from "@/features/tasks/components/task-chat-thread";
 import { TaskConfirmationPanel } from "@/features/tasks/components/task-confirmation-panel";
+import { VenueSuggestionsPanel } from "@/features/tasks/components/venue-suggestions-panel";
 import { TaskCustomerSnippet } from "@/features/tasks/components/task-customer-snippet";
 import { TaskFacts } from "@/features/tasks/components/task-facts";
 import { PageChromeSetter } from "@/features/shell/page-chrome";
@@ -378,9 +379,6 @@ export function TaskWorkspace({
             <h1 className="text-[34px] font-semibold leading-none tracking-[-0.04em] text-foreground">
               Task detail
             </h1>
-            <p className="mt-3 text-[16px] font-normal tracking-[-0.02em] text-muted">
-              Your current sales summary and activity
-            </p>
           </div>
           <Link
             href={lockedReadOnly ? ROUTES.history : ROUTES.tasks}
@@ -441,6 +439,8 @@ export function TaskWorkspace({
           {/* Left — Figma: confirmation summary + editable task details */}
           <div className="space-y-5">
             <TaskFacts task={task} />
+
+            <VenueSuggestionsPanel task={task} />
 
             <TaskConfirmationPanel
               task={task}

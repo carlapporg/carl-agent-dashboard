@@ -16,7 +16,7 @@ const FILTERS: Array<{
 }> = [
   {
     id: "AVAILABLE",
-    label: "Available",
+    label: "Active",
     hint: "Counts toward hours",
     activeClass: "border-success bg-success-soft text-success-foreground",
     idleClass: "border-border bg-surface text-muted hover:text-foreground",
@@ -106,7 +106,7 @@ function IntervalLog({
             )}
           >
             {row.status === "AVAILABLE"
-              ? "Available"
+              ? "Active"
               : row.status === "BUSY"
                 ? "Busy"
                 : "Offline"}

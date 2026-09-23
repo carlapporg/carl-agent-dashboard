@@ -169,9 +169,6 @@ function PanelHeader({ title }: { title: string }) {
       <h2 className="text-[22px] font-semibold leading-none tracking-[-0.04em] text-foreground sm:text-[34px]">
         {title}
       </h2>
-      <p className="mt-2 hidden text-[16px] font-normal tracking-[-0.02em] text-muted sm:mt-3 sm:block">
-        Your current sales summary and activity
-      </p>
     </div>
   );
 }
@@ -258,9 +255,6 @@ export function SettingsView() {
             <h1 className="text-[26px] font-semibold leading-none tracking-[-0.04em] text-foreground sm:text-[34px]">
               Settings
             </h1>
-            <p className="mt-2 hidden text-[16px] font-normal tracking-[-0.02em] text-muted sm:mt-3 sm:block">
-              Your current sales summary and activity
-            </p>
           </div>
           <AvailabilityToggle activeTaskCount={activeTaskCount} />
         </section>

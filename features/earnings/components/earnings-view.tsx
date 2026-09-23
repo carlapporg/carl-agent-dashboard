@@ -110,7 +110,7 @@ function Card({
 }: {
   label: string;
   value: string;
-  hint: string;
+  hint?: string;
   emphasize?: boolean;
 }) {
   return (
@@ -133,7 +133,7 @@ function Card({
       >
         {value}
       </p>
-      <p className="mt-3 text-sm text-muted">{hint}</p>
+      {hint ? <p className="mt-3 text-sm text-muted">{hint}</p> : null}
     </div>
   );
 }
@@ -208,10 +208,6 @@ export function EarningsView() {
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
             Earnings
           </h1>
-          <p className="mt-1 max-w-xl text-sm text-muted">
-            Read-only pay for this period. Wages and tips stay separate. You
-            cannot change your rate or run payroll here.
-          </p>
         </div>
         <div className="flex w-fit max-w-full flex-wrap items-end gap-3">
           <label className="flex w-[9.75rem] shrink-0 flex-col gap-1.5">
@@ -284,12 +280,7 @@ export function EarningsView() {
             <p className="rounded-[var(--radius-md)] border border-warning bg-warning-soft px-4 py-3 text-sm text-warning-foreground">
               Estimated. This month is not closed yet.
             </p>
-          ) : (
-            <p className="rounded-[var(--radius-md)] border border-border bg-surface-muted px-4 py-3 text-sm text-foreground">
-              Final for this period. A later rate change does not change this
-              number.
-            </p>
-          )}
+          ) : null}
 
           <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Card
@@ -326,7 +317,6 @@ export function EarningsView() {
             <Card
               label="Hourly rate"
               value={formatMoney(summary.hourlyRate)}
-              hint="Used for this period. Not edited here."
             />
           </section>
 
@@ -353,9 +343,6 @@ export function EarningsView() {
       <section className="overflow-hidden rounded-[var(--radius-card)] border border-border bg-surface shadow-[var(--shadow-card)]">
         <div className="border-b border-border px-4 py-3">
           <h2 className="text-sm font-semibold text-foreground">Hourly rate</h2>
-          <p className="mt-0.5 text-[11px] text-muted">
-            Read-only. You cannot change this rate.
-          </p>
         </div>
         {rateQuery.isError ? (
           <p className="px-4 py-6 text-sm text-muted">
@@ -365,28 +352,10 @@ export function EarningsView() {
           </p>
         ) : rateQuery.data ? (
           <div className="space-y-4 px-4 py-4">
-            <div>
-              <p className="text-lg font-normal text-foreground">
-                {formatMoney(rateDollars(rateQuery.data.current))}
-              </p>
-              {rateQuery.data.current.source === "system_default" ? (
-                <p className="mt-1 text-sm text-muted">
-                  No personal rate yet. This is the platform default, usually
-                  $15.
-                </p>
-              ) : (
-                <p className="mt-1 text-sm text-muted">
-                  Your current rate
-                  {rateQuery.data.current.effectiveFrom
-                    ? ` from ${formatStamp(rateQuery.data.current.effectiveFrom)}`
-                    : ""}
-                  .
-                </p>
-              )}
-            </div>
-            {rateQuery.data.history.length === 0 ? (
-              <p className="text-sm text-muted">No rate history yet.</p>
-            ) : (
+            <p className="text-lg font-normal text-foreground">
+              {formatMoney(rateDollars(rateQuery.data.current))}
+            </p>
+            {rateQuery.data.history.length > 0 ? (
               <ul className="divide-y divide-border border-t border-border">
                 {rateQuery.data.history.map((row, index) => (
                   <li
@@ -408,7 +377,7 @@ export function EarningsView() {
                   </li>
                 ))}
               </ul>
-            )}
+            ) : null}
           </div>
         ) : (
           <p className="px-4 py-6 text-sm text-muted">Loading rate…</p>
@@ -418,9 +387,6 @@ export function EarningsView() {
       <section className="overflow-hidden rounded-[var(--radius-card)] border border-border bg-surface shadow-[var(--shadow-card)]">
         <div className="border-b border-border px-4 py-3">
           <h2 className="text-sm font-semibold text-foreground">Ledger</h2>
-          <p className="mt-0.5 text-[11px] text-muted">
-            Saved pay lines for this period. Void lines are hidden.
-          </p>
         </div>
         {ledgerQuery.isError ? (
           <p className="px-4 py-6 text-sm text-muted">

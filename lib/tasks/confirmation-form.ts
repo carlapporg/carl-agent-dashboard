@@ -32,6 +32,17 @@ const SKIP_FORM_KEYS = new Set([
   "currency",
   "deliveryFee",
   "tax",
+  "venueChoice",
+  "venueSearchQuery",
+  "venueSearchWhat",
+  "venueSearchWhere",
+  "venueSuggestions",
+  "pickedSuggestionId",
+  "pickedSuggestionMapsUrl",
+  "pickedSuggestionRating",
+  "venuePlaceId",
+  "venueLat",
+  "venueLng",
 ]);
 
 function titleCase(value: string): string {

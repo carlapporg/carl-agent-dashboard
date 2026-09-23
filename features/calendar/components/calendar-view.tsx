@@ -370,9 +370,6 @@ function EventsList({
         <h2 className="text-sm font-semibold text-foreground">
           Scheduled events
         </h2>
-        <p className="mt-0.5 text-[11px] text-muted">
-          Tasks assigned to you with a schedule. Read-only — no personal events.
-        </p>
       </div>
       {events.length === 0 ? (
         <p className="px-4 py-8 text-center text-sm text-muted">{emptyLabel}</p>
@@ -826,11 +823,6 @@ export function CalendarView() {
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
             Timesheet
           </h1>
-          <p className="mt-1 max-w-xl text-sm text-muted">
-            Scheduled tasks and presence for you. Total Online = Available +
-            Busy. Online and Offline do not count hours. No personal event
-            create or edit.
-          </p>
         </div>
         <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto">
           <div className="inline-flex max-w-full flex-wrap rounded-[var(--radius-md)] border border-border bg-surface p-1">

@@ -143,9 +143,6 @@ export function NotificationsView() {
             <h1 className="text-[34px] font-semibold leading-none tracking-[-0.04em] text-foreground">
               Notification
             </h1>
-            <p className="mt-3 text-[16px] font-normal tracking-[-0.02em] text-muted">
-              Your current sales summary and activity
-            </p>
           </div>
           <button
             type="button"
