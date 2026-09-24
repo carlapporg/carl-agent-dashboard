@@ -16,6 +16,10 @@ import {
   setAvailabilityAction,
 } from "@/features/agents/actions";
 import {
+  markMessagesDeliveredAction,
+  markMessagesReadAction,
+} from "@/features/tasks/actions/task-actions";
+import {
   desiredPresenceForSession,
   normalizePresence,
 } from "@/lib/agent/presence";
@@ -723,13 +727,10 @@ export function AgentOpsProvider({
     const seenIds = new Set<string>();
 
     function rejoinRooms() {
-      const ids = new Set<string>();
+      // joinTask auto-marks SEEN on Nest — only join the open chat.
       const viewingId = taskIdFromPath(pathnameRef.current);
-      if (viewingId) ids.add(viewingId);
-      if (offerRef.current?.id) ids.add(offerRef.current.id);
-      for (const row of liveTasksRef.current) ids.add(row.id);
-      for (const id of ids) {
-        if (!isRejectingOrRejected(id)) joinTaskRoom(socket, id);
+      if (viewingId && !isRejectingOrRejected(viewingId)) {
+        joinTaskRoom(socket, viewingId);
       }
     }
 
@@ -810,7 +811,6 @@ export function AgentOpsProvider({
           known.add(task.id);
           seenIds.add(task.id);
           upsertLiveTaskRef.current(task);
-          joinTaskRoom(socket, task.id);
           if (task.backendStatus === "OFFERED" && unknown) {
             newOffers.push(task);
           }
@@ -944,7 +944,6 @@ export function AgentOpsProvider({
       if (forgetIfRejecting(task.id)) return;
       const alreadyKnown = liveTasksRef.current.some((row) => row.id === task.id);
       if (!alreadyKnown) {
-        joinTaskRoom(socket, task.id);
         if (task.backendStatus === "OFFERED") {
           setOffer((current) => current ?? task);
           notifyNewOffer(task);
@@ -967,7 +966,14 @@ export function AgentOpsProvider({
       const incoming = parseIncomingTaskMessage(payload);
       if (!incoming) return;
       if (isRejectingOrRejected(incoming.taskId)) return;
-      joinTaskRoom(socket, incoming.taskId);
+      const viewingThisTask =
+        notificationsRef.current.isViewingTaskInbox(incoming.taskId) &&
+        typeof document !== "undefined" &&
+        document.visibilityState === "visible";
+      // Nest joinTask auto-marks SEEN — only join when chat is open.
+      if (viewingThisTask) {
+        joinTaskRoom(socket, incoming.taskId);
+      }
       if (incoming.sender === "USER") {
         setLiveChat({
           at: Date.now(),
@@ -979,22 +985,15 @@ export function AgentOpsProvider({
           durationMs: incoming.durationMs,
           metadata: incoming.metadata,
         });
-        // Device received USER message → DELIVERED ACK (socket).
-        if (incoming.messageId) {
-          emitMessageDelivered(incoming.taskId, [incoming.messageId]);
-        } else {
-          emitMessageDelivered(incoming.taskId);
-        }
-        // Chat open / visible → SEEN immediately.
-        if (
-          notificationsRef.current.isViewingTaskInbox(incoming.taskId) &&
-          typeof document !== "undefined" &&
-          document.visibilityState === "visible"
-        ) {
-          emitMessageSeen(
-            incoming.taskId,
-            incoming.messageId ? [incoming.messageId] : undefined,
-          );
+        // Online on agent room = DELIVERED (no task room required).
+        const deliveredIds = incoming.messageId
+          ? [incoming.messageId]
+          : undefined;
+        emitMessageDelivered(incoming.taskId, deliveredIds);
+        void markMessagesDeliveredAction(incoming.taskId, deliveredIds);
+        if (viewingThisTask) {
+          emitMessageSeen(incoming.taskId, deliveredIds);
+          void markMessagesReadAction(incoming.taskId, deliveredIds);
         }
         if (isVenuePickedMessageMetadata(incoming.metadata)) {
           const suggestion = venueFromMessageMetadata(incoming.metadata);
@@ -1130,7 +1129,6 @@ export function AgentOpsProvider({
     function onVenueSuggestions(payload: unknown) {
       const parsed = parseVenueSuggestionsPayload(payload);
       if (!parsed) return;
-      joinTaskRoom(socket, parsed.taskId);
       setLiveVenue({
         at: Date.now(),
         taskId: parsed.taskId,
@@ -1161,7 +1159,6 @@ export function AgentOpsProvider({
     function onVenuePicked(payload: unknown) {
       const parsed = parseVenuePickedPayload(payload);
       if (!parsed) return;
-      joinTaskRoom(socket, parsed.taskId);
       setLiveVenue({
         at: Date.now(),
         taskId: parsed.taskId,
