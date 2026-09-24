@@ -238,6 +238,30 @@ export async function sendTaskMessageAction(
   }
 }
 
+/** ACK: customer messages arrived on this agent device. */
+export async function markMessagesDeliveredAction(
+  taskId: string,
+  messageIds?: string[],
+): Promise<void> {
+  try {
+    await messagesApi.markDelivered(taskId, messageIds);
+  } catch {
+    /* best-effort */
+  }
+}
+
+/** ACK: agent has chat open / messages visible. */
+export async function markMessagesReadAction(
+  taskId: string,
+  messageIds?: string[],
+): Promise<void> {
+  try {
+    await messagesApi.markRead(taskId, messageIds);
+  } catch {
+    /* best-effort */
+  }
+}
+
 export async function requestApprovalAction(
   _taskId: string,
   _formData?: FormData,

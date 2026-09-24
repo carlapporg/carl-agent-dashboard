@@ -68,8 +68,32 @@ export const messagesApi = {
         createdAt: new Date().toISOString(),
         visibleToCustomer: true,
         mediaKind: "text",
+        receiptStatus: "SENT",
       }
     );
+  },
+
+  async markDelivered(
+    taskId: string,
+    messageIds?: string[],
+  ): Promise<void> {
+    await apiRequest(API_ENDPOINTS.agents.taskMessagesDelivered(taskId), {
+      method: "POST",
+      body: messageIds?.length ? { messageIds } : {},
+      schema: z.unknown(),
+      looseEnvelope: true,
+      dedupe: false,
+    });
+  },
+
+  async markRead(taskId: string, messageIds?: string[]): Promise<void> {
+    await apiRequest(API_ENDPOINTS.agents.taskMessagesRead(taskId), {
+      method: "POST",
+      body: messageIds?.length ? { messageIds } : {},
+      schema: z.unknown(),
+      looseEnvelope: true,
+      dedupe: false,
+    });
   },
 
   async sendVoice(taskId: string, form: FormData): Promise<TimelineEvent> {
@@ -95,6 +119,7 @@ export const messagesApi = {
         visibleToCustomer: true,
         mediaKind: "voice",
         durationMs: Number.isFinite(durationMs) ? durationMs : null,
+        receiptStatus: "SENT",
       }
     );
   },
@@ -120,6 +145,7 @@ export const messagesApi = {
         createdAt: new Date().toISOString(),
         visibleToCustomer: true,
         mediaKind: "image",
+        receiptStatus: "SENT",
       }
     );
   },

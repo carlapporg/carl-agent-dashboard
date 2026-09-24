@@ -12,7 +12,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { sendUpdateAction } from "@/features/tasks/actions/task-actions";
+import { sendUpdateAction, markMessagesDeliveredAction, markMessagesReadAction } from "@/features/tasks/actions/task-actions";
 import { ChatAudioPlayer } from "@/features/tasks/components/chat-audio-player";
 import { LiveVoiceWaveform } from "@/features/tasks/components/live-voice-waveform";
 import { CallButton } from "@/features/calls/components/call-button";
@@ -23,6 +23,12 @@ import {
 import { useOps } from "@/features/ops/ops-provider";
 import { CHAT_TEMPLATES } from "@/features/tasks/lib/workflow";
 import { useToast } from "@/components/providers/toast-provider";
+import { mergeReceiptStatus } from "@/lib/realtime/parse-message-receipt";
+import {
+  emitMessageDelivered,
+  emitMessageSeen,
+} from "@/lib/realtime/agent-socket";
+import type { MessageReceiptStatus } from "@/types/message";
 import {
   CHAT_ATTACH_ACCEPT,
   formatClockMs,
@@ -387,35 +393,60 @@ function ClockIcon({ className }: { className?: string }) {
   );
 }
 
-/** Single check = delivered; double blue = customer read (`readAt`). */
+/** WhatsApp-style ticks for outgoing AGENT messages only. */
 function AgentDeliveryTicks({
-  readAt,
+  status,
   className,
 }: {
-  readAt?: string | null;
+  status: "SENT" | "DELIVERED" | "SEEN";
   className?: string;
 }) {
-  const seen = Boolean(readAt && String(readAt).trim());
-  if (seen) {
+  if (status === "SEEN") {
     return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src="/figma/messages/icon-check-check.svg"
-        alt=""
-        width={14}
-        height={14}
-        className={cn("size-3.5", className)}
-        title="Seen"
-      />
+      <svg
+        viewBox="0 0 14 14"
+        fill="none"
+        aria-label="Seen"
+        className={cn("size-3.5 text-[#377DFF]", className)}
+      >
+        <title>Seen</title>
+        <path
+          d="M10.5 3.5 4.083 9.917 1.166 7M12.834 5.834 8.458 10.209 7.583 9.334"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+  if (status === "DELIVERED") {
+    return (
+      <svg
+        viewBox="0 0 14 14"
+        fill="none"
+        aria-label="Delivered"
+        className={cn("size-3.5 text-muted-dim", className)}
+      >
+        <title>Delivered</title>
+        <path
+          d="M10.5 3.5 4.083 9.917 1.166 7M12.834 5.834 8.458 10.209 7.583 9.334"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
     );
   }
   return (
     <svg
       viewBox="0 0 14 14"
       fill="none"
-      aria-label="Delivered"
+      aria-label="Sent"
       className={cn("size-3.5 text-muted-dim", className)}
     >
+      <title>Sent</title>
       <path
         d="M11.5 3.5 5.083 9.917 2.166 7"
         stroke="currentColor"
@@ -677,6 +708,7 @@ const TaskChatThreadBody = forwardRef<
   const { toast } = useToast();
   const ops = useOps();
   const liveChat = ops?.liveChat ?? null;
+  const taskReceipts = ops?.messageReceipts?.[taskId];
   const taskReads = ops?.messageReads?.[taskId];
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -782,13 +814,69 @@ const TaskChatThreadBody = forwardRef<
       timeline,
       liveItem ? [...extras, liveItem] : extras,
     ).filter(isVisibleInThread);
-    if (!taskReads) return merged;
     return merged.map((event) => {
-      if (event.kind !== "agent_message" || event.readAt) return event;
-      const fromReceipt = taskReads[event.id];
-      return fromReceipt ? { ...event, readAt: fromReceipt } : event;
+      if (event.kind !== "agent_message") return event;
+      const fromLive = taskReceipts?.[event.id] ?? taskReceipts?.["*"];
+      const fromRead = taskReads?.[event.id] || taskReads?.["*"]
+        ? ("SEEN" as const)
+        : null;
+      const nextStatus = mergeReceiptStatus(
+        mergeReceiptStatus(event.receiptStatus, fromLive),
+        fromRead,
+      );
+      if (nextStatus === event.receiptStatus) return event;
+      return {
+        ...event,
+        receiptStatus: nextStatus,
+        readAt:
+          nextStatus === "SEEN"
+            ? event.readAt ?? taskReads?.[event.id] ?? event.seenAt ?? null
+            : event.readAt,
+        seenAt:
+          nextStatus === "SEEN"
+            ? event.seenAt ?? taskReads?.[event.id] ?? event.readAt ?? null
+            : event.seenAt,
+      };
     });
-  }, [extras, liveItem, taskReads, timeline]);
+  }, [extras, liveItem, taskReads, taskReceipts, timeline]);
+
+  // Reconnect / open chat: ACK delivered for USER msgs still SENT, then SEEN if focused.
+  useEffect(() => {
+    if (disabled) return;
+    const userIds = timeline
+      .filter((row) => row.kind === "customer_message")
+      .map((row) => row.id);
+    const stillSent = timeline
+      .filter(
+        (row) =>
+          row.kind === "customer_message" &&
+          (row.receiptStatus === "SENT" || !row.receiptStatus),
+      )
+      .map((row) => row.id);
+
+    if (stillSent.length > 0) {
+      emitMessageDelivered(taskId, stillSent);
+      void markMessagesDeliveredAction(taskId, stillSent);
+    }
+
+    function ackSeen() {
+      if (document.visibilityState === "hidden") return;
+      emitMessageSeen(taskId, userIds.length ? userIds : undefined);
+      void markMessagesReadAction(
+        taskId,
+        userIds.length ? userIds : undefined,
+      );
+    }
+
+    ackSeen();
+    document.addEventListener("visibilitychange", ackSeen);
+    window.addEventListener("focus", ackSeen);
+    return () => {
+      document.removeEventListener("visibilitychange", ackSeen);
+      window.removeEventListener("focus", ackSeen);
+    };
+  }, [disabled, taskId, timeline]);
+
   const blocks = useMemo(
     () => buildBlocks(thread, unreadFromId),
     [thread, unreadFromId],
@@ -928,6 +1016,7 @@ const TaskChatThreadBody = forwardRef<
             visibleToCustomer: true,
             mediaKind: "text",
             delivery: "sending",
+            receiptStatus: "SENT",
           },
         ]);
         setDraft("");
@@ -1054,6 +1143,7 @@ const TaskChatThreadBody = forwardRef<
           previewUrl: pending.previewUrl,
           delivery: "sending",
           uploadProgress: 1,
+          receiptStatus: "SENT",
         },
       ]);
       pinnedRef.current = true;
@@ -1412,7 +1502,12 @@ const TaskChatThreadBody = forwardRef<
                         {fromAgent &&
                         last.delivery !== "failed" &&
                         last.delivery !== "sending" ? (
-                          <AgentDeliveryTicks readAt={last.readAt} />
+                          <AgentDeliveryTicks
+                            status={
+                              (last.receiptStatus as MessageReceiptStatus) ??
+                              "SENT"
+                            }
+                          />
                         ) : null}
                       </div>
                     </div>

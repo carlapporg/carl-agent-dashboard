@@ -45,6 +45,22 @@ import { agentTaskStatusSchema, type AgentPresence, type AgentTaskStatus } from 
 import { getOpenTasksAction } from "@/features/dashboard/actions";
 import { parseIncomingTaskMessage, previewForIncomingMessage } from "@/lib/realtime/parse-task-message";
 import {
+  mergeReceiptStatus,
+  parseMessageReceiptPayload,
+  type MessageReceiptEvent,
+} from "@/lib/realtime/parse-message-receipt";
+import type { MessageReceiptStatus } from "@/types/message";
+import {
+  connectAgentSocket,
+  emitAgentAvailability,
+  emitMessageDelivered,
+  emitMessageSeen,
+  joinTaskRoom,
+  leaveTaskRoom,
+  releaseAgentSocket,
+  updateAgentSocketAuth,
+} from "@/lib/realtime/agent-socket";
+import {
   isVenuePickedMessageMetadata,
   parseVenuePickedPayload,
   parseVenueSuggestionsPayload,
@@ -52,14 +68,6 @@ import {
   venueFromMessageMetadata,
   type VenueSuggestion,
 } from "@/types/venue";
-import {
-  connectAgentSocket,
-  emitAgentAvailability,
-  joinTaskRoom,
-  leaveTaskRoom,
-  releaseAgentSocket,
-  updateAgentSocketAuth,
-} from "@/lib/realtime/agent-socket";
 import { ROUTES } from "@/lib/constants/routes";
 import { parseTaskConfirmationPayload, type TaskConfirmation } from "@/types/confirmation";
 import { parseTaskReceiptPayload, type TaskReceipt } from "@/types/receipt";
@@ -283,9 +291,11 @@ type OpsContextValue = {
   /** Venue suggestions / pick from task sockets (agent read-only). */
   liveVenue: LiveVenueEvent | null;
   /**
-   * Customer read receipts for agent messages: taskId → messageId → readAt ISO.
-   * Filled from Nest `message.read` (reader USER).
+   * Receipt ticks for agent outgoing messages: taskId → messageId → status.
+   * Updated from `message.receipt` / delivered / seen when reader is USER.
    */
+  messageReceipts: Record<string, Record<string, MessageReceiptStatus>>;
+  /** @deprecated use messageReceipts — SEEN timestamps only */
   messageReads: Record<string, Record<string, string>>;
   /** Latest booking-payment socket event for the open task flow. */
   livePayment: LiveTaskPaymentEvent | null;
@@ -364,6 +374,9 @@ export function AgentOpsProvider({
   const [livePulse, setLivePulse] = useState(false);
   const [liveChat, setLiveChat] = useState<LiveChatEvent | null>(null);
   const [liveVenue, setLiveVenue] = useState<LiveVenueEvent | null>(null);
+  const [messageReceipts, setMessageReceipts] = useState<
+    Record<string, Record<string, MessageReceiptStatus>>
+  >({});
   const [messageReads, setMessageReads] = useState<
     Record<string, Record<string, string>>
   >({});
@@ -966,6 +979,23 @@ export function AgentOpsProvider({
           durationMs: incoming.durationMs,
           metadata: incoming.metadata,
         });
+        // Device received USER message → DELIVERED ACK (socket).
+        if (incoming.messageId) {
+          emitMessageDelivered(incoming.taskId, [incoming.messageId]);
+        } else {
+          emitMessageDelivered(incoming.taskId);
+        }
+        // Chat open / visible → SEEN immediately.
+        if (
+          notificationsRef.current.isViewingTaskInbox(incoming.taskId) &&
+          typeof document !== "undefined" &&
+          document.visibilityState === "visible"
+        ) {
+          emitMessageSeen(
+            incoming.taskId,
+            incoming.messageId ? [incoming.messageId] : undefined,
+          );
+        }
         if (isVenuePickedMessageMetadata(incoming.metadata)) {
           const suggestion = venueFromMessageMetadata(incoming.metadata);
           setLiveVenue({
@@ -1326,7 +1356,133 @@ export function AgentOpsProvider({
       });
     }
 
+    function applyReceiptEvent(event: MessageReceiptEvent) {
+      // reader USER → client delivered/saw our AGENT messages → update ticks
+      if (event.reader !== "USER") return;
+      const at =
+        event.seenAt ??
+        event.readAt ??
+        event.deliveredAt ??
+        new Date().toISOString();
+      setMessageReceipts((prev) => {
+        const nextTask = { ...(prev[event.taskId] ?? {}) };
+        if (event.messageIds.length === 0) {
+          // No ids → apply to all known agent msgs for this task (+ wildcard).
+          for (const id of Object.keys(nextTask)) {
+            nextTask[id] = mergeReceiptStatus(nextTask[id], event.status);
+          }
+          nextTask["*"] = mergeReceiptStatus(nextTask["*"], event.status);
+        } else {
+          for (const id of event.messageIds) {
+            nextTask[id] = mergeReceiptStatus(nextTask[id], event.status);
+          }
+        }
+        return { ...prev, [event.taskId]: nextTask };
+      });
+      if (event.status === "SEEN") {
+        setMessageReads((prev) => {
+          const nextTask = { ...(prev[event.taskId] ?? {}) };
+          if (event.messageIds.length === 0) {
+            for (const id of Object.keys(nextTask)) nextTask[id] = at;
+            nextTask["*"] = at;
+          } else {
+            for (const id of event.messageIds) nextTask[id] = at;
+          }
+          return { ...prev, [event.taskId]: nextTask };
+        });
+      }
+    }
+
+    function onMessageReceipt(payload: unknown) {
+      const parsed = parseMessageReceiptPayload(payload);
+      if (!parsed) return;
+      applyReceiptEvent(parsed);
+    }
+
+    function onMessageDeliveredAlias(payload: unknown) {
+      const parsed = parseMessageReceiptPayload(payload);
+      if (parsed) {
+        applyReceiptEvent(parsed);
+        return;
+      }
+      // Alias may omit status — infer DELIVERED
+      if (!payload || typeof payload !== "object") return;
+      const root = payload as Record<string, unknown>;
+      const data =
+        root.data && typeof root.data === "object"
+          ? (root.data as Record<string, unknown>)
+          : root;
+      const taskId =
+        typeof data.taskId === "string"
+          ? data.taskId
+          : typeof root.taskId === "string"
+            ? root.taskId
+            : null;
+      if (!taskId) return;
+      if (data.reader != null && data.reader !== "USER") return;
+      const ids = Array.isArray(data.messageIds)
+        ? data.messageIds.filter((id): id is string => typeof id === "string")
+        : [];
+      applyReceiptEvent({
+        taskId,
+        messageIds: ids,
+        status: "DELIVERED",
+        deliveredAt:
+          typeof data.deliveredAt === "string" ? data.deliveredAt : undefined,
+        reader: "USER",
+      });
+    }
+
+    function onMessageSeenAlias(payload: unknown) {
+      const parsed = parseMessageReceiptPayload(payload);
+      if (parsed) {
+        applyReceiptEvent({ ...parsed, status: "SEEN" });
+        return;
+      }
+      if (!payload || typeof payload !== "object") return;
+      const root = payload as Record<string, unknown>;
+      const data =
+        root.data && typeof root.data === "object"
+          ? (root.data as Record<string, unknown>)
+          : root;
+      const taskId =
+        typeof data.taskId === "string"
+          ? data.taskId
+          : typeof root.taskId === "string"
+            ? root.taskId
+            : null;
+      if (!taskId) return;
+      if (data.reader != null && data.reader !== "USER") return;
+      const ids = Array.isArray(data.messageIds)
+        ? data.messageIds.filter((id): id is string => typeof id === "string")
+        : [];
+      applyReceiptEvent({
+        taskId,
+        messageIds: ids,
+        status: "SEEN",
+        seenAt:
+          typeof data.seenAt === "string"
+            ? data.seenAt
+            : typeof data.readAt === "string"
+              ? data.readAt
+              : undefined,
+        readAt:
+          typeof data.readAt === "string"
+            ? data.readAt
+            : typeof data.seenAt === "string"
+              ? data.seenAt
+              : undefined,
+        reader: "USER",
+      });
+    }
+
     function onMessageRead(payload: unknown) {
+      const parsed = parseMessageReceiptPayload(payload);
+      if (parsed) {
+        applyReceiptEvent({ ...parsed, status: "SEEN" });
+        return;
+      }
+      // Legacy shape without status
       if (!payload || typeof payload !== "object") return;
       const root = payload as Record<string, unknown>;
       const data =
@@ -1343,15 +1499,20 @@ export function AgentOpsProvider({
       const readAt =
         typeof data.readAt === "string"
           ? data.readAt
-          : new Date().toISOString();
+          : typeof data.seenAt === "string"
+            ? data.seenAt
+            : new Date().toISOString();
       const ids = Array.isArray(data.messageIds)
         ? data.messageIds.filter((id): id is string => typeof id === "string")
         : [];
       if (!taskId || ids.length === 0) return;
-      setMessageReads((prev) => {
-        const nextTask = { ...(prev[taskId] ?? {}) };
-        for (const id of ids) nextTask[id] = readAt;
-        return { ...prev, [taskId]: nextTask };
+      applyReceiptEvent({
+        taskId,
+        messageIds: ids,
+        status: "SEEN",
+        seenAt: readAt,
+        readAt,
+        reader: "USER",
       });
     }
 
@@ -1444,6 +1605,12 @@ export function AgentOpsProvider({
     socket.on("activity_created", onActivityCreated);
     socket.on("message.read", onMessageRead);
     socket.on("message_read", onMessageRead);
+    socket.on("message.receipt", onMessageReceipt);
+    socket.on("message_receipt", onMessageReceipt);
+    socket.on("message.delivered", onMessageDeliveredAlias);
+    socket.on("message_delivered", onMessageDeliveredAlias);
+    socket.on("message.seen", onMessageSeenAlias);
+    socket.on("message_seen", onMessageSeenAlias);
     socket.on("task.updated", onTaskUpdated);
     socket.on("task_updated", onTaskUpdated);
     socket.on("queue.updated", onQueuePulse);
@@ -1508,6 +1675,12 @@ export function AgentOpsProvider({
       socket.off("activity_created", onActivityCreated);
       socket.off("message.read", onMessageRead);
       socket.off("message_read", onMessageRead);
+      socket.off("message.receipt", onMessageReceipt);
+      socket.off("message_receipt", onMessageReceipt);
+      socket.off("message.delivered", onMessageDeliveredAlias);
+      socket.off("message_delivered", onMessageDeliveredAlias);
+      socket.off("message.seen", onMessageSeenAlias);
+      socket.off("message_seen", onMessageSeenAlias);
       socket.off("task.updated", onTaskUpdated);
       socket.off("task_updated", onTaskUpdated);
       socket.off("queue.updated", onQueuePulse);
@@ -1543,6 +1716,7 @@ export function AgentOpsProvider({
       livePulse,
       liveChat,
       liveVenue,
+      messageReceipts,
       messageReads,
       livePayment,
       liveConfirmation,
@@ -1569,6 +1743,7 @@ export function AgentOpsProvider({
       livePulse,
       liveTasks,
       liveVenue,
+      messageReceipts,
       messageReads,
       offer,
       patchLiveTask,

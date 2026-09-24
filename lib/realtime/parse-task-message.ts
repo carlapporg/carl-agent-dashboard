@@ -1,6 +1,7 @@
 import { mediaKindFromMessage } from "@/lib/api/map-task";
 import { agentTaskMessageSchema } from "@/types/agent";
 import type { ChatMediaKind } from "@/types/message";
+import { receiptStatusFromMessage } from "@/lib/realtime/parse-message-receipt";
 import { isVenuePickedMessageMetadata } from "@/types/venue";
 
 export type IncomingTaskMessage = {
@@ -13,6 +14,7 @@ export type IncomingTaskMessage = {
   mediaKind: ChatMediaKind;
   durationMs?: number | null;
   metadata?: unknown;
+  receiptStatus?: "SENT" | "DELIVERED" | "SEEN";
 };
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -98,5 +100,20 @@ export function parseIncomingTaskMessage(
     mediaKind,
     durationMs: parsed.success ? parsed.data.durationMs : null,
     metadata,
+    receiptStatus: parsed.success
+      ? receiptStatusFromMessage(parsed.data)
+      : receiptStatusFromMessage({
+          status: typeof message.status === "string" ? message.status : null,
+          receiptStatus:
+            typeof message.receiptStatus === "string"
+              ? message.receiptStatus
+              : null,
+          deliveredAt:
+            typeof message.deliveredAt === "string"
+              ? message.deliveredAt
+              : null,
+          seenAt: typeof message.seenAt === "string" ? message.seenAt : null,
+          readAt: typeof message.readAt === "string" ? message.readAt : null,
+        }),
   };
 }

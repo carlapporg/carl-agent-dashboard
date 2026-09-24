@@ -97,7 +97,10 @@ export const API_ENDPOINTS = {
     /** GET list | POST { content } */
     taskMessages: (taskId: string) =>
       `/agents/me/tasks/${taskId}/messages` as const,
-    /** POST — mark unread customer messages as read */
+    /** POST — mark customer messages DELIVERED on this device */
+    taskMessagesDelivered: (taskId: string) =>
+      `/agents/me/tasks/${taskId}/messages/delivered` as const,
+    /** POST — mark customer messages SEEN (chat open) */
     taskMessagesRead: (taskId: string) =>
       `/agents/me/tasks/${taskId}/messages/read` as const,
     /** POST multipart { file, durationMs? } */

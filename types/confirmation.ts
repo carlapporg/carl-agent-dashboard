@@ -88,6 +88,8 @@ export const taskConfirmationSchema = z
     createdAt: z.string().optional().default(""),
     updatedAt: z.string().optional().default(""),
     decidedAt: z.string().nullable().optional(),
+    /** After CONFIRMED — agent should request booking payment. */
+    awaitingPayment: z.boolean().optional(),
   })
   .passthrough();
 

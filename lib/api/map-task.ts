@@ -13,6 +13,7 @@ import {
   parseConfirmationFormSchema,
   parseConfirmationPrefill,
 } from "@/types/confirmation";
+import { receiptStatusFromMessage } from "@/lib/realtime/parse-message-receipt";
 
 export function uiStatusFromAgent(status: AgentTaskStatus): TaskStatus {
   switch (status) {
@@ -265,12 +266,15 @@ export function mapAgentMessageToTimeline(
       message.caption ||
       captionFromMetadata(message.metadata) ||
       "",
-    createdAt: message.createdAt,
+    createdAt: message.createdAt || message.sentAt || new Date().toISOString(),
     visibleToCustomer: message.sender !== "SYSTEM",
     mediaKind,
     durationMs: message.durationMs,
     mimeType: message.mimeType,
-    readAt: message.readAt ?? null,
+    receiptStatus: receiptStatusFromMessage(message),
+    deliveredAt: message.deliveredAt ?? null,
+    seenAt: message.seenAt ?? message.readAt ?? null,
+    readAt: message.readAt ?? message.seenAt ?? null,
     metadata: message.metadata ?? null,
   };
 }

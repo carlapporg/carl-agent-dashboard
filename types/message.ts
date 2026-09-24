@@ -13,6 +13,14 @@ export const timelineEventKindSchema = z.enum([
 
 export const chatMediaKindSchema = z.enum(["text", "voice", "image"]);
 
+export const messageReceiptStatusSchema = z.enum([
+  "SENT",
+  "DELIVERED",
+  "SEEN",
+]);
+
+export type MessageReceiptStatus = z.infer<typeof messageReceiptStatusSchema>;
+
 export const timelineEventSchema = z.object({
   id: z.string(),
   taskId: z.string(),
@@ -25,7 +33,11 @@ export const timelineEventSchema = z.object({
   durationMs: z.number().nullable().optional(),
   mimeType: z.string().nullable().optional(),
   previewUrl: z.string().nullable().optional(),
-  /** When the customer read this agent message (null / missing = delivered only). */
+  /** SENT → DELIVERED → SEEN (agent outgoing ticks). */
+  receiptStatus: messageReceiptStatusSchema.optional(),
+  deliveredAt: z.string().nullable().optional(),
+  seenAt: z.string().nullable().optional(),
+  /** Legacy alias of seenAt. */
   readAt: z.string().nullable().optional(),
   /** Nest message metadata (e.g. venue_picked). */
   metadata: z.unknown().nullable().optional(),

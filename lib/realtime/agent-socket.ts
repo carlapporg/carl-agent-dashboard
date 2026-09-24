@@ -173,6 +173,27 @@ export function emitAgentAvailability(status: AgentPresence) {
   socket.emit("agent.availability", { status });
 }
 
+export function emitMessageDelivered(
+  taskId: string,
+  messageIds?: string[],
+) {
+  const socket = getAgentSocket();
+  if (!socket?.connected || !taskId) return;
+  socket.emit("message_delivered", {
+    taskId,
+    ...(messageIds?.length ? { messageIds } : {}),
+  });
+}
+
+export function emitMessageSeen(taskId: string, messageIds?: string[]) {
+  const socket = getAgentSocket();
+  if (!socket?.connected || !taskId) return;
+  socket.emit("message_seen", {
+    taskId,
+    ...(messageIds?.length ? { messageIds } : {}),
+  });
+}
+
 export function joinTaskRoom(socket: Socket, taskId: string) {
   if (!taskId || !socket.connected) return;
   socket.emit("joinTask", { taskId });
