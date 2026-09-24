@@ -59,6 +59,14 @@ import {
   markTaskConfirmationKnown,
   markTaskReceiptKnown,
 } from "@/lib/tasks/confirmation-presence";
+import {
+  clearStoredTaskPayment,
+  patchStoredTaskPayment,
+} from "@/lib/tasks/task-payment-store";
+import {
+  parseTaskPaymentPayload,
+  type TaskPaymentStatus,
+} from "@/types/task-payment";
 import type { Task } from "@/types/task";
 import type { Socket } from "socket.io-client";
 import { markOfferAccepted } from "@/features/ops/auto-accept-offer";
@@ -226,6 +234,17 @@ type LiveChatEvent = {
   durationMs?: number | null;
 };
 
+export type LiveTaskPaymentEvent = {
+  at: number;
+  taskId: string;
+  paymentId: string;
+  status?: TaskPaymentStatus;
+  last4?: string | null;
+  brand?: string | null;
+  spendAmountCents?: number;
+  currency?: string;
+};
+
 type OpsContextValue = {
   connected: boolean;
   presence: AgentPresence;
@@ -248,6 +267,8 @@ type OpsContextValue = {
    * Filled from Nest `message.read` (reader USER).
    */
   messageReads: Record<string, Record<string, string>>;
+  /** Latest booking-payment socket event for the open task flow. */
+  livePayment: LiveTaskPaymentEvent | null;
   liveConfirmation: TaskConfirmation | null;
   /** Confirmation rows keyed by task id (`null` = fetched, none). */
   confirmationsByTaskId: Record<string, TaskConfirmation | null>;
@@ -325,6 +346,9 @@ export function AgentOpsProvider({
   const [messageReads, setMessageReads] = useState<
     Record<string, Record<string, string>>
   >({});
+  const [livePayment, setLivePayment] = useState<LiveTaskPaymentEvent | null>(
+    null,
+  );
   const [liveConfirmation, setLiveConfirmationState] =
     useState<TaskConfirmation | null>(null);
   const [confirmationsByTaskId, setConfirmationsByTaskId] = useState<
@@ -954,6 +978,77 @@ export function AgentOpsProvider({
       pulseQueue();
     }
 
+    function onTaskPaymentEvent(
+      payload: unknown,
+      statusHint?: TaskPaymentStatus,
+    ) {
+      const parsed = parseTaskPaymentPayload(payload);
+      if (!parsed?.taskId || !parsed.paymentId) return;
+      const status = statusHint ?? parsed.status;
+      const event: LiveTaskPaymentEvent = {
+        at: Date.now(),
+        taskId: parsed.taskId,
+        paymentId: parsed.paymentId,
+        status,
+        last4: parsed.last4,
+        brand: parsed.brand,
+        spendAmountCents: parsed.spendAmountCents,
+        currency: parsed.currency,
+      };
+      setLivePayment(event);
+      if (status) {
+        patchStoredTaskPayment(parsed.taskId, {
+          paymentId: parsed.paymentId,
+          status,
+          last4: parsed.last4,
+          brand: parsed.brand,
+          currency: parsed.currency,
+          spendDisplay:
+            parsed.spendAmountCents != null
+              ? (parsed.spendAmountCents / 100).toFixed(2)
+              : undefined,
+        });
+      } else {
+        patchStoredTaskPayment(parsed.taskId, {
+          paymentId: parsed.paymentId,
+          last4: parsed.last4,
+          brand: parsed.brand,
+          currency: parsed.currency,
+        });
+      }
+      if (status === "card_issued") {
+        toastRef.current("Virtual card ready.", "success", {
+          title: "Payment",
+          href: ROUTES.taskPanel(parsed.taskId, "payment"),
+          actionLabel: "Open payment",
+        });
+      }
+      if (status === "cancelled") {
+        clearStoredTaskPayment(parsed.taskId);
+      }
+      pulseQueue();
+    }
+
+    function onPaymentCaptured(payload: unknown) {
+      onTaskPaymentEvent(payload, "captured");
+    }
+
+    function onCardReady(payload: unknown) {
+      onTaskPaymentEvent(payload, "card_issued");
+    }
+
+    function onPaymentSpent(payload: unknown) {
+      onTaskPaymentEvent(payload, "spent");
+    }
+
+    function onPaymentRequested(payload: unknown) {
+      onTaskPaymentEvent(payload, "requires_payment");
+    }
+
+    function onPaymentCancelled(payload: unknown) {
+      onTaskPaymentEvent(payload, "cancelled");
+    }
+
     function onPaymentDeclined(_payload: unknown) {
       pulseQueue();
     }
@@ -1203,6 +1298,16 @@ export function AgentOpsProvider({
     socket.on("payment_rejected", onPaymentDeclined);
     socket.on("payment.expired", onPaymentExpired);
     socket.on("payment_expired", onPaymentExpired);
+    socket.on("task.payment_captured", onPaymentCaptured);
+    socket.on("task_payment_captured", onPaymentCaptured);
+    socket.on("task.card_ready", onCardReady);
+    socket.on("task_card_ready", onCardReady);
+    socket.on("task.payment_spent", onPaymentSpent);
+    socket.on("task_payment_spent", onPaymentSpent);
+    socket.on("task.payment_requested", onPaymentRequested);
+    socket.on("task_payment_requested", onPaymentRequested);
+    socket.on("task.payment_cancelled", onPaymentCancelled);
+    socket.on("task_payment_cancelled", onPaymentCancelled);
     socket.on("task.confirmation_confirmed", onConfirmationConfirmed);
     socket.on("task_confirmation_confirmed", onConfirmationConfirmed);
     socket.on("task.confirmation_declined", onConfirmationDeclined);
@@ -1253,6 +1358,16 @@ export function AgentOpsProvider({
       socket.off("payment_rejected", onPaymentDeclined);
       socket.off("payment.expired", onPaymentExpired);
       socket.off("payment_expired", onPaymentExpired);
+      socket.off("task.payment_captured", onPaymentCaptured);
+      socket.off("task_payment_captured", onPaymentCaptured);
+      socket.off("task.card_ready", onCardReady);
+      socket.off("task_card_ready", onCardReady);
+      socket.off("task.payment_spent", onPaymentSpent);
+      socket.off("task_payment_spent", onPaymentSpent);
+      socket.off("task.payment_requested", onPaymentRequested);
+      socket.off("task_payment_requested", onPaymentRequested);
+      socket.off("task.payment_cancelled", onPaymentCancelled);
+      socket.off("task_payment_cancelled", onPaymentCancelled);
       socket.off("task.confirmation_confirmed", onConfirmationConfirmed);
       socket.off("task_confirmation_confirmed", onConfirmationConfirmed);
       socket.off("task.confirmation_declined", onConfirmationDeclined);
@@ -1306,6 +1421,7 @@ export function AgentOpsProvider({
       livePulse,
       liveChat,
       messageReads,
+      livePayment,
       liveConfirmation,
       confirmationsByTaskId,
       setLiveConfirmation,
@@ -1325,6 +1441,7 @@ export function AgentOpsProvider({
       liveActivities,
       liveChat,
       liveConfirmation,
+      livePayment,
       liveReceipt,
       livePulse,
       liveTasks,

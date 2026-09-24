@@ -36,7 +36,7 @@ export function kindLabel(kind: NotificationKind): string {
     case "client_message":
       return "Message";
     case "payment_approved":
-      return "Payment approved";
+      return "Virtual card ready";
     case "payment_declined":
       return "Payment declined";
     case "payment_expired":
@@ -120,12 +120,12 @@ export function parsePaymentNotification(
   const amountText =
     amount != null ? ` (${amount.toLocaleString()})` : "";
   const titles = {
-    payment_approved: "Payment approved",
+    payment_approved: "Virtual card ready",
     payment_declined: "Payment declined",
     payment_expired: "Payment request expired",
   } as const;
   const bodies = {
-    payment_approved: `${merchant} approved the payment request${amountText}.`,
+    payment_approved: `Virtual card is ready for this booking${amountText}. Reveal it on the task to pay the merchant.`,
     payment_declined: `${merchant} declined the payment request.`,
     payment_expired: `The payment request for ${merchant} expired.`,
   } as const;

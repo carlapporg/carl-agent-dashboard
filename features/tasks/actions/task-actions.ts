@@ -415,3 +415,93 @@ export async function refreshVenueSuggestionsAction(
   }
 }
 
+function mapPaymentError(error: unknown): string {
+  if (isApiError(error)) {
+    const msg = error.message.toLowerCase();
+    if (error.status === 503) {
+      return "Stripe is not configured. Ask ops to enable Stripe.";
+    }
+    if (error.status === 403) {
+      return "This task is not assigned to you.";
+    }
+    if (error.status === 400) {
+      if (msg.includes("confirm")) {
+        return "User must confirm booking first.";
+      }
+      if (
+        msg.includes("open payment") ||
+        msg.includes("already") ||
+        msg.includes("exists")
+      ) {
+        return "An open payment already exists for this task.";
+      }
+      if (msg.includes("not ready") || msg.includes("waiting")) {
+        return "Virtual card is not ready yet.";
+      }
+      if (msg.includes("spent") && msg.includes("cancel")) {
+        return "Payment already spent — cannot cancel.";
+      }
+      if (msg.includes("cancelled")) {
+        return "This card was cancelled.";
+      }
+    }
+    return error.message || toUserMessage(error);
+  }
+  return toUserMessage(error);
+}
+
+export async function requestTaskPaymentAction(
+  taskId: string,
+  spendAmountCents: number,
+  confirmationId?: string | null,
+): Promise<
+  | { ok: true; payment: import("@/types/task-payment").TaskPayment }
+  | { ok: false; message: string }
+> {
+  try {
+    const { taskPaymentsApi } = await import("@/lib/api/task-payments");
+    const payment = await taskPaymentsApi.request(taskId, {
+      spendAmountCents,
+      currency: "usd",
+      ...(confirmationId ? { confirmationId } : {}),
+    });
+    revalidateTaskPage(taskId);
+    return { ok: true, payment };
+  } catch (error) {
+    return { ok: false, message: mapPaymentError(error) };
+  }
+}
+
+export async function revealTaskPaymentCardAction(
+  taskId: string,
+  paymentId: string,
+): Promise<
+  | { ok: true; card: import("@/types/task-payment").VirtualCardSecrets }
+  | { ok: false; message: string }
+> {
+  try {
+    const { taskPaymentsApi } = await import("@/lib/api/task-payments");
+    const card = await taskPaymentsApi.getCard(taskId, paymentId);
+    return { ok: true, card };
+  } catch (error) {
+    return { ok: false, message: mapPaymentError(error) };
+  }
+}
+
+export async function cancelTaskPaymentAction(
+  taskId: string,
+  paymentId: string,
+): Promise<
+  | { ok: true; payment: import("@/types/task-payment").TaskPayment }
+  | { ok: false; message: string }
+> {
+  try {
+    const { taskPaymentsApi } = await import("@/lib/api/task-payments");
+    const payment = await taskPaymentsApi.cancel(taskId, paymentId);
+    revalidateTaskPage(taskId);
+    return { ok: true, payment };
+  } catch (error) {
+    return { ok: false, message: mapPaymentError(error) };
+  }
+}
+

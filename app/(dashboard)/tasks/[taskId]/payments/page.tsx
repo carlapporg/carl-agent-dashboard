@@ -10,8 +10,8 @@ export const metadata: Metadata = {
   title: "Payments",
 };
 
-/** Receipt and payment proof live in the task workspace — not a separate Nest ledger page yet. */
+/** Booking payment + card reveal live on the task workspace payment panel. */
 export default async function TaskPaymentsPage({ params }: PaymentsPageProps) {
   const { taskId } = await params;
-  redirect(ROUTES.taskPanel(taskId, "receipt"));
+  redirect(ROUTES.taskPanel(taskId, "payment"));
 }

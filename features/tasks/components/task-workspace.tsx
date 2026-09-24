@@ -24,6 +24,7 @@ import {
 } from "@/features/tasks/components/task-chat-thread";
 import { TaskConfirmationPanel } from "@/features/tasks/components/task-confirmation-panel";
 import { VenueSuggestionsPanel } from "@/features/tasks/components/venue-suggestions-panel";
+import { BookingPaymentPanel } from "@/features/tasks/components/booking-payment-panel";
 import { TaskCustomerSnippet } from "@/features/tasks/components/task-customer-snippet";
 import { TaskFacts } from "@/features/tasks/components/task-facts";
 import { PageChromeSetter } from "@/features/shell/page-chrome";
@@ -291,6 +292,15 @@ export function TaskWorkspace({
         behavior: "smooth",
         block: "start",
       });
+      return;
+    }
+    if (panel === "payment" || panel === "receipt") {
+      document
+        .getElementById(panel === "payment" ? "panel-payment" : "panel-receipt")
+        ?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
     }
   }, [searchParams]);
 
@@ -470,6 +480,12 @@ export function TaskWorkspace({
                 }
                 router.refresh();
               }}
+            />
+
+            <BookingPaymentPanel
+              taskId={task.id}
+              confirmation={confirmation}
+              disabled={lockedReadOnly}
             />
 
             <TaskAgentNotes taskId={task.id} disabled={lockedReadOnly} />

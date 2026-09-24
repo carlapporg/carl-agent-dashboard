@@ -82,6 +82,18 @@ export const API_ENDPOINTS = {
     /** GET raw file bytes. Use agentFileUrl. */
     taskReceiptFile: (taskId: string, receiptId: string) =>
       `/agents/me/tasks/${taskId}/receipts/${receiptId}/file` as const,
+    /**
+     * Booking payment + one-time Issuing card (after CONFIRMED confirmation).
+     * POST { spendAmountCents, currency?, confirmationId? }
+     * GET  …/payments/:paymentId/card
+     * POST …/payments/:paymentId/cancel
+     */
+    taskPayments: (taskId: string) =>
+      `/agents/me/tasks/${taskId}/payments` as const,
+    taskPaymentCard: (taskId: string, paymentId: string) =>
+      `/agents/me/tasks/${taskId}/payments/${paymentId}/card` as const,
+    taskPaymentCancel: (taskId: string, paymentId: string) =>
+      `/agents/me/tasks/${taskId}/payments/${paymentId}/cancel` as const,
     /** GET list | POST { content } */
     taskMessages: (taskId: string) =>
       `/agents/me/tasks/${taskId}/messages` as const,
