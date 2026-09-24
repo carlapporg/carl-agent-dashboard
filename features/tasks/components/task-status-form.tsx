@@ -5,7 +5,7 @@ import { updateTaskAgentStatusAction } from "@/features/tasks/actions/task-actio
 import { CompleteTaskReceiptDialog } from "@/features/tasks/components/complete-task-receipt-dialog";
 import { formatStatus } from "@/features/tasks/components/status-badge";
 import { Button } from "@/components/ui/button";
-import { ChevronIcon } from "@/components/ui/chevron-icon";
+import { SelectField } from "@/components/ui/select-field";
 import { useToast } from "@/components/providers/toast-provider";
 import { isClosedTask } from "@/features/tasks/lib/workflow";
 import type { TaskReceipt } from "@/types/receipt";
@@ -147,6 +147,27 @@ export function TaskStatusForm({
     [status],
   );
 
+  const selectOptions = useMemo(
+    () =>
+      STATUS_OPTIONS.map((option) => {
+        const lockedOption = optionLocked(
+          option.value,
+          option.selectable,
+          current,
+          blockComplete,
+        );
+        const disableOption = lockedOption && option.value !== status;
+        return {
+          value: option.value,
+          label: `${option.label}${
+            current === option.value ? " (Current)" : ""
+          }${disableOption ? " — auto" : ""}`,
+          disabled: disableOption,
+        };
+      }),
+    [blockComplete, current, status],
+  );
+
   function submit() {
     if (!canSubmit) return;
     if (status === "COMPLETED") {
@@ -211,57 +232,14 @@ export function TaskStatusForm({
         >
           Status
         </label>
-        <div className="relative">
-          <select
-            id="task-status-select"
-            value={status}
-            disabled={locked || pending}
-            onChange={(event) => {
-              const next = event.target.value as AgentStatusChoice;
-              const option = STATUS_OPTIONS.find((item) => item.value === next);
-              if (!option) return;
-              if (
-                optionLocked(
-                  option.value,
-                  option.selectable,
-                  current,
-                  blockComplete,
-                )
-              ) {
-                return;
-              }
-              setStatus(next);
-            }}
-            className="h-[45px] w-full appearance-none rounded-[5px] border border-border bg-surface px-[15px] pr-10 text-[14px] font-normal tracking-[-0.05em] text-foreground outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent/40 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {STATUS_OPTIONS.map((option) => {
-              const lockedOption = optionLocked(
-                option.value,
-                option.selectable,
-                current,
-                blockComplete,
-              );
-              // Keep the current auto-status selectable in the list so the
-              // control can show it; agent cannot switch *to* locked values.
-              const disableOption =
-                lockedOption && option.value !== status;
-              return (
-                <option
-                  key={option.value}
-                  value={option.value}
-                  disabled={disableOption}
-                >
-                  {option.label}
-                  {current === option.value ? " (Current)" : ""}
-                  {lockedOption && option.value !== status ? " — auto" : ""}
-                </option>
-              );
-            })}
-          </select>
-          <ChevronIcon
-            className="pointer-events-none absolute top-1/2 right-3 size-[15px] -translate-y-1/2 text-muted"
-          />
-        </div>
+        <SelectField
+          id="task-status-select"
+          value={status}
+          options={selectOptions}
+          disabled={locked || pending}
+          onChange={setStatus}
+          aria-label="Task status"
+        />
         {selectedOption ? (
           <p className="mt-2 text-xs text-muted">
             {optionHint(

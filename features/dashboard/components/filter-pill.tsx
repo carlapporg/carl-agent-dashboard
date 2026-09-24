@@ -10,6 +10,10 @@ import {
 } from "react";
 import { AnchoredMenu } from "@/components/ui/anchored-menu";
 import { ChevronIcon } from "@/components/ui/chevron-icon";
+import {
+  dropdownItemClass,
+  dropdownPanelClass,
+} from "@/components/ui/dropdown-styles";
 import { cn } from "@/lib/utils/cn";
 
 export type FilterPillOption<T extends string = string> = {
@@ -115,7 +119,7 @@ export function FilterPill<T extends string = string>({
         menuRef={menuRef}
         id={menuId}
         aria-label={label}
-        className="min-w-[10.5rem] rounded-[12px] border border-border bg-surface p-1.5 shadow-[0_12px_32px_rgba(15,23,42,0.12)]"
+        className={cn(dropdownPanelClass, "min-w-[10.5rem]")}
       >
         {options.map((option) => {
           const isSelected = option.value === value;
@@ -129,13 +133,17 @@ export function FilterPill<T extends string = string>({
                 onChange(option.value);
                 close(true);
               }}
-              className={cn(
-                "flex w-full items-center rounded-[8px] px-3 py-2 text-left text-[12px] font-medium tracking-[-0.02em]",
-                isSelected
-                  ? "bg-surface-muted text-foreground"
-                  : "text-muted hover:bg-surface-muted hover:text-foreground",
-              )}
+              className={dropdownItemClass({ selected: isSelected })}
             >
+              <span
+                className={cn(
+                  "flex w-4 shrink-0 justify-center text-[12px]",
+                  isSelected ? "opacity-100" : "opacity-0",
+                )}
+                aria-hidden
+              >
+                ✓
+              </span>
               {option.label}
             </button>
           );

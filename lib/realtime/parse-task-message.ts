@@ -1,6 +1,7 @@
 import { mediaKindFromMessage } from "@/lib/api/map-task";
 import { agentTaskMessageSchema } from "@/types/agent";
 import type { ChatMediaKind } from "@/types/message";
+import { isVenuePickedMessageMetadata } from "@/types/venue";
 
 export type IncomingTaskMessage = {
   taskId: string;
@@ -11,6 +12,7 @@ export type IncomingTaskMessage = {
   messageId?: string;
   mediaKind: ChatMediaKind;
   durationMs?: number | null;
+  metadata?: unknown;
 };
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -35,6 +37,9 @@ function labelFromClient(value: unknown): string | undefined {
 }
 
 export function previewForIncomingMessage(message: IncomingTaskMessage): string {
+  if (isVenuePickedMessageMetadata(message.metadata)) {
+    return "Customer selected a place";
+  }
   if (message.mediaKind === "voice") return "Voice message";
   if (message.mediaKind === "image") {
     return message.content.trim() || "Photo";
@@ -59,11 +64,16 @@ export function parseIncomingTaskMessage(
     (typeof message.content === "string" ? message.content : null) ??
     (typeof data.content === "string" ? data.content : null) ??
     "";
+  const metadata = parsed.success
+    ? parsed.data.metadata
+    : (message.metadata ?? data.metadata ?? null);
   const mediaKind = parsed.success
     ? mediaKindFromMessage(parsed.data)
     : "text";
   if (!taskId) return null;
-  if (!content && mediaKind === "text") return null;
+  if (!content && mediaKind === "text" && !isVenuePickedMessageMetadata(metadata)) {
+    return null;
+  }
 
   const sender =
     (parsed.success ? parsed.data.sender : null) ??
@@ -87,5 +97,6 @@ export function parseIncomingTaskMessage(
     messageId: parsed.success ? parsed.data.id : undefined,
     mediaKind,
     durationMs: parsed.success ? parsed.data.durationMs : null,
+    metadata,
   };
 }

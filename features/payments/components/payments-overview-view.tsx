@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/feedback/empty-state";
 import { useToast } from "@/components/providers/toast-provider";
 import { AnchoredMenu } from "@/components/ui/anchored-menu";
 import { Button } from "@/components/ui/button";
+import { dropdownPanelClass } from "@/components/ui/dropdown-styles";
 import { AvailabilityToggle } from "@/features/dashboard/components/availability-toggle";
 import { MetricStatCard } from "@/features/dashboard/components/metric-stat-card";
 import {
@@ -316,37 +317,42 @@ export function PaymentsOverviewView({
               menuRef={filterMenuRef}
               role="dialog"
               aria-label="Filter by date"
-              className="w-72 rounded-[12px] border border-border bg-surface p-4 shadow-[0_12px_32px_rgba(15,23,42,0.12)]"
+              className={cn(dropdownPanelClass, "w-72 p-4")}
             >
-              <p className="text-sm font-semibold text-foreground">
+              <p className="text-sm font-semibold text-dropdown-foreground">
                 Filter by date
               </p>
               <div className="mt-3 space-y-3">
                 <label className="block space-y-1">
-                  <span className="text-xs font-medium text-muted">
+                  <span className="text-xs font-medium text-dropdown-muted">
                     From
                   </span>
                   <input
                     type="date"
                     value={draftFrom}
                     onChange={(event) => setDraftFrom(event.target.value)}
-                    className="h-10 w-full rounded-[10px] border border-border bg-surface px-3 text-sm outline-none focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/20"
+                    className="h-10 w-full rounded-[10px] border border-dropdown-border bg-white/10 px-3 text-sm text-dropdown-foreground outline-none focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/20 [color-scheme:dark]"
                   />
                 </label>
                 <label className="block space-y-1">
-                  <span className="text-xs font-medium text-muted">
+                  <span className="text-xs font-medium text-dropdown-muted">
                     To
                   </span>
                   <input
                     type="date"
                     value={draftTo}
                     onChange={(event) => setDraftTo(event.target.value)}
-                    className="h-10 w-full rounded-[10px] border border-border bg-surface px-3 text-sm outline-none focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/20"
+                    className="h-10 w-full rounded-[10px] border border-dropdown-border bg-white/10 px-3 text-sm text-dropdown-foreground outline-none focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/20 [color-scheme:dark]"
                   />
                 </label>
               </div>
               <div className="mt-4 flex justify-end gap-2">
-                <Button type="button" variant="ghost" onClick={clearDateFilter}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={clearDateFilter}
+                  className="text-dropdown-foreground hover:bg-dropdown-hover"
+                >
                   Clear
                 </Button>
                 <Button type="button" onClick={applyDateFilter}>

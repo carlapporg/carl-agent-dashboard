@@ -35,6 +35,11 @@ import {
 } from "@/lib/api/task-media";
 import { cn } from "@/lib/utils/cn";
 import type { ChatMediaKind, TimelineEvent, TimelineEventKind } from "@/types/message";
+import {
+  isVenuePickedMessageMetadata,
+  venueFromMessageMetadata,
+} from "@/types/venue";
+import { VenuePickedCard } from "@/features/tasks/components/venue-picked-card";
 
 export type TaskChatThreadHandle = {
   prefills: (text: string) => void;
@@ -497,7 +502,35 @@ const ChatBubble = memo(function ChatBubble({
           />
         ) : null}
         {mediaKind === "text" ? (
-          <p className="whitespace-pre-wrap wrap-break-word">{event.body}</p>
+          (() => {
+            const venue =
+              isVenuePickedMessageMetadata(event.metadata)
+                ? venueFromMessageMetadata(event.metadata)
+                : null;
+            if (venue) {
+              return (
+                <div className="space-y-2">
+                  <VenuePickedCard
+                    venue={venue}
+                    compact
+                    className={cn(
+                      fromAgent && !inbox
+                        ? "border-white/20 bg-white/15 text-accent-foreground"
+                        : undefined,
+                    )}
+                  />
+                  {event.body.trim() ? (
+                    <p className="whitespace-pre-wrap wrap-break-word text-[12px] opacity-90">
+                      {event.body}
+                    </p>
+                  ) : null}
+                </div>
+              );
+            }
+            return (
+              <p className="whitespace-pre-wrap wrap-break-word">{event.body}</p>
+            );
+          })()
         ) : null}
         {event.delivery === "sending" ? (
           <span
@@ -740,6 +773,7 @@ const TaskChatThreadBody = forwardRef<
       visibleToCustomer: true,
       mediaKind: liveChat.mediaKind ?? "text",
       durationMs: liveChat.durationMs,
+      metadata: liveChat.metadata ?? null,
     };
   }, [liveChat, taskId]);
 

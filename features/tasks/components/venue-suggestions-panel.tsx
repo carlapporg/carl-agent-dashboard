@@ -1,97 +1,77 @@
 "use client";
 
 import { useMemo } from "react";
+import { useOps } from "@/features/ops/ops-provider";
+import { VenuePickedCard } from "@/features/tasks/components/venue-picked-card";
 import type { Task } from "@/types/task";
 import {
   isUserLockedVenue,
   readTaskVenueMeta,
   shouldShowVenuePickedSummary,
   shouldShowWaitingForClientVenue,
+  type VenueSuggestion,
 } from "@/types/venue";
 
 type VenueSuggestionsPanelProps = {
   task: Task;
 };
 
-function StarRating({ value }: { value: number }) {
-  return (
-    <span className="tabular-nums text-accent">
-      {value.toFixed(1)}
-      <span className="text-muted"> ★</span>
-    </span>
-  );
-}
-
-function LockedVenueCard({
-  title,
-  name,
-  address,
-  rating,
-  mapsUrl,
-  footnote,
-}: {
-  title: string;
-  name: string;
-  address: string | null;
-  rating: number | null;
-  mapsUrl: string | null;
-  footnote: string;
-}) {
-  return (
-    <section className="overflow-hidden rounded-[15px] border border-border bg-surface p-4 shadow-(--shadow-card)">
-      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-      <p className="mt-2 text-sm font-medium text-foreground">{name}</p>
-      {address ? <p className="mt-1 text-xs text-muted">{address}</p> : null}
-      {rating != null ? (
-        <p className="mt-1 text-xs text-muted">
-          <StarRating value={rating} />
-        </p>
-      ) : null}
-      {mapsUrl ? (
-        <a
-          href={mapsUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-2 inline-block text-xs font-semibold text-accent hover:underline"
-        >
-          Open in Maps
-        </a>
-      ) : null}
-      <p className="mt-3 text-xs text-muted">{footnote}</p>
-    </section>
-  );
-}
-
 /**
- * Venue UI for agents: show the one place the client locked, or wait.
- * No Places list / refresh — that lives on mobile.
+ * Venue UI for agents: wait after Start, or show the place the client locked.
+ * No Places picker — suggestions go to the user app; agent is read-only.
  */
 export function VenueSuggestionsPanel({ task }: VenueSuggestionsPanelProps) {
-  const showPicked = shouldShowVenuePickedSummary(task);
-  const showWaiting = shouldShowWaitingForClientVenue(task);
+  const ops = useOps();
+  const live =
+    ops?.liveVenue?.taskId === task.id ? ops.liveVenue : null;
+
   const venue = useMemo(() => readTaskVenueMeta(task), [task]);
+
+  const pickedFromLive: VenueSuggestion | null =
+    live?.status === "picked" ? live.suggestion : null;
+
+  const showPicked =
+    shouldShowVenuePickedSummary(task) || Boolean(pickedFromLive);
+  const showWaiting =
+    !showPicked &&
+    (shouldShowWaitingForClientVenue(task) ||
+      live?.status === "suggestions_sent");
+
+  const suggestionsPreview =
+    live?.status === "suggestions_sent"
+      ? live.suggestions
+      : venue.venueSuggestions;
 
   if (!showPicked && !showWaiting) return null;
 
-  if (showPicked && venue.pickedName) {
-    const clientLocked = isUserLockedVenue(venue.venueChoice);
+  if (showPicked) {
+    const name = pickedFromLive?.name ?? venue.pickedName;
+    if (!name) return null;
+    const cardVenue: VenueSuggestion = pickedFromLive ?? {
+      id: venue.pickedSuggestionId ?? "picked",
+      name,
+      address: venue.pickedAddress,
+      rating: venue.pickedRating,
+      priceLevel: null,
+      mapsUrl: venue.pickedMapsUrl,
+      types: [],
+      lat: venue.pickedLat,
+      lng: venue.pickedLng,
+    };
+    const clientLocked =
+      isUserLockedVenue(venue.venueChoice) || live?.status === "picked";
     return (
-      <LockedVenueCard
-        title={clientLocked ? "Client selected venue" : "Venue chosen"}
-        name={
-          clientLocked
-            ? `Client picked: ${venue.pickedName}`
-            : venue.pickedName
-        }
-        address={venue.pickedAddress}
-        rating={venue.pickedRating}
-        mapsUrl={venue.pickedMapsUrl}
-        footnote={
-          clientLocked
-            ? "This place is locked by the client. Confirmation will use it."
-            : "Venue is locked on this confirmation. Client decline is needed before another pick."
-        }
-      />
+      <section className="overflow-hidden rounded-[15px] border border-border bg-surface p-4 shadow-(--shadow-card)">
+        <VenuePickedCard
+          venue={cardVenue}
+          title={clientLocked ? "Customer selected" : "Venue chosen"}
+        />
+        <p className="mt-3 text-xs text-muted">
+          {clientLocked
+            ? "Use this place for booking and confirmation."
+            : "Venue is locked on this confirmation."}
+        </p>
+      </section>
     );
   }
 
@@ -99,12 +79,22 @@ export function VenueSuggestionsPanel({ task }: VenueSuggestionsPanelProps) {
     <section className="overflow-hidden rounded-[15px] border border-border bg-surface p-4 shadow-(--shadow-card)">
       <h3 className="text-sm font-semibold text-foreground">Venue</h3>
       <p className="mt-2 text-sm text-muted">
-        Waiting for the client to send one place. You do not pick from
-        suggestions — use confirmation once their venue appears here.
+        Waiting for customer to pick a place
       </p>
-      {venue.venueSearchQuery ? (
+      {suggestionsPreview.length > 0 ? (
         <p className="mt-2 text-xs text-muted">
-          Client search: “{venue.venueSearchQuery}”.
+          {suggestionsPreview.length} option
+          {suggestionsPreview.length === 1 ? "" : "s"} sent to the customer
+          (read-only).
+        </p>
+      ) : (
+        <p className="mt-2 text-xs text-muted">
+          Place options were sent to the customer after you started the task.
+        </p>
+      )}
+      {venue.venueSearchQuery ? (
+        <p className="mt-1 text-xs text-muted">
+          Search: “{venue.venueSearchQuery}”.
         </p>
       ) : null}
     </section>

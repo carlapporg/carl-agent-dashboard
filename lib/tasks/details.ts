@@ -144,6 +144,10 @@ export function taskFacts(task: Task): TaskFact[] {
   if (metadata && typeof metadata === "object") {
     for (const [key, value] of Object.entries(metadata)) {
       if (SKIP_METADATA_KEYS.has(key)) continue;
+      const lower = key.toLowerCase();
+      if (lower.startsWith("venue") || lower.startsWith("pickedsuggestion")) {
+        continue;
+      }
       if (typeof value === "object" && value != null) continue;
       add(key, value);
     }

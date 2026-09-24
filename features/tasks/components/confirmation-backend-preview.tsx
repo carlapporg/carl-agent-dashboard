@@ -8,15 +8,33 @@ type ConfirmationBackendPreviewProps = {
   className?: string;
 };
 
+/** Nest-internal venue pipeline keys — not useful on the agent confirmation card. */
+function isInternalVenueRow(label: string, value: string): boolean {
+  const text = `${label} ${value}`.toLowerCase();
+  if (/venue\s*choice/.test(text)) return true;
+  if (/picked\s*suggestion/.test(text)) return true;
+  if (/venue\s*search/.test(text)) return true;
+  if (/venue\s*suggestions/.test(text)) return true;
+  if (/venue\s*(lat|lng|place)/.test(text)) return true;
+  if (
+    /^(user_picked|user_custom|agent_suggest|agent_picked)$/i.test(value.trim())
+  ) {
+    return true;
+  }
+  return false;
+}
+
 /**
- * Renders Nest confirmation preview exactly as returned
- * (title, summary, rows, costDisplay). Do not rebuild rows on the client.
+ * Renders Nest confirmation preview (title, summary, rows, costDisplay).
+ * Hides internal venue pipeline rows like Venue Choice = USER_CUSTOM.
  */
 export function ConfirmationBackendPreview({
   confirmation,
   className,
 }: ConfirmationBackendPreviewProps) {
-  const rows = confirmation.rows ?? [];
+  const rows = (confirmation.rows ?? []).filter(
+    (row) => !isInternalVenueRow(row.label, row.value),
+  );
   const costDisplay =
     confirmation.costDisplay ||
     `${confirmation.currency} ${confirmation.cost}`.trim();

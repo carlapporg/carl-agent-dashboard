@@ -165,7 +165,7 @@ export function PresenceTimeline({
       <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-sm font-semibold text-foreground">
-            Presence log
+            Availability history
           </h2>
           <p className="mt-0.5 text-[12px] text-muted">
             Pick a status to see every time you were in that state.
@@ -213,7 +213,7 @@ export function PresenceTimeline({
       <div className="mt-4">
         {intervals.length === 0 ? (
           <p className="rounded-[var(--radius-md)] border border-dashed border-border px-4 py-10 text-center text-sm text-muted">
-            No presence intervals for this period.
+            No availability records for this period.
           </p>
         ) : filtered.length === 0 ? (
           <p className="rounded-[var(--radius-md)] border border-dashed border-border px-4 py-10 text-center text-sm text-muted">

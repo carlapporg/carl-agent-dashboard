@@ -6,6 +6,7 @@ import { uploadReceiptAction } from "@/features/tasks/actions/task-actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SelectField } from "@/components/ui/select-field";
 import type { PaymentAuthorization, Receipt } from "@/types/payment";
 
 type TaskReceiptsProps = {
@@ -80,24 +81,24 @@ export function TaskReceipts({
         </div>
         <div>
           <Label htmlFor="rcpt-auth">Authorization</Label>
-          <select
+          <SelectField
             id="rcpt-auth"
-            name="authorizationId"
-            value={authId}
-            onChange={(e) => setAuthId(e.target.value)}
+            className="mt-1"
+            value={authId || "__none__"}
             disabled={disabled || pending || authorizations.length === 0}
-            className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
-          >
-            {authorizations.length === 0 ? (
-              <option value="">No authorizations</option>
-            ) : (
-              authorizations.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.id} · ${a.amount.toFixed(0)} · {a.merchant}
-                </option>
-              ))
-            )}
-          </select>
+            aria-label="Authorization"
+            options={
+              authorizations.length === 0
+                ? [{ value: "__none__", label: "No authorizations" }]
+                : authorizations.map((a) => ({
+                    value: a.id,
+                    label: `${a.id} · $${a.amount.toFixed(0)} · ${a.merchant}`,
+                  }))
+            }
+            onChange={(next) => {
+              if (next !== "__none__") setAuthId(next);
+            }}
+          />
         </div>
         <Button
           type="submit"

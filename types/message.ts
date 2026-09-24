@@ -27,6 +27,8 @@ export const timelineEventSchema = z.object({
   previewUrl: z.string().nullable().optional(),
   /** When the customer read this agent message (null / missing = delivered only). */
   readAt: z.string().nullable().optional(),
+  /** Nest message metadata (e.g. venue_picked). */
+  metadata: z.unknown().nullable().optional(),
 });
 
 export type TimelineEventKind = z.infer<typeof timelineEventKindSchema>;

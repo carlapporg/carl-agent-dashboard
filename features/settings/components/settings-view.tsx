@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useTheme } from "@/components/providers/theme-provider";
 import { useToast } from "@/components/providers/toast-provider";
-import { ChevronIcon } from "@/components/ui/chevron-icon";
 import { PageShell } from "@/components/ui/page-shell";
+import { SelectField } from "@/components/ui/select-field";
 import { Switch } from "@/components/ui/switch";
 import { AvailabilityToggle } from "@/features/dashboard/components/availability-toggle";
 import { useNotifications } from "@/features/notifications/notification-provider";
@@ -104,7 +104,7 @@ function SettingToggleRow({
   );
 }
 
-function SelectField({
+function SettingsSelect({
   label,
   value,
   options,
@@ -125,20 +125,14 @@ function SelectField({
         <span>{label}</span>
         {comingSoon ? <ComingSoonBadge /> : null}
       </span>
-      <span className="relative mt-[10px] block">
-        <select
+      <span className="mt-[10px] block">
+        <SelectField
           value={value}
+          options={options}
+          onChange={onChange}
           disabled={comingSoon}
-          onChange={(event) => onChange(event.target.value)}
-          className="box-border h-[45px] w-full appearance-none rounded-[5px] border border-border bg-surface py-0 pl-[15px] pr-10 text-[14px] font-normal leading-[45px] tracking-[-0.05em] text-foreground-soft outline-none focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/20 disabled:cursor-not-allowed"
-        >
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        <ChevronIcon className="pointer-events-none absolute right-3 top-1/2 size-5 -translate-y-1/2 text-foreground opacity-70" />
+          aria-label={label}
+        />
       </span>
     </label>
   );
@@ -260,23 +254,18 @@ export function SettingsView() {
         </section>
 
         {/* Mobile: section picker (no cramped horizontal tabs) */}
-        <label className="block lg:hidden">
-          <span className="sr-only">Settings section</span>
-          <span className="relative block">
-            <select
-              value={tab}
-              onChange={(event) => setTab(event.target.value as SettingsTab)}
-              className="box-border h-[45px] w-full appearance-none rounded-[10px] border border-border bg-surface py-0 pl-4 pr-10 text-[14px] font-medium tracking-[-0.02em] text-foreground outline-none focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/20"
-            >
-              {TABS.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.shortLabel}
-                </option>
-              ))}
-            </select>
-            <ChevronIcon className="pointer-events-none absolute right-3 top-1/2 size-5 -translate-y-1/2 text-foreground opacity-70" />
-          </span>
-        </label>
+        <div className="lg:hidden">
+          <SelectField
+            value={tab}
+            aria-label="Settings section"
+            triggerClassName="rounded-[10px] pl-4 font-medium tracking-[-0.02em]"
+            options={TABS.map((item) => ({
+              value: item.id,
+              label: item.shortLabel,
+            }))}
+            onChange={(next) => setTab(next as SettingsTab)}
+          />
+        </div>
 
         <div className="grid gap-4 sm:gap-[25px] lg:min-h-0 lg:flex-1 lg:grid-cols-[292px_minmax(0,1fr)] lg:items-start lg:overflow-hidden">
           {/* Desktop left nav */}
@@ -312,7 +301,7 @@ export function SettingsView() {
             {tab === "general" ? (
               <div>
                 <div className="grid gap-[20px] sm:grid-cols-2">
-                  <SelectField
+                  <SettingsSelect
                     label="Default Workspace Language"
                     value={settings.language}
                     options={LANGUAGE_OPTIONS}
@@ -321,7 +310,7 @@ export function SettingsView() {
                       patchSettings({ ...settings, language })
                     }
                   />
-                  <SelectField
+                  <SettingsSelect
                     label="Timezone Sync"
                     value={settings.timezone}
                     options={TIMEZONE_OPTIONS}

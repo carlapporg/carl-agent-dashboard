@@ -68,6 +68,7 @@ import type { CustomerHistoryItem, CustomerProfile } from "@/types/customer";
 import type { Itinerary } from "@/types/itinerary";
 import type { TimelineEvent } from "@/types/message";
 import type { Task } from "@/types/task";
+import { taskMetadataWithVenuePick } from "@/types/venue";
 
 type TaskWorkspaceProps = {
   task: Task;
@@ -143,6 +144,56 @@ export function TaskWorkspace({
     }
     setTask(taskProp);
   }, [taskProp, rejecting]);
+
+  useEffect(() => {
+    const live = ops?.liveVenue;
+    if (!live || live.taskId !== taskState.id) return;
+    if (live.status !== "picked" || !live.suggestion) return;
+    setTask((current) => ({
+      ...current,
+      metadata: taskMetadataWithVenuePick(
+        current.metadata ?? null,
+        live.suggestion!,
+      ),
+    }));
+  }, [ops?.liveVenue, taskState.id]);
+
+  useEffect(() => {
+    const liveRow = ops?.liveTasks.find((row) => row.id === taskState.id);
+    if (!liveRow?.metadata) return;
+    setTask((current) => {
+      if (current.metadata === liveRow.metadata) return current;
+      const liveChoice =
+        liveRow.metadata &&
+        typeof liveRow.metadata === "object" &&
+        "venueChoice" in liveRow.metadata
+          ? (liveRow.metadata as { venueChoice?: string }).venueChoice
+          : null;
+      if (liveChoice !== "USER_PICKED" && liveChoice !== "USER_CUSTOM") {
+        if (
+          liveRow.metadata &&
+          typeof liveRow.metadata === "object" &&
+          "venueSuggestions" in liveRow.metadata
+        ) {
+          return {
+            ...current,
+            metadata: {
+              ...(current.metadata ?? {}),
+              ...(liveRow.metadata as Record<string, unknown>),
+            },
+          };
+        }
+        return current;
+      }
+      return {
+        ...current,
+        metadata: {
+          ...(current.metadata ?? {}),
+          ...(liveRow.metadata as Record<string, unknown>),
+        },
+      };
+    });
+  }, [ops?.liveTasks, taskState.id]);
 
   const rememberConfirmation = ops?.rememberConfirmation;
   const rememberReceipt = ops?.rememberReceipt;

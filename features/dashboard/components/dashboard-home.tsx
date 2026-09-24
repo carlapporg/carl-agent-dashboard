@@ -46,11 +46,16 @@ function MetricIconAlert() {
   return (
     <svg viewBox="0 0 26 26" fill="none" aria-hidden className="size-[26px]">
       <path
-        d="M13 8.7v5.4M13 17.3h.01M7.4 23.8h11.2c1.8 0 2.7 0 3.4-.35a3.25 3.25 0 0 0 1.4-1.4c.35-.7.35-1.6.35-3.4V7.4c0-1.8 0-2.7-.35-3.4a3.25 3.25 0 0 0-1.4-1.4C21.3 2.2 20.4 2.2 18.6 2.2H7.4c-1.8 0-2.7 0-3.4.35a3.25 3.25 0 0 0-1.4 1.4C2.2 4.7 2.2 5.6 2.2 7.4v11.2c0 1.8 0 2.7.35 3.4a3.25 3.25 0 0 0 1.4 1.4c.7.35 1.6.35 3.4.35Z"
+        d="M13 3.6 22.6 21.2c.35.62.05 1.4-.66 1.4H4.06c-.71 0-1.01-.78-.66-1.4L13 3.6Z"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M13 10.2v5.2M13 18.4h.01"
         stroke="currentColor"
         strokeWidth="1.75"
         strokeLinecap="round"
-        strokeLinejoin="round"
       />
     </svg>
   );
@@ -235,7 +240,7 @@ export function DashboardHome({ tasks }: DashboardHomeProps) {
         <MetricStatCard
           label="Waiting on Customer"
           value={stats.waitingCustomer}
-          hint="Waiting for customers for confirmation."
+          hint="Waiting for customer confirmation."
           icon={<MetricIconWaiting />}
           variant="plainCyan"
           className="dash-slide-in"

@@ -45,6 +45,14 @@ import { agentTaskStatusSchema, type AgentPresence, type AgentTaskStatus } from 
 import { getOpenTasksAction } from "@/features/dashboard/actions";
 import { parseIncomingTaskMessage, previewForIncomingMessage } from "@/lib/realtime/parse-task-message";
 import {
+  isVenuePickedMessageMetadata,
+  parseVenuePickedPayload,
+  parseVenueSuggestionsPayload,
+  taskMetadataWithVenuePick,
+  venueFromMessageMetadata,
+  type VenueSuggestion,
+} from "@/types/venue";
+import {
   connectAgentSocket,
   emitAgentAvailability,
   joinTaskRoom,
@@ -232,6 +240,16 @@ type LiveChatEvent = {
   messageId?: string;
   mediaKind?: "text" | "voice" | "image";
   durationMs?: number | null;
+  metadata?: unknown;
+};
+
+export type LiveVenueEvent = {
+  at: number;
+  taskId: string;
+  status: "suggestions_sent" | "picked";
+  suggestions: VenueSuggestion[];
+  suggestion: VenueSuggestion | null;
+  message: string | null;
 };
 
 export type LiveTaskPaymentEvent = {
@@ -262,6 +280,8 @@ type OpsContextValue = {
   queuePulse: number;
   livePulse: boolean;
   liveChat: LiveChatEvent | null;
+  /** Venue suggestions / pick from task sockets (agent read-only). */
+  liveVenue: LiveVenueEvent | null;
   /**
    * Customer read receipts for agent messages: taskId → messageId → readAt ISO.
    * Filled from Nest `message.read` (reader USER).
@@ -343,6 +363,7 @@ export function AgentOpsProvider({
   const [queuePulse, setQueuePulse] = useState(0);
   const [livePulse, setLivePulse] = useState(false);
   const [liveChat, setLiveChat] = useState<LiveChatEvent | null>(null);
+  const [liveVenue, setLiveVenue] = useState<LiveVenueEvent | null>(null);
   const [messageReads, setMessageReads] = useState<
     Record<string, Record<string, string>>
   >({});
@@ -943,7 +964,34 @@ export function AgentOpsProvider({
           messageId: incoming.messageId,
           mediaKind: incoming.mediaKind,
           durationMs: incoming.durationMs,
+          metadata: incoming.metadata,
         });
+        if (isVenuePickedMessageMetadata(incoming.metadata)) {
+          const suggestion = venueFromMessageMetadata(incoming.metadata);
+          setLiveVenue({
+            at: Date.now(),
+            taskId: incoming.taskId,
+            status: "picked",
+            suggestions: [],
+            suggestion,
+            message: incoming.content || null,
+          });
+          if (suggestion) {
+            const current = liveTasksRef.current.find(
+              (row) => row.id === incoming.taskId,
+            );
+            patchLiveTaskRef.current(
+              incoming.taskId,
+              {
+                metadata: taskMetadataWithVenuePick(
+                  current?.metadata ?? null,
+                  suggestion,
+                ),
+              },
+              current,
+            );
+          }
+        }
       }
       if (incoming.sender !== "USER") return;
       if (notificationsRef.current.isViewingTaskInbox(incoming.taskId)) return;
@@ -1047,6 +1095,72 @@ export function AgentOpsProvider({
 
     function onPaymentCancelled(payload: unknown) {
       onTaskPaymentEvent(payload, "cancelled");
+    }
+
+    function onVenueSuggestions(payload: unknown) {
+      const parsed = parseVenueSuggestionsPayload(payload);
+      if (!parsed) return;
+      joinTaskRoom(socket, parsed.taskId);
+      setLiveVenue({
+        at: Date.now(),
+        taskId: parsed.taskId,
+        status: "suggestions_sent",
+        suggestions: parsed.suggestions,
+        suggestion: null,
+        message: parsed.message,
+      });
+      const current = liveTasksRef.current.find((row) => row.id === parsed.taskId);
+      if (parsed.suggestions.length > 0) {
+        patchLiveTaskRef.current(
+          parsed.taskId,
+          {
+            metadata: {
+              ...(current?.metadata && typeof current.metadata === "object"
+                ? current.metadata
+                : {}),
+              venueSuggestions: parsed.suggestions,
+              venueChoice: "AGENT_SUGGEST",
+            },
+          },
+          current,
+        );
+      }
+      pulseQueue();
+    }
+
+    function onVenuePicked(payload: unknown) {
+      const parsed = parseVenuePickedPayload(payload);
+      if (!parsed) return;
+      joinTaskRoom(socket, parsed.taskId);
+      setLiveVenue({
+        at: Date.now(),
+        taskId: parsed.taskId,
+        status: "picked",
+        suggestions: [],
+        suggestion: parsed.suggestion,
+        message: parsed.message,
+      });
+      if (parsed.suggestion) {
+        const current = liveTasksRef.current.find(
+          (row) => row.id === parsed.taskId,
+        );
+        patchLiveTaskRef.current(
+          parsed.taskId,
+          {
+            metadata: taskMetadataWithVenuePick(
+              current?.metadata ?? null,
+              parsed.suggestion,
+            ),
+          },
+          current,
+        );
+        toastRef.current(`${parsed.suggestion.name} selected.`, "success", {
+          title: "Customer selected a place",
+          href: ROUTES.taskPanel(parsed.taskId, "chat"),
+          actionLabel: "Open chat",
+        });
+      }
+      pulseQueue();
     }
 
     function onPaymentDeclined(_payload: unknown) {
@@ -1308,6 +1422,10 @@ export function AgentOpsProvider({
     socket.on("task_payment_requested", onPaymentRequested);
     socket.on("task.payment_cancelled", onPaymentCancelled);
     socket.on("task_payment_cancelled", onPaymentCancelled);
+    socket.on("task.venue_suggestions", onVenueSuggestions);
+    socket.on("task_venue_suggestions", onVenueSuggestions);
+    socket.on("task.venue_picked", onVenuePicked);
+    socket.on("task_venue_picked", onVenuePicked);
     socket.on("task.confirmation_confirmed", onConfirmationConfirmed);
     socket.on("task_confirmation_confirmed", onConfirmationConfirmed);
     socket.on("task.confirmation_declined", onConfirmationDeclined);
@@ -1368,6 +1486,10 @@ export function AgentOpsProvider({
       socket.off("task_payment_requested", onPaymentRequested);
       socket.off("task.payment_cancelled", onPaymentCancelled);
       socket.off("task_payment_cancelled", onPaymentCancelled);
+      socket.off("task.venue_suggestions", onVenueSuggestions);
+      socket.off("task_venue_suggestions", onVenueSuggestions);
+      socket.off("task.venue_picked", onVenuePicked);
+      socket.off("task_venue_picked", onVenuePicked);
       socket.off("task.confirmation_confirmed", onConfirmationConfirmed);
       socket.off("task_confirmation_confirmed", onConfirmationConfirmed);
       socket.off("task.confirmation_declined", onConfirmationDeclined);
@@ -1420,6 +1542,7 @@ export function AgentOpsProvider({
       queuePulse,
       livePulse,
       liveChat,
+      liveVenue,
       messageReads,
       livePayment,
       liveConfirmation,
@@ -1445,6 +1568,7 @@ export function AgentOpsProvider({
       liveReceipt,
       livePulse,
       liveTasks,
+      liveVenue,
       messageReads,
       offer,
       patchLiveTask,

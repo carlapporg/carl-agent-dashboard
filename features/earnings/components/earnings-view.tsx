@@ -286,19 +286,19 @@ export function EarningsView() {
             <Card
               label="Pending"
               value={formatMoney(summary.payroll.pending)}
-              hint="Earned, not approved yet"
+              hint="Earned but not yet approved"
               emphasize
             />
             <Card
               label="Approved"
               value={formatMoney(summary.payroll.approved)}
-              hint="Reviewed, not sent yet"
+              hint="Approved but not yet paid"
               emphasize
             />
             <Card
               label="Paid"
               value={formatMoney(summary.payroll.paid)}
-              hint="Marked paid"
+              hint="Payment marked as paid"
               emphasize
             />
           </section>
@@ -307,27 +307,28 @@ export function EarningsView() {
             <Card
               label="Gross"
               value={formatMoney(summary.gross)}
-              hint="All earned lines added together"
+              hint="Total of all earned amounts"
             />
             <Card
               label="Hours"
               value={formatHours(summary.hoursWorked)}
-              hint="Available + Busy only"
+              hint="Includes Available and Busy hours only"
             />
             <Card
               label="Hourly rate"
               value={formatMoney(summary.hourlyRate)}
+              hint="—"
             />
           </section>
 
           <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {[
-              { label: "Wages", value: summary.earned.wages, hint: "Hourly pay only. Tips are not included." },
-              { label: "Tips", value: summary.earned.tips, hint: "Separate from wages." },
-              { label: "Bonuses", value: summary.earned.bonuses, hint: "Extra pay" },
+              { label: "Wages", value: summary.earned.wages, hint: "Hourly pay only. Tips are excluded." },
+              { label: "Tips", value: summary.earned.tips, hint: "Separate from wages" },
+              { label: "Bonuses", value: summary.earned.bonuses, hint: "Additional compensation" },
               { label: "Adjustments", value: summary.earned.adjustments, hint: "Manual corrections" },
-              { label: "Reimbursements", value: summary.earned.reimbursements, hint: "Money paid back to you" },
-              { label: "Penalties", value: summary.earned.penalties, hint: "Amounts taken off" },
+              { label: "Reimbursements", value: summary.earned.reimbursements, hint: "Eligible expenses reimbursed" },
+              { label: "Penalties", value: summary.earned.penalties, hint: "Amounts deducted" },
             ].map((item) => (
               <Card
                 key={item.label}

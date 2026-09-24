@@ -12,6 +12,7 @@ import {
   getCalendarWeekAction,
 } from "@/features/calendar/actions";
 import { PresenceTimeline } from "@/features/presence/components/presence-timeline";
+import { SelectField } from "@/components/ui/select-field";
 import { ROUTES } from "@/lib/constants/routes";
 import { queryKeys } from "@/lib/query/keys";
 import { cn } from "@/lib/utils/cn";
@@ -586,7 +587,7 @@ function WeekGrid({
       <div className="border-b border-border px-4 py-3">
         <h2 className="text-sm font-semibold text-foreground">Week days</h2>
         <p className="mt-0.5 text-[11px] text-muted">
-          Monday–Sunday UTC. Tap a day to see its bookings and presence.
+          Monday–Sunday UTC. Tap a day to see its bookings and availability.
         </p>
       </div>
       <div className="overflow-x-auto">
@@ -861,20 +862,24 @@ export function CalendarView() {
                 <span className="text-[11px] font-semibold uppercase tracking-[0.04em]">
                   Month
                 </span>
-                <select
-                  value={month}
-                  onChange={(e) => setMonth(Number(e.target.value))}
-                  className="h-10 rounded-[var(--radius-md)] border border-border bg-surface px-3 text-sm text-foreground"
-                >
-                  {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-                    <option key={m} value={m}>
-                      {new Date(Date.UTC(2026, m - 1, 1)).toLocaleDateString(
+                <SelectField
+                  value={String(month)}
+                  aria-label="Month"
+                  matchTriggerWidth={false}
+                  className="w-[10.5rem]"
+                  triggerClassName="h-10 rounded-[var(--radius-md)] px-3 text-sm"
+                  options={Array.from({ length: 12 }, (_, i) => {
+                    const m = i + 1;
+                    return {
+                      value: String(m),
+                      label: new Date(Date.UTC(2026, m - 1, 1)).toLocaleDateString(
                         undefined,
                         { month: "long", timeZone: "UTC" },
-                      )}
-                    </option>
-                  ))}
-                </select>
+                      ),
+                    };
+                  })}
+                  onChange={(next) => setMonth(Number(next))}
+                />
               </label>
               <label className="flex items-center gap-2 text-sm text-muted">
                 <span className="text-[11px] font-semibold uppercase tracking-[0.04em]">
@@ -1075,7 +1080,7 @@ export function CalendarView() {
           />
           <EventsList events={monthQuery.data.events} />
           <AvailabilitySummaryBlock
-            title="Month presence"
+            title="Month availability"
             availability={monthQuery.data.availability}
           />
         </div>

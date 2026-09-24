@@ -271,5 +271,6 @@ export function mapAgentMessageToTimeline(
     durationMs: message.durationMs,
     mimeType: message.mimeType,
     readAt: message.readAt ?? null,
+    metadata: message.metadata ?? null,
   };
 }

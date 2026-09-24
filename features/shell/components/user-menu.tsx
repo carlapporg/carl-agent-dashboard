@@ -15,6 +15,7 @@ import { ConfirmDialog } from "@/components/ui/dialog";
 import { AnchoredMenu } from "@/components/ui/anchored-menu";
 import { AgentAvatar } from "@/components/ui/agent-avatar";
 import { ChevronIcon } from "@/components/ui/chevron-icon";
+import { dropdownPanelClass } from "@/components/ui/dropdown-styles";
 import { logoutAction } from "@/features/auth/actions/auth";
 import { useClearAppCache } from "@/features/agents/hooks";
 import { clearManualPresence } from "@/lib/agent/presence";
@@ -63,7 +64,7 @@ function SignOutIcon() {
 }
 
 const ITEM_CLASS =
-  "flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm font-medium outline-none transition-colors focus-visible:bg-surface-hover focus-visible:ring-2 focus-visible:ring-accent/40";
+  "flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm font-medium outline-none transition-colors focus-visible:bg-dropdown-hover focus-visible:ring-2 focus-visible:ring-accent/40";
 
 export function UserMenu({
   user,
@@ -215,16 +216,16 @@ export function UserMenu({
         id={menuId}
         aria-label="Account"
         onKeyDown={onMenuKeyDown}
-        className="w-72 origin-top-right rounded-[var(--radius-lg)] border border-border bg-surface p-3 shadow-[var(--shadow-dropdown)]"
+        className={cn(dropdownPanelClass, "w-72 origin-top-right p-3")}
       >
-        <div className="border-b border-border pb-3">
+        <div className="border-b border-dropdown-border pb-3">
           <div className="flex items-center gap-3">
             <AgentAvatar user={user} size="md" />
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-foreground">
+              <p className="truncate text-sm font-semibold text-dropdown-foreground">
                 {name}
               </p>
-              <p className="truncate text-xs text-muted">{user.email}</p>
+              <p className="truncate text-xs text-dropdown-muted">{user.email}</p>
             </div>
           </div>
           <span className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-success-soft px-2 py-0.5 text-[11px] font-semibold text-success-foreground">
@@ -236,7 +237,7 @@ export function UserMenu({
             />
             {statusLabel}
           </span>
-          <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-dim">
+          <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-dropdown-muted">
             Support agent
           </p>
         </div>
@@ -252,10 +253,10 @@ export function UserMenu({
             aria-current={profileActive ? "page" : undefined}
             className={cn(
               ITEM_CLASS,
-              "justify-center border border-border",
+              "justify-center border border-dropdown-border",
               profileActive
                 ? "bg-accent-soft text-accent"
-                : "text-foreground hover:bg-surface-hover",
+                : "text-dropdown-foreground hover:bg-dropdown-hover",
             )}
             onClick={() => close()}
           >

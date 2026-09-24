@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { ChevronIcon } from "@/components/ui/chevron-icon";
+import { SelectField } from "@/components/ui/select-field";
 import { Textarea } from "@/components/ui/textarea";
 import { OfferCountdown } from "@/features/ops/offer-countdown";
 import {
@@ -169,26 +169,21 @@ export function RejectDialog({
 
       <label className="block" htmlFor="reject-reason-select">
         <span className="text-sm font-medium text-foreground">Reason</span>
-        <div className="relative mt-1.5">
-          <select
+        <div className="mt-1.5">
+          <SelectField
             id="reject-reason-select"
             value={choice}
             disabled={processing || expired}
-            onChange={(event) =>
-              setChoice(event.target.value as RejectReasonValue | "")
-            }
-            className="h-[45px] w-full appearance-none rounded-[5px] border border-border bg-surface px-[15px] pr-10 text-[14px] tracking-[-0.05em] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <option value="" disabled>
-              Select a reason
-            </option>
-            {REJECT_REASON_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <ChevronIcon className="pointer-events-none absolute top-1/2 right-3 size-[15px] -translate-y-1/2 text-muted" />
+            placeholder="Select a reason"
+            aria-label="Reject reason"
+            options={[
+              ...REJECT_REASON_OPTIONS.map((option) => ({
+                value: option.value as RejectReasonValue | "",
+                label: option.label,
+              })),
+            ]}
+            onChange={(next) => setChoice(next)}
+          />
         </div>
       </label>
 
