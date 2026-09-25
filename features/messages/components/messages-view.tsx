@@ -20,9 +20,15 @@ import {
 } from "@/features/tasks/lib/workflow";
 import {
   lastChatActivityAt,
+  lastChatPreview,
 } from "@/features/messages/lib/preview";
 import { previewForIncomingMessage } from "@/lib/realtime/parse-task-message";
 import { dashboardExtrasApi } from "@/lib/api/dashboard-extras";
+import { setViewingMessagesTaskId } from "@/lib/messages/viewing-chat";
+import {
+  callEndedMessageBody,
+  isCallEndedMessageMetadata,
+} from "@/types/call";
 import { taskListSubtitle, taskPlaceLabel } from "@/lib/tasks/place-label";
 import { ROUTES } from "@/lib/constants/routes";
 import { cn } from "@/lib/utils/cn";
@@ -96,6 +102,12 @@ function threadSignature(thread: TimelineEvent[]): string {
   return thread.map((event) => event.id).join("\u0001");
 }
 
+function unseenLabel(count: number): string {
+  if (count <= 0) return "";
+  if (count === 1) return "1 msg unseen";
+  return `${count} msgs unseen`;
+}
+
 function formatBookingRef(value: string): string {
   const trimmed = value.trim();
   return trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
@@ -166,6 +178,9 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
   const [timelines, setTimelines] = useState<Record<string, TimelineLoad>>(
     {},
   );
+  const [unreadByTaskId, setUnreadByTaskId] = useState<Record<string, number>>(
+    {},
+  );
   const [filter, setFilter] = useState("");
   const [bookingRefs, setBookingRefs] = useState<Record<string, string | null>>(
     {},
@@ -173,7 +188,31 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
   const inflightRef = useRef(new Set<string>());
   const timelinesRef = useRef(timelines);
   timelinesRef.current = timelines;
+  const selectedIdRef = useRef(selectedId);
+  selectedIdRef.current = selectedId;
   const liveChatAt = ops?.liveChat?.at ?? 0;
+
+  useEffect(() => {
+    setViewingMessagesTaskId(selectedId);
+    return () => setViewingMessagesTaskId(null);
+  }, [selectedId]);
+
+  const clearUnread = useCallback((taskId: string) => {
+    setUnreadByTaskId((prev) => {
+      if (!prev[taskId]) return prev;
+      const next = { ...prev };
+      delete next[taskId];
+      return next;
+    });
+  }, []);
+
+  const bumpUnread = useCallback((taskId: string) => {
+    if (selectedIdRef.current === taskId) return;
+    setUnreadByTaskId((prev) => ({
+      ...prev,
+      [taskId]: (prev[taskId] ?? 0) + 1,
+    }));
+  }, []);
 
   const loadTimeline = useCallback((taskId: string, force = false) => {
     if (!force && inflightRef.current.has(taskId)) return;
@@ -208,17 +247,24 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
     const rows = visibleConversations.map((c) => {
       const load = timelines[c.taskId];
       const events = load?.status === "ready" ? load.events : undefined;
-      const preview = sidebarSubtitle(c, tasks[c.taskId]);
+      const place = sidebarSubtitle(c, tasks[c.taskId]);
+      const chatPreview = events ? lastChatPreview(events) : null;
       const activityAt =
         (events ? lastChatActivityAt(events) : null) ?? c.lastActivityAt;
-      return { ...c, lastMessage: preview, lastActivityAt: activityAt };
+      const unread = unreadByTaskId[c.taskId] ?? c.unreadCount ?? 0;
+      return {
+        ...c,
+        lastMessage: chatPreview ?? place,
+        lastActivityAt: activityAt,
+        unreadCount: unread,
+      };
     });
     return rows.sort(
       (a, b) =>
         new Date(b.lastActivityAt).getTime() -
         new Date(a.lastActivityAt).getTime(),
     );
-  }, [tasks, timelines, visibleConversations]);
+  }, [tasks, timelines, unreadByTaskId, visibleConversations]);
 
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase();
@@ -263,7 +309,8 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
   useEffect(() => {
     if (!selectedId) return;
     loadTimeline(selectedId);
-  }, [loadTimeline, selectedId]);
+    clearUnread(selectedId);
+  }, [clearUnread, loadTimeline, selectedId]);
 
   // Intentionally no bulk prefetch of every conversation — each listTaskMessagesAction
   // is a ~2s server POST. Sidebar uses conversation.lastMessage until a chat is opened.
@@ -273,50 +320,63 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
     if (!live?.taskId) return;
     // Own agent sends already land via TaskChatThread optimistic/upload.
     // Echoing them here duplicates the bubble with a second id.
-    if (live.sender !== "USER") return;
+    const isUser = live.sender === "USER";
+    const isCallEnded =
+      live.sender === "SYSTEM" && isCallEndedMessageMetadata(live.metadata);
+    if (!isUser && !isCallEnded) return;
 
     const existingLoad = timelinesRef.current[live.taskId];
     // If we never loaded this thread (or last load failed), fetch history
     // instead of showing only the live ping.
     if (existingLoad?.status !== "ready") {
+      if (isUser) bumpUnread(live.taskId);
       loadTimeline(live.taskId, true);
       return;
     }
 
+    const existing = existingLoad.events;
+    if (live.messageId && existing.some((row) => row.id === live.messageId)) {
+      return;
+    }
+
+    const body = isCallEnded
+      ? callEndedMessageBody(live.content, live.metadata)
+      : previewForIncomingMessage({
+          taskId: live.taskId,
+          sender: live.sender,
+          content: live.content,
+          clientLabel: "",
+          messageId: live.messageId,
+          mediaKind: live.mediaKind ?? "text",
+          durationMs: live.durationMs,
+          metadata: live.metadata,
+        });
+
+    const nextEvent: TimelineEvent = {
+      id: live.messageId ?? `live-${live.at}`,
+      taskId: live.taskId,
+      kind: isCallEnded ? "system" : "customer_message",
+      body,
+      createdAt: new Date(live.at).toISOString(),
+      visibleToCustomer: !isCallEnded,
+      mediaKind: live.mediaKind ?? "text",
+      durationMs: live.durationMs,
+      metadata: live.metadata ?? null,
+    };
+
     setTimelines((prev) => {
       const ready = prev[live.taskId];
-      const existing = ready?.status === "ready" ? ready.events : [];
-      if (live.messageId && existing.some((row) => row.id === live.messageId)) {
+      const rows = ready?.status === "ready" ? ready.events : [];
+      if (live.messageId && rows.some((row) => row.id === live.messageId)) {
         return prev;
       }
-
-      const preview = previewForIncomingMessage({
-        taskId: live.taskId,
-        sender: live.sender,
-        content: live.content,
-        clientLabel: "",
-        messageId: live.messageId,
-        mediaKind: live.mediaKind ?? "text",
-        durationMs: live.durationMs,
-      });
-
-      const nextEvent: TimelineEvent = {
-        id: live.messageId ?? `live-${live.at}`,
-        taskId: live.taskId,
-        kind: "customer_message",
-        body: preview,
-        createdAt: new Date(live.at).toISOString(),
-        visibleToCustomer: true,
-        mediaKind: live.mediaKind ?? "text",
-        durationMs: live.durationMs,
-      };
-
       return {
         ...prev,
-        [live.taskId]: { status: "ready", events: [...existing, nextEvent] },
+        [live.taskId]: { status: "ready", events: [...rows, nextEvent] },
       };
     });
-  }, [liveChatAt, loadTimeline, ops?.liveChat]);
+    if (isUser) bumpUnread(live.taskId);
+  }, [bumpUnread, liveChatAt, loadTimeline, ops?.liveChat]);
 
   const handleThreadUpdate = useCallback(
     (taskId: string, thread: TimelineEvent[]) => {
@@ -467,23 +527,44 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
                       />
                       <span className="min-w-0 flex-1 pt-0.5">
                         <span className="flex items-start justify-between gap-2">
-                          <span className="truncate text-[14px] font-semibold leading-[14px] tracking-[-0.02em] text-foreground">
+                          <span
+                            className={cn(
+                              "truncate text-[14px] leading-[14px] tracking-[-0.02em] text-foreground",
+                              c.unreadCount > 0
+                                ? "font-bold"
+                                : "font-semibold",
+                            )}
+                          >
                             {customerName}
                           </span>
-                          <span className="shrink-0 text-[10px] leading-[10px] tracking-[-0.02em] text-muted-dim">
-                            {formatRel(c.lastActivityAt)}
+                          <span className="inline-flex shrink-0 flex-col items-end gap-1">
+                            <span className="text-[10px] leading-[10px] tracking-[-0.02em] text-muted-dim">
+                              {formatRel(c.lastActivityAt)}
+                            </span>
+                            {c.unreadCount > 0 ? (
+                              <span
+                                className="inline-flex min-w-5 items-center justify-center rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-bold text-accent-foreground"
+                                title={unseenLabel(c.unreadCount)}
+                                aria-label={unseenLabel(c.unreadCount)}
+                              >
+                                {c.unreadCount > 99 ? "99+" : c.unreadCount}
+                              </span>
+                            ) : null}
                           </span>
                         </span>
-                        <span className="mt-1 block truncate text-[14px] leading-[14px] tracking-[-0.02em] text-muted">
-                          {c.lastMessage}
+                        <span
+                          className={cn(
+                            "mt-1 block truncate text-[14px] leading-[14px] tracking-[-0.02em]",
+                            c.unreadCount > 0
+                              ? "font-semibold text-foreground"
+                              : "text-muted",
+                          )}
+                        >
+                          {c.unreadCount > 0
+                            ? unseenLabel(c.unreadCount)
+                            : c.lastMessage}
                         </span>
                       </span>
-                      {c.unreadCount > 0 ? (
-                        <span
-                          className="mt-1 size-2 shrink-0 rounded-full bg-accent"
-                          aria-label="Unread"
-                        />
-                      ) : null}
                     </button>
                   </li>
                 );

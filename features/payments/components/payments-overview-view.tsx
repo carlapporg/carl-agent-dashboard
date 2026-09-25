@@ -331,7 +331,7 @@ export function PaymentsOverviewView({
                     type="date"
                     value={draftFrom}
                     onChange={(event) => setDraftFrom(event.target.value)}
-                    className="h-10 w-full rounded-[10px] border border-dropdown-border bg-white/10 px-3 text-sm text-dropdown-foreground outline-none focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/20 [color-scheme:dark]"
+                    className="h-10 w-full rounded-[10px] border border-dropdown-border bg-surface px-3 text-sm text-dropdown-foreground outline-none focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/20"
                   />
                 </label>
                 <label className="block space-y-1">
@@ -342,7 +342,7 @@ export function PaymentsOverviewView({
                     type="date"
                     value={draftTo}
                     onChange={(event) => setDraftTo(event.target.value)}
-                    className="h-10 w-full rounded-[10px] border border-dropdown-border bg-white/10 px-3 text-sm text-dropdown-foreground outline-none focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/20 [color-scheme:dark]"
+                    className="h-10 w-full rounded-[10px] border border-dropdown-border bg-surface px-3 text-sm text-dropdown-foreground outline-none focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/20"
                   />
                 </label>
               </div>

@@ -10,6 +10,7 @@ import {
   fieldInputType,
   isDraftConfirmationEditableField,
   isLineItemsValue,
+  normalizeCountFieldValue,
   type ConfirmationFieldValue,
   type ConfirmationFormValues,
   type ConfirmationLineItemValue,
@@ -225,6 +226,15 @@ export function ConfirmationSchemaFields({
         }
 
         const text = asFieldText(value);
+        const isCountField =
+          field.key === "guests" ||
+          field.key === "partySize" ||
+          field.key === "party_size" ||
+          field.key === "ticketCount" ||
+          field.key === "passengers";
+        const displayText = isCountField
+          ? normalizeCountFieldValue(text)
+          : text;
 
         return (
           <div key={field.key}>
@@ -252,13 +262,25 @@ export function ConfirmationSchemaFields({
             ) : (
               <Input
                 id={id}
-                value={text}
-                onChange={(event) => onChange(field.key, event.target.value)}
+                value={displayText}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  onChange(
+                    field.key,
+                    isCountField ? normalizeCountFieldValue(next) : next,
+                  );
+                }}
                 disabled={fieldDisabled}
                 required={editable && field.required}
                 maxLength={500}
                 readOnly={!editable}
-                inputMode={inputType === "money" ? "decimal" : undefined}
+                inputMode={
+                  inputType === "money"
+                    ? "decimal"
+                    : isCountField
+                      ? "numeric"
+                      : undefined
+                }
                 placeholder={inputType === "money" ? "0.00" : field.label}
                 className={fieldInputClass}
               />

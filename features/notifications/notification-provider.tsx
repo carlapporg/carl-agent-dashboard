@@ -16,6 +16,8 @@ import {
   markAllNotificationsReadAction,
   markNotificationReadAction,
 } from "@/features/notifications/actions";
+import { ROUTES } from "@/lib/constants/routes";
+import { getViewingMessagesTaskId } from "@/lib/messages/viewing-chat";
 import { hrefForNotification } from "@/lib/notifications/from-events";
 import { isAgentIrrelevantNotification } from "@/lib/notifications/parse-api";
 import {
@@ -236,7 +238,14 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
   const isViewingTaskInbox = useCallback((taskId: string) => {
     const path = pathnameRef.current;
-    return path === `/tasks/${taskId}` || path.startsWith(`/tasks/${taskId}/`);
+    if (path === `/tasks/${taskId}` || path.startsWith(`/tasks/${taskId}/`)) {
+      return true;
+    }
+    // Messages screen: selected conversation counts as "chat open".
+    if (path === ROUTES.messages || path.startsWith(`${ROUTES.messages}/`)) {
+      return getViewingMessagesTaskId() === taskId;
+    }
+    return false;
   }, []);
 
   const push = useCallback(

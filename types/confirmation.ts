@@ -260,7 +260,13 @@ export function isLineItemsValue(
 export function asFieldText(
   value: ConfirmationFieldValue | undefined,
 ): string {
-  return typeof value === "string" ? value : "";
+  if (typeof value !== "string") return "";
+  return value;
+}
+
+/** Guest / party counts must never carry a % (headcount, not a rate). */
+export function normalizeCountFieldValue(raw: string): string {
+  return raw.replace(/%/g, "").trim();
 }
 
 function parseAmount(raw: string): number | null {
@@ -494,6 +500,30 @@ export function buildConfirmationDraftBody(
     if (!text) continue;
 
     const label = field.label?.trim().toLowerCase();
+
+    // Headcounts — strip accidental % (e.g. "2%" → "2")
+    if (
+      field.key === "guests" ||
+      field.key === "partySize" ||
+      field.key === "party_size" ||
+      field.key === "ticketCount" ||
+      field.key === "passengers" ||
+      label === "guests" ||
+      label === "party size"
+    ) {
+      const count = normalizeCountFieldValue(text);
+      if (!count) continue;
+      if (
+        field.key === "partySize" ||
+        field.key === "party_size" ||
+        label === "party size"
+      ) {
+        body.partySize = count;
+      } else {
+        body[field.key] = count;
+      }
+      continue;
+    }
 
     // Hotel aliases → Nest accepts hotel | hotelName | property
     if (DRAFT_CONFIRMATION_HOTEL_KEYS.has(field.key) || label === "hotel") {

@@ -118,6 +118,43 @@ export function canRevealTaskCard(status: TaskPaymentStatus): boolean {
   return status === "card_issued" || status === "spent";
 }
 
+/** Forward-only payment status (never card_issued → captured). */
+const PAYMENT_STATUS_RANK: Record<TaskPaymentStatus, number> = {
+  requires_payment: 0,
+  captured: 1,
+  card_issued: 2,
+  spent: 3,
+  cancelled: 4,
+  failed: 4,
+  expired: 4,
+};
+
+export function mergePaymentStatus(
+  current: TaskPaymentStatus | null | undefined,
+  next: TaskPaymentStatus | null | undefined,
+): TaskPaymentStatus {
+  if (!next) return current ?? "requires_payment";
+  if (!current) return next;
+  // Terminal outcomes always win.
+  if (
+    next === "cancelled" ||
+    next === "failed" ||
+    next === "expired"
+  ) {
+    return next;
+  }
+  if (
+    current === "cancelled" ||
+    current === "failed" ||
+    current === "expired"
+  ) {
+    return current;
+  }
+  return PAYMENT_STATUS_RANK[next] >= PAYMENT_STATUS_RANK[current]
+    ? next
+    : current;
+}
+
 export function parseTaskPaymentPayload(payload: unknown): {
   paymentId?: string;
   taskId?: string;
@@ -129,41 +166,71 @@ export function parseTaskPaymentPayload(payload: unknown): {
 } | null {
   if (!payload || typeof payload !== "object") return null;
   const root = payload as Record<string, unknown>;
-  const data =
-    root.data && typeof root.data === "object" && !Array.isArray(root.data)
-      ? (root.data as Record<string, unknown>)
-      : root.payment && typeof root.payment === "object"
-        ? (root.payment as Record<string, unknown>)
-        : root;
-  const paymentId =
-    typeof data.paymentId === "string"
-      ? data.paymentId
-      : typeof data.id === "string"
-        ? data.id
-        : undefined;
-  const taskId =
-    typeof data.taskId === "string"
-      ? data.taskId
-      : typeof root.taskId === "string"
-        ? root.taskId
-        : undefined;
+  const candidates: Record<string, unknown>[] = [root];
+  for (const key of ["data", "payment", "payload", "metadata"] as const) {
+    const nested = root[key];
+    if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+      candidates.push(nested as Record<string, unknown>);
+      const deeper = (nested as Record<string, unknown>).payment;
+      if (deeper && typeof deeper === "object" && !Array.isArray(deeper)) {
+        candidates.push(deeper as Record<string, unknown>);
+      }
+      const meta = (nested as Record<string, unknown>).metadata;
+      if (meta && typeof meta === "object" && !Array.isArray(meta)) {
+        candidates.push(meta as Record<string, unknown>);
+      }
+    }
+  }
+
+  let paymentId: string | undefined;
+  let taskId: string | undefined;
+  let last4: string | null | undefined;
+  let brand: string | null | undefined;
+  let spendAmountCents: number | undefined;
+  let currency: string | undefined;
+  let status: TaskPaymentStatus | undefined;
+
+  for (const data of candidates) {
+    if (!paymentId) {
+      if (typeof data.paymentId === "string") paymentId = data.paymentId;
+      else if (typeof data.id === "string" && data.taskId) paymentId = data.id;
+    }
+    if (!taskId && typeof data.taskId === "string") taskId = data.taskId;
+    if (last4 == null && typeof data.last4 === "string") last4 = data.last4;
+    if (brand == null && typeof data.brand === "string") brand = data.brand;
+    if (
+      spendAmountCents == null &&
+      typeof data.spendAmountCents === "number"
+    ) {
+      spendAmountCents = data.spendAmountCents;
+    }
+    if (!currency && typeof data.currency === "string") currency = data.currency;
+    if (!status && typeof data.status === "string") {
+      const parsed = taskPaymentStatusSchema.safeParse(data.status);
+      if (parsed.success) status = parsed.data;
+    }
+  }
+
+  // Body like "Card •••• 4893 ready…"
+  if (last4 == null) {
+    const body =
+      typeof root.body === "string"
+        ? root.body
+        : typeof root.title === "string"
+          ? root.title
+          : "";
+    const match = body.match(/••••\s*(\d{4})|·{4}\s*(\d{4})|\*{4}\s*(\d{4})/);
+    if (match) last4 = match[1] ?? match[2] ?? match[3] ?? null;
+  }
+
   if (!paymentId && !taskId) return null;
-  const statusRaw = data.status;
-  const status =
-    typeof statusRaw === "string" &&
-    taskPaymentStatusSchema.safeParse(statusRaw).success
-      ? (statusRaw as TaskPaymentStatus)
-      : undefined;
   return {
     paymentId,
     taskId,
-    last4: typeof data.last4 === "string" ? data.last4 : null,
-    brand: typeof data.brand === "string" ? data.brand : null,
-    spendAmountCents:
-      typeof data.spendAmountCents === "number"
-        ? data.spendAmountCents
-        : undefined,
-    currency: typeof data.currency === "string" ? data.currency : undefined,
+    last4: last4 ?? null,
+    brand: brand ?? null,
+    spendAmountCents,
+    currency,
     status,
   };
 }

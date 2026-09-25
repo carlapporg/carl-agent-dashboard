@@ -33,6 +33,7 @@ import {
   dollarsToSpendCents,
   formatCardExp,
   formatPan,
+  mergePaymentStatus,
   taskPaymentStatusLabel,
   type TaskPayment,
   type VirtualCardSecrets,
@@ -119,43 +120,50 @@ export function BookingPaymentPanel({
     const stored = readStoredTaskPayment(taskId);
     if (!stored) return;
     setPayment((current) => {
-      if (current?.id === stored.paymentId) return current;
+      const nextStatus = mergePaymentStatus(current?.status, stored.status);
+      if (
+        current?.id === stored.paymentId &&
+        current.status === nextStatus &&
+        (current.last4 ?? null) === (stored.last4 ?? null)
+      ) {
+        return current;
+      }
       return {
         id: stored.paymentId,
         taskId: stored.taskId,
-        confirmationId: confirmation?.id ?? null,
-        userId: "",
-        requestedByAgentId: "",
-        spendAmountCents: Math.round(
-          Number(stored.spendDisplay ?? "0") * 100,
-        ),
-        chargeAmountCents: Math.round(
-          Number(stored.chargeDisplay ?? "0") * 100,
-        ),
-        feeEstimateCents: 0,
-        spendDisplay: stored.spendDisplay ?? "—",
-        chargeDisplay: stored.chargeDisplay ?? "—",
-        currency: stored.currency ?? "usd",
-        status: stored.status,
-        last4: stored.last4 ?? null,
-        brand: stored.brand ?? null,
-        hasCard: Boolean(stored.last4),
-        paidAt: null,
-        expiresAt: null,
-        createdAt: stored.updatedAt,
+        confirmationId: current?.confirmationId ?? confirmation?.id ?? null,
+        userId: current?.userId ?? "",
+        requestedByAgentId: current?.requestedByAgentId ?? "",
+        spendAmountCents:
+          current?.spendAmountCents ??
+          Math.round(Number(stored.spendDisplay ?? "0") * 100),
+        chargeAmountCents: current?.chargeAmountCents ?? 0,
+        feeEstimateCents: current?.feeEstimateCents ?? 0,
+        spendDisplay:
+          current?.spendDisplay ?? stored.spendDisplay ?? "—",
+        chargeDisplay: current?.chargeDisplay ?? stored.chargeDisplay ?? "—",
+        currency: stored.currency ?? current?.currency ?? "usd",
+        status: nextStatus,
+        last4: stored.last4 ?? current?.last4 ?? null,
+        brand: stored.brand ?? current?.brand ?? null,
+        hasCard: Boolean(stored.last4 ?? current?.last4),
+        paidAt: current?.paidAt ?? null,
+        expiresAt: current?.expiresAt ?? null,
+        createdAt: current?.createdAt ?? stored.updatedAt,
         updatedAt: stored.updatedAt,
       };
     });
   }, [confirmation?.id, taskId]);
 
+  const liveForTask =
+    ops?.paymentsByTaskId?.[taskId] ??
+    (ops?.livePayment?.taskId === taskId ? ops.livePayment : null);
+
   useEffect(() => {
-    const live = ops?.livePayment;
-    if (!live || live.taskId !== taskId) return;
+    const live = liveForTask;
+    if (!live) return;
     setPayment((prev) => {
-      if (prev && prev.id !== live.paymentId && live.paymentId) {
-        // Prefer live socket payment for this task.
-      }
-      const nextStatus = live.status ?? prev?.status ?? "requires_payment";
+      const nextStatus = mergePaymentStatus(prev?.status, live.status);
       const next: TaskPayment = {
         id: live.paymentId || prev?.id || "",
         taskId,
@@ -179,13 +187,29 @@ export function BookingPaymentPanel({
         paidAt: prev?.paidAt ?? null,
         expiresAt: prev?.expiresAt ?? null,
         createdAt: prev?.createdAt ?? new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        updatedAt: new Date(live.at).toISOString(),
       };
       if (!next.id) return prev;
+      if (
+        prev &&
+        prev.id === next.id &&
+        prev.status === next.status &&
+        prev.last4 === next.last4
+      ) {
+        return prev;
+      }
       rememberTaskPayment(next);
       return next;
     });
-  }, [confirmation?.id, ops?.livePayment, taskId]);
+  }, [
+    confirmation?.id,
+    liveForTask,
+    liveForTask?.at,
+    liveForTask?.status,
+    liveForTask?.last4,
+    liveForTask?.paymentId,
+    taskId,
+  ]);
 
   useEffect(() => {
     if (!revealOpen) return;

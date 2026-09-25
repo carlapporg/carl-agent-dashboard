@@ -29,6 +29,39 @@ const KEY_LABELS: Record<string, string> = {
   membershipId: "Membership ID",
 };
 
+/** Headcounts — never show a trailing % (not a rate). */
+const COUNT_KEYS = new Set([
+  "guests",
+  "guest",
+  "guestcount",
+  "guestCount",
+  "partySize",
+  "party_size",
+  "ticketCount",
+  "passengers",
+]);
+
+function isCountKey(key: string): boolean {
+  if (COUNT_KEYS.has(key)) return true;
+  const lower = key.toLowerCase();
+  return (
+    lower === "guests" ||
+    lower.endsWith("guests") ||
+    lower.includes("guestcount") ||
+    lower === "partysize" ||
+    lower === "ticketcount" ||
+    lower === "passengers"
+  );
+}
+
+/** Strip accidental % from guest/party counts (e.g. "2%" → "2"). */
+export function formatCountValue(raw: unknown): string {
+  return String(raw ?? "")
+    .trim()
+    .replace(/%/g, "")
+    .trim();
+}
+
 const SKIP_METADATA_KEYS = new Set([
   "membershipBrand",
   "membershipId",
@@ -120,13 +153,19 @@ export function taskFacts(task: Task): TaskFact[] {
 
   function add(key: string, raw: unknown, options?: { titleCaseValue?: boolean }) {
     if (raw == null) return;
-    const value = String(raw).trim();
+    const asCount = isCountKey(key);
+    const value = asCount
+      ? formatCountValue(raw)
+      : String(raw).trim();
     if (!value || seen.has(key)) return;
     seen.add(key);
     facts.push({
       key,
       label: humanizeKey(key),
-      value: options?.titleCaseValue === false ? value : titleCase(value),
+      value:
+        asCount || options?.titleCaseValue === false
+          ? value
+          : titleCase(value),
     });
   }
 

@@ -3,6 +3,10 @@ import { agentTaskMessageSchema } from "@/types/agent";
 import type { ChatMediaKind } from "@/types/message";
 import { receiptStatusFromMessage } from "@/lib/realtime/parse-message-receipt";
 import { isVenuePickedMessageMetadata } from "@/types/venue";
+import {
+  callEndedMessageBody,
+  isCallEndedMessageMetadata,
+} from "@/types/call";
 
 export type IncomingTaskMessage = {
   taskId: string;
@@ -73,7 +77,12 @@ export function parseIncomingTaskMessage(
     ? mediaKindFromMessage(parsed.data)
     : "text";
   if (!taskId) return null;
-  if (!content && mediaKind === "text" && !isVenuePickedMessageMetadata(metadata)) {
+  if (
+    !content &&
+    mediaKind === "text" &&
+    !isVenuePickedMessageMetadata(metadata) &&
+    !isCallEndedMessageMetadata(metadata)
+  ) {
     return null;
   }
 
@@ -87,10 +96,14 @@ export function parseIncomingTaskMessage(
     (typeof task?.title === "string" && task.title) ||
     undefined;
 
+  const resolvedContent = isCallEndedMessageMetadata(metadata)
+    ? callEndedMessageBody(content, metadata)
+    : content;
+
   return {
     taskId,
     sender,
-    content,
+    content: resolvedContent,
     clientLabel:
       labelFromClient(data.client) ??
       labelFromClient(task?.client) ??

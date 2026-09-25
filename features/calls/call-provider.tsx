@@ -26,6 +26,7 @@ import {
   joinLivekitSession,
   refreshLivekitSession,
   setLivekitMicrophoneEnabled,
+  setLivekitCameraEnabled,
   setLivekitRemoteAudioElement,
   setLivekitSessionHandlers,
 } from "@/features/calls/livekit-session";
@@ -62,6 +63,9 @@ type CallContextValue = {
   call: Call | null;
   direction: CallDirection | null;
   muted: boolean;
+  cameraMuted: boolean;
+  peerMicMuted: boolean;
+  peerCameraMuted: boolean;
   connectionLabel: string;
   elapsedSec: number;
   busy: boolean;
@@ -74,6 +78,7 @@ type CallContextValue = {
   rejectIncoming: () => Promise<void>;
   endActive: () => Promise<void>;
   toggleMute: () => void;
+  toggleCamera: () => void;
 };
 
 const CallContext = createContext<CallContextValue | null>(null);
@@ -118,6 +123,9 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const [call, setCall] = useState<Call | null>(null);
   const [direction, setDirection] = useState<CallDirection | null>(null);
   const [muted, setMuted] = useState(false);
+  const [cameraMuted, setCameraMuted] = useState(false);
+  const [peerMicMuted, setPeerMicMuted] = useState(false);
+  const [peerCameraMuted, setPeerCameraMuted] = useState(false);
   const [connectionLabel, setConnectionLabel] = useState("Idle");
   const [elapsedSec, setElapsedSec] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -194,12 +202,27 @@ export function CallProvider({ children }: { children: ReactNode }) {
     setCall(null);
     setDirection(null);
     setMuted(false);
+    setCameraMuted(false);
+    setPeerMicMuted(false);
+    setPeerCameraMuted(false);
     setConnectionLabel("Idle");
     setElapsedSec(0);
     setBusy(false);
     activeStartedRef.current = null;
   }, [clearRefreshTimer]);
   resetToIdleRef.current = resetToIdle;
+
+  const enableLocalMedia = useCallback((row: Call, micOn = true) => {
+    void setLivekitMicrophoneEnabled(micOn);
+    setMuted(!micOn);
+    if (row.type === "VIDEO") {
+      void setLivekitCameraEnabled(true);
+      setCameraMuted(false);
+    } else {
+      void setLivekitCameraEnabled(false);
+      setCameraMuted(true);
+    }
+  }, []);
 
   const applyOutboundRinging = useCallback((row: Call) => {
     outboundCallIdsRef.current.add(row.id);
@@ -263,8 +286,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
       opts?: { preferCreds?: NonNullable<Call["livekit"]> | null },
     ) => {
       if (isLivekitJoined(incoming.id)) {
-        void setLivekitMicrophoneEnabled(true);
-        setMuted(false);
+        enableLocalMedia(incoming, true);
         setPhase("active");
         setConnectionLabel("Connected");
         if (!activeStartedRef.current) {
@@ -276,8 +298,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
       if (ensureJoinedInflightRef.current) {
         await ensureJoinedInflightRef.current;
         if (isLivekitJoined(incoming.id)) {
-          void setLivekitMicrophoneEnabled(true);
-          setMuted(false);
+          enableLocalMedia(incoming, true);
           setPhase("active");
           setConnectionLabel("Connected");
         }
@@ -320,8 +341,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
         }
 
         if (isLivekitJoined(next.id)) {
-          void setLivekitMicrophoneEnabled(true);
-          setMuted(false);
+          enableLocalMedia(next, true);
           setPhase("active");
           setConnectionLabel("Connected");
           return;
@@ -348,8 +368,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        void setLivekitMicrophoneEnabled(true);
-        setMuted(false);
+        enableLocalMedia(withCreds, true);
         // Stay on ringing UI until callee accepts (mobile joins on accept).
         if (isOutbound && phaseRef.current === "connecting") {
           setPhase("outgoing");
@@ -373,7 +392,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [scheduleTokenRefresh, toast],
+    [enableLocalMedia, scheduleTokenRefresh, toast],
   );
   ensureJoinedRef.current = ensureJoined;
 
@@ -511,6 +530,14 @@ export function CallProvider({ children }: { children: ReactNode }) {
     setMuted((prev) => {
       const next = !prev;
       void setLivekitMicrophoneEnabled(!next);
+      return next;
+    });
+  }, []);
+
+  const toggleCamera = useCallback(() => {
+    setCameraMuted((prev) => {
+      const next = !prev;
+      void setLivekitCameraEnabled(!next);
       return next;
     });
   }, []);
@@ -681,8 +708,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
 
         if (isOutbound) {
           // Already in the room since POST /calls (mobile contract). Just go live.
-          void setLivekitMicrophoneEnabled(true);
-          setMuted(false);
+          enableLocalMedia(merged, true);
           setPhase("active");
           setConnectionLabel("Connected");
           if (!activeStartedRef.current) {
@@ -697,7 +723,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
         }
 
         if (isLivekitJoined(merged.id)) {
-          void setLivekitMicrophoneEnabled(true);
+          enableLocalMedia(merged, true);
           setPhase("active");
           setConnectionLabel("Connected");
           if (!activeStartedRef.current) {
@@ -794,7 +820,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
         socket.off(eventName, fn);
       }
     };
-  }, [connected, toast, applyOutboundRinging, resolveCustomerName]);
+  }, [connected, toast, applyOutboundRinging, enableLocalMedia, resolveCustomerName]);
 
   // Wire remote <audio> + session UI callbacks once.
   useEffect(() => {
@@ -808,6 +834,10 @@ export function CallProvider({ children }: { children: ReactNode }) {
             activeStartedRef.current = Date.now();
           }
         }
+      },
+      onRemoteMedia: (state) => {
+        setPeerMicMuted(state.hasRemote && state.micMuted);
+        setPeerCameraMuted(state.hasRemote && state.cameraMuted);
       },
     });
     return () => {
@@ -838,6 +868,9 @@ export function CallProvider({ children }: { children: ReactNode }) {
       call,
       direction,
       muted,
+      cameraMuted,
+      peerMicMuted,
+      peerCameraMuted,
       connectionLabel,
       elapsedSec,
       busy,
@@ -846,19 +879,24 @@ export function CallProvider({ children }: { children: ReactNode }) {
       rejectIncoming,
       endActive,
       toggleMute,
+      toggleCamera,
     }),
     [
       acceptIncoming,
       busy,
       call,
+      cameraMuted,
       connectionLabel,
       direction,
       elapsedSec,
       endActive,
       muted,
+      peerCameraMuted,
+      peerMicMuted,
       phase,
       rejectIncoming,
       startCall,
+      toggleCamera,
       toggleMute,
     ],
   );
@@ -943,8 +981,13 @@ export function CallProvider({ children }: { children: ReactNode }) {
           }
           elapsedLabel={formatElapsed(elapsedSec)}
           muted={muted}
+          cameraMuted={cameraMuted}
+          peerMicMuted={peerMicMuted}
+          peerCameraMuted={peerCameraMuted}
+          isVideo={call.type === "VIDEO"}
           busy={busy}
           onToggleMute={toggleMute}
+          onToggleCamera={call.type === "VIDEO" ? toggleCamera : undefined}
           onEnd={() => void endActive()}
         />
       ) : null}

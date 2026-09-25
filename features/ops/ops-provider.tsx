@@ -82,11 +82,17 @@ import {
 import {
   clearStoredTaskPayment,
   patchStoredTaskPayment,
+  readStoredTaskPayment,
 } from "@/lib/tasks/task-payment-store";
 import {
+  mergePaymentStatus,
   parseTaskPaymentPayload,
   type TaskPaymentStatus,
 } from "@/types/task-payment";
+import {
+  callEndedMessageBody,
+  isCallEndedMessageMetadata,
+} from "@/types/call";
 import type { Task } from "@/types/task";
 import type { Socket } from "socket.io-client";
 import { markOfferAccepted } from "@/features/ops/auto-accept-offer";
@@ -303,6 +309,8 @@ type OpsContextValue = {
   messageReads: Record<string, Record<string, string>>;
   /** Latest booking-payment socket event for the open task flow. */
   livePayment: LiveTaskPaymentEvent | null;
+  /** Live payment status keyed by task id (survives later events for other tasks). */
+  paymentsByTaskId: Record<string, LiveTaskPaymentEvent>;
   liveConfirmation: TaskConfirmation | null;
   /** Confirmation rows keyed by task id (`null` = fetched, none). */
   confirmationsByTaskId: Record<string, TaskConfirmation | null>;
@@ -387,6 +395,9 @@ export function AgentOpsProvider({
   const [livePayment, setLivePayment] = useState<LiveTaskPaymentEvent | null>(
     null,
   );
+  const [paymentsByTaskId, setPaymentsByTaskId] = useState<
+    Record<string, LiveTaskPaymentEvent>
+  >({});
   const [liveConfirmation, setLiveConfirmationState] =
     useState<TaskConfirmation | null>(null);
   const [confirmationsByTaskId, setConfirmationsByTaskId] = useState<
@@ -656,6 +667,8 @@ export function AgentOpsProvider({
   setLiveReceiptRef.current = setLiveReceipt;
   const liveTasksRef = useRef(liveTasks);
   liveTasksRef.current = liveTasks;
+  const paymentsByTaskIdRef = useRef(paymentsByTaskId);
+  paymentsByTaskIdRef.current = paymentsByTaskId;
   const offerRef = useRef(offer);
   offerRef.current = offer;
   const socketTokenRef = useRef(socketToken);
@@ -1021,6 +1034,20 @@ export function AgentOpsProvider({
             );
           }
         }
+      } else if (
+        incoming.sender === "SYSTEM" &&
+        isCallEndedMessageMetadata(incoming.metadata)
+      ) {
+        // Connected-call duration line from Nest — show in thread, no toast.
+        setLiveChat({
+          at: Date.now(),
+          taskId: incoming.taskId,
+          sender: "SYSTEM",
+          content: callEndedMessageBody(incoming.content, incoming.metadata),
+          messageId: incoming.messageId,
+          mediaKind: "text",
+          metadata: incoming.metadata,
+        });
       }
       if (incoming.sender !== "USER") return;
       if (notificationsRef.current.isViewingTaskInbox(incoming.taskId)) return;
@@ -1060,43 +1087,52 @@ export function AgentOpsProvider({
       statusHint?: TaskPaymentStatus,
     ) {
       const parsed = parseTaskPaymentPayload(payload);
-      if (!parsed?.taskId || !parsed.paymentId) return;
-      const status = statusHint ?? parsed.status;
+      if (!parsed?.taskId) return;
+      const stored = readStoredTaskPayment(parsed.taskId);
+      const paymentId = parsed.paymentId || stored?.paymentId;
+      if (!paymentId) return;
+      const prevLive = paymentsByTaskIdRef.current[parsed.taskId];
+      const status = mergePaymentStatus(
+        prevLive?.status ?? stored?.status,
+        statusHint ?? parsed.status,
+      );
       const event: LiveTaskPaymentEvent = {
         at: Date.now(),
         taskId: parsed.taskId,
-        paymentId: parsed.paymentId,
+        paymentId,
         status,
-        last4: parsed.last4,
-        brand: parsed.brand,
-        spendAmountCents: parsed.spendAmountCents,
-        currency: parsed.currency,
+        last4: parsed.last4 ?? prevLive?.last4 ?? stored?.last4 ?? null,
+        brand: parsed.brand ?? prevLive?.brand ?? stored?.brand ?? null,
+        spendAmountCents:
+          parsed.spendAmountCents ??
+          prevLive?.spendAmountCents ??
+          (stored?.spendDisplay
+            ? Math.round(Number(stored.spendDisplay) * 100)
+            : undefined),
+        currency: parsed.currency ?? prevLive?.currency ?? stored?.currency,
       };
+      const taskId = parsed.taskId;
       setLivePayment(event);
-      if (status) {
-        patchStoredTaskPayment(parsed.taskId, {
-          paymentId: parsed.paymentId,
-          status,
-          last4: parsed.last4,
-          brand: parsed.brand,
-          currency: parsed.currency,
-          spendDisplay:
-            parsed.spendAmountCents != null
-              ? (parsed.spendAmountCents / 100).toFixed(2)
-              : undefined,
-        });
-      } else {
-        patchStoredTaskPayment(parsed.taskId, {
-          paymentId: parsed.paymentId,
-          last4: parsed.last4,
-          brand: parsed.brand,
-          currency: parsed.currency,
-        });
-      }
-      if (status === "card_issued") {
+      setPaymentsByTaskId((prev) => {
+        const next = { ...prev, [taskId]: event };
+        paymentsByTaskIdRef.current = next;
+        return next;
+      });
+      patchStoredTaskPayment(taskId, {
+        paymentId,
+        status,
+        last4: event.last4,
+        brand: event.brand,
+        currency: event.currency,
+        spendDisplay:
+          event.spendAmountCents != null
+            ? (event.spendAmountCents / 100).toFixed(2)
+            : undefined,
+      });
+      if (status === "card_issued" && prevLive?.status !== "card_issued") {
         toastRef.current("Virtual card ready.", "success", {
           title: "Payment",
-          href: ROUTES.taskPanel(parsed.taskId, "payment"),
+          href: ROUTES.taskPanel(taskId, "payment"),
           actionLabel: "Open payment",
         });
       }
@@ -1327,6 +1363,13 @@ export function AgentOpsProvider({
 
     function onNotificationCreated(payload: unknown) {
       const item = parseNotificationPayload(payload);
+      // Feed often arrives when socket card_ready was missed — sync booking panel.
+      if (
+        item?.kind === "payment_approved" ||
+        (item?.title ?? "").toLowerCase().includes("virtual card")
+      ) {
+        onTaskPaymentEvent(payload, "card_issued");
+      }
       if (!item) return;
       const api = notificationsRef.current;
       const isOfferKind =
@@ -1716,6 +1759,7 @@ export function AgentOpsProvider({
       messageReceipts,
       messageReads,
       livePayment,
+      paymentsByTaskId,
       liveConfirmation,
       confirmationsByTaskId,
       setLiveConfirmation,
@@ -1736,6 +1780,7 @@ export function AgentOpsProvider({
       liveChat,
       liveConfirmation,
       livePayment,
+      paymentsByTaskId,
       liveReceipt,
       livePulse,
       liveTasks,

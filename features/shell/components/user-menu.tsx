@@ -228,7 +228,14 @@ export function UserMenu({
               <p className="truncate text-xs text-dropdown-muted">{user.email}</p>
             </div>
           </div>
-          <span className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-success-soft px-2 py-0.5 text-[11px] font-semibold text-success-foreground">
+          <span
+            className={cn(
+              "mt-1.5 inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+              online
+                ? "bg-success-soft text-success-foreground"
+                : "bg-surface-muted text-muted",
+            )}
+          >
             <span
               className={cn(
                 "size-1.5 rounded-full",

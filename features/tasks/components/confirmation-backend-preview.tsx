@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils/cn";
+import { formatCountValue } from "@/lib/tasks/details";
 import type { TaskConfirmation } from "@/types/confirmation";
 
 type ConfirmationBackendPreviewProps = {
@@ -22,6 +23,19 @@ function isInternalVenueRow(label: string, value: string): boolean {
     return true;
   }
   return false;
+}
+
+function displayRowValue(label: string, value: string): string {
+  const norm = label.trim().toLowerCase();
+  if (
+    norm === "guests" ||
+    norm === "party size" ||
+    norm === "tickets" ||
+    norm === "passengers"
+  ) {
+    return formatCountValue(value);
+  }
+  return value;
 }
 
 /**
@@ -60,7 +74,9 @@ export function ConfirmationBackendPreview({
               <dt className="w-36 shrink-0 text-sm font-medium text-muted">
                 {row.label}
               </dt>
-              <dd className="text-sm text-foreground">{row.value}</dd>
+              <dd className="text-sm text-foreground">
+                {displayRowValue(row.label, row.value)}
+              </dd>
             </div>
           ))}
         </dl>

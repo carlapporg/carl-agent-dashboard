@@ -6,10 +6,18 @@ type ActiveCallOverlayProps = {
   statusLabel: string;
   elapsedLabel: string;
   muted: boolean;
+  /** Local camera off (video calls only). */
+  cameraMuted?: boolean;
+  /** Peer muted their mic (LiveKit TrackMuted). */
+  peerMicMuted?: boolean;
+  /** Peer muted their camera (video calls). */
+  peerCameraMuted?: boolean;
+  isVideo?: boolean;
   busy: boolean;
   /** Outgoing ring looks different from an in-progress call. */
   mode: "outgoing" | "connecting" | "active" | "ending";
   onToggleMute: () => void;
+  onToggleCamera?: () => void;
   onEnd: () => void;
 };
 
@@ -19,13 +27,20 @@ export function ActiveCallOverlay({
   statusLabel,
   elapsedLabel,
   muted,
+  cameraMuted = false,
+  peerMicMuted = false,
+  peerCameraMuted = false,
+  isVideo = false,
   busy,
   mode,
   onToggleMute,
+  onToggleCamera,
   onEnd,
 }: ActiveCallOverlayProps) {
   const isOutboundRing = mode === "outgoing";
   const isConnecting = mode === "connecting";
+  const showPeerMedia =
+    !isOutboundRing && !isConnecting && mode === "active";
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[190] flex justify-center p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
@@ -82,6 +97,22 @@ export function ActiveCallOverlay({
                   {statusLabel}
                   {taskHint ? ` · ${taskHint}` : ""}
                 </p>
+                {showPeerMedia && (peerMicMuted || peerCameraMuted) ? (
+                  <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-warning-foreground">
+                    {peerMicMuted ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-warning-soft px-2 py-0.5">
+                        <MicOffIcon className="size-3" />
+                        Mic muted
+                      </span>
+                    ) : null}
+                    {peerCameraMuted ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-warning-soft px-2 py-0.5">
+                        <CamOffIcon className="size-3" />
+                        Camera off
+                      </span>
+                    ) : null}
+                  </p>
+                ) : null}
               </>
             )}
           </div>
@@ -93,18 +124,34 @@ export function ActiveCallOverlay({
         </div>
         <div className="flex items-center justify-center gap-3 px-4 py-3">
           {!isOutboundRing && mode === "active" ? (
-            <button
-              type="button"
-              onClick={onToggleMute}
-              disabled={busy}
-              className={`flex h-11 min-w-24 items-center justify-center rounded-full px-4 text-sm font-semibold ${
-                muted
-                  ? "bg-warning-soft text-warning-foreground"
-                  : "bg-surface-muted text-foreground"
-              }`}
-            >
-              {muted ? "Unmute" : "Mute"}
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={onToggleMute}
+                disabled={busy}
+                className={`flex h-11 min-w-24 items-center justify-center rounded-full px-4 text-sm font-semibold ${
+                  muted
+                    ? "bg-warning-soft text-warning-foreground"
+                    : "bg-surface-muted text-foreground"
+                }`}
+              >
+                {muted ? "Unmute" : "Mute"}
+              </button>
+              {isVideo && onToggleCamera ? (
+                <button
+                  type="button"
+                  onClick={onToggleCamera}
+                  disabled={busy}
+                  className={`flex h-11 min-w-24 items-center justify-center rounded-full px-4 text-sm font-semibold ${
+                    cameraMuted
+                      ? "bg-warning-soft text-warning-foreground"
+                      : "bg-surface-muted text-foreground"
+                  }`}
+                >
+                  {cameraMuted ? "Cam on" : "Cam off"}
+                </button>
+              ) : null}
+            </>
           ) : null}
           <button
             type="button"
@@ -117,5 +164,45 @@ export function ActiveCallOverlay({
         </div>
       </div>
     </div>
+  );
+}
+
+function MicOffIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" aria-hidden>
+      <path
+        d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.3V12a3 3 0 0 1-.1.8M12 19v2m-4 0h8M5 5l14 14"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M12 3a3 3 0 0 1 3 3v2.5M8.5 8.5V12a3.5 3.5 0 0 0 5.6 2.8"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+      />
+      <path
+        d="M19 11a7 7 0 0 1-1.5 4.3M5 11a7 7 0 0 0 10.2 6.2"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function CamOffIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" aria-hidden>
+      <path
+        d="M3 5l18 14M15 11.5V8a2 2 0 0 0-2-2H6.5M5 8v8a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2v-1l4 2.5V9.5L16 12"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }

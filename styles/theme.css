@@ -85,14 +85,14 @@
 
   --shadow-card: 0 1px 2px rgba(55, 125, 255, 0.05), 0 8px 24px rgba(55, 125, 255, 0.08);
   --shadow-soft: 0 8px 24px rgba(15, 23, 42, 0.08);
-  /* Option menus are always dark glass (light page + dark popover). */
-  --dropdown: rgba(28, 30, 36, 0.94);
-  --dropdown-foreground: #ffffff;
-  --dropdown-muted: rgba(255, 255, 255, 0.42);
-  --dropdown-hover: rgba(255, 255, 255, 0.1);
-  --dropdown-selected: rgba(255, 255, 255, 0.14);
-  --dropdown-border: rgba(255, 255, 255, 0.12);
-  --shadow-dropdown: 0 16px 40px rgba(0, 0, 0, 0.38);
+  /* Option menus: white surface (matches page chrome). */
+  --dropdown: #ffffff;
+  --dropdown-foreground: #1a1d26;
+  --dropdown-muted: #6b7280;
+  --dropdown-hover: rgba(26, 29, 38, 0.06);
+  --dropdown-selected: rgba(55, 125, 255, 0.1);
+  --dropdown-border: #e7e7e7;
+  --shadow-dropdown: 0 12px 32px rgba(15, 23, 42, 0.12);
 
   --motion-fast: 150ms;
   --motion-base: 200ms;
@@ -177,13 +177,14 @@ html.dark {
 
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35), 0 8px 24px rgba(0, 0, 0, 0.28);
   --shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.35);
-  --dropdown: rgba(20, 22, 28, 0.96);
-  --dropdown-foreground: #ffffff;
-  --dropdown-muted: rgba(255, 255, 255, 0.45);
-  --dropdown-hover: rgba(255, 255, 255, 0.1);
-  --dropdown-selected: rgba(255, 255, 255, 0.16);
-  --dropdown-border: rgba(255, 255, 255, 0.14);
-  --shadow-dropdown: 0 16px 40px rgba(0, 0, 0, 0.55);
+  /* Keep menus white even in dark page mode for readable option lists. */
+  --dropdown: #ffffff;
+  --dropdown-foreground: #1a1d26;
+  --dropdown-muted: #6b7280;
+  --dropdown-hover: rgba(26, 29, 38, 0.06);
+  --dropdown-selected: rgba(55, 125, 255, 0.12);
+  --dropdown-border: #e7e7e7;
+  --shadow-dropdown: 0 12px 32px rgba(0, 0, 0, 0.28);
 }
 
 @theme inline {

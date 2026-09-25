@@ -30,6 +30,10 @@ import {
 } from "@/lib/realtime/agent-socket";
 import type { MessageReceiptStatus } from "@/types/message";
 import {
+  callEndedMessageBody,
+  isCallEndedMessageMetadata,
+} from "@/types/call";
+import {
   CHAT_ATTACH_ACCEPT,
   formatClockMs,
   isImageFile,
@@ -166,6 +170,8 @@ function isVisibleInThread(event: TimelineEvent): boolean {
 function messageTone(event: ChatItem): MessageTone {
   if (event.kind === "agent_message") return "agent";
   if (event.kind === "customer_message") return "client";
+  // Call duration lines stay centered system text (not payment ImportantCard).
+  if (isCallEndedMessageMetadata(event.metadata)) return "system";
   if (
     IMPORTANT_KINDS.includes(event.kind) ||
     (event.kind === "system" && IMPORTANT_BODY.test(event.body))
@@ -476,7 +482,10 @@ const ChatBubble = memo(function ChatBubble({
   const fromAgent = role === "agent";
   const mediaKind = event.mediaKind ?? "text";
   const inbox = appearance === "inbox";
-  const inboxAgentTone = inbox && fromAgent;
+  /** Voice uses Messages waveform UI in both inbox and task detail. */
+  const voiceWave = mediaKind === "voice";
+  const inboxAgentTone = inbox && fromAgent && !voiceWave;
+  const softBubble = inbox || voiceWave;
   return (
     <div
       style={{ contentVisibility: "auto", containIntrinsicSize: "0 40px" }}
@@ -489,24 +498,23 @@ const ChatBubble = memo(function ChatBubble({
     >
       <div
         className={cn(
-          inbox
+          softBubble
             ? "px-4 py-3 text-[14px] leading-[1.5] text-foreground"
             : "px-2.5 py-1.5 text-[13px] leading-snug",
           fromAgent
-            ? inbox
-              ? mediaKind === "voice"
-                ? "rounded-bl-[16px] rounded-br-[16px] rounded-tl-[16px] rounded-tr-[4px] bg-surface-muted"
-                : "rounded-bl-[16px] rounded-br-[16px] rounded-tl-[16px] rounded-tr-[4px] bg-[rgba(84,149,253,0.2)]"
-              : "rounded-2xl rounded-br-md bg-accent text-accent-foreground"
-            : inbox
+            ? voiceWave
+              ? "rounded-bl-[16px] rounded-br-[16px] rounded-tl-[16px] rounded-tr-[4px] bg-surface-muted"
+              : softBubble
+                ? "rounded-bl-[16px] rounded-br-[16px] rounded-tl-[16px] rounded-tr-[4px] bg-[rgba(84,149,253,0.2)]"
+                : "rounded-2xl rounded-br-md bg-accent text-accent-foreground"
+            : softBubble
               ? "rounded-bl-[16px] rounded-br-[16px] rounded-tl-[4px] rounded-tr-[16px] bg-surface-muted"
               : "rounded-2xl rounded-bl-md bg-surface-muted text-foreground",
-          grouped && fromAgent && !inbox && "rounded-tr-md",
-          grouped && !fromAgent && !inbox && "rounded-tl-md",
+          grouped && fromAgent && !softBubble && "rounded-tr-md",
+          grouped && !fromAgent && !softBubble && "rounded-tl-md",
           mediaKind === "image" && "overflow-hidden p-1.5",
           /* Figma voice bubble is 320px — waveform fills inside, not the whole chat */
-          mediaKind === "voice" &&
-            (inbox ? "w-[320px] max-w-[320px] px-4 py-3" : "min-w-52"),
+          voiceWave && "w-[320px] max-w-[320px] px-4 py-3",
           event.delivery === "failed" && "bg-red-600 text-accent-foreground",
         )}
       >
@@ -517,8 +525,8 @@ const ChatBubble = memo(function ChatBubble({
             messageId={event.id}
             durationMs={event.durationMs}
             previewUrl={event.previewUrl}
-            fromAgent={inbox ? false : fromAgent}
-            appearance={inbox ? "inbox" : "workspace"}
+            fromAgent={false}
+            appearance="inbox"
           />
         ) : null}
         {mediaKind === "image" ? (
@@ -528,7 +536,7 @@ const ChatBubble = memo(function ChatBubble({
             messageId={event.id}
             previewUrl={event.previewUrl}
             caption={event.body}
-            fromAgent={inbox ? false : fromAgent}
+            fromAgent={softBubble ? false : fromAgent}
             onOpen={onOpenImage}
           />
         ) : null}
@@ -545,9 +553,11 @@ const ChatBubble = memo(function ChatBubble({
                     venue={venue}
                     compact
                     className={cn(
-                      fromAgent && !inbox
-                        ? "border-white/20 bg-white/15 text-accent-foreground"
-                        : undefined,
+                      softBubble
+                        ? "border-border bg-surface-muted text-foreground"
+                        : fromAgent
+                          ? "border-white/20 bg-white/15 text-accent-foreground"
+                          : undefined,
                     )}
                   />
                   {event.body.trim() ? (
@@ -567,7 +577,9 @@ const ChatBubble = memo(function ChatBubble({
           <span
             className={cn(
               "mt-1 flex items-center justify-end gap-1",
-              inboxAgentTone || !fromAgent ? "text-muted-dim" : "text-white/70",
+              inboxAgentTone || softBubble || !fromAgent
+                ? "text-muted-dim"
+                : "text-white/70",
             )}
             title={
               typeof event.uploadProgress === "number"
@@ -592,7 +604,7 @@ const ChatBubble = memo(function ChatBubble({
           <p
             className={cn(
               "mt-0.5 text-[10px]",
-              fromAgent && !inbox ? "text-white/75" : "text-muted",
+              fromAgent && !softBubble ? "text-white/75" : "text-muted",
             )}
           >
             Couldn’t send
@@ -795,18 +807,35 @@ const TaskChatThreadBody = forwardRef<
 
   const liveItem = useMemo<ChatItem | null>(() => {
     if (!liveChat || liveChat.taskId !== taskId) return null;
-    if (liveChat.sender !== "USER") return null;
-    return {
-      id: liveChat.messageId || `live-${liveChat.at}`,
-      taskId,
-      kind: "customer_message",
-      body: liveChat.content,
-      createdAt: new Date(liveChat.at).toISOString(),
-      visibleToCustomer: true,
-      mediaKind: liveChat.mediaKind ?? "text",
-      durationMs: liveChat.durationMs,
-      metadata: liveChat.metadata ?? null,
-    };
+    if (liveChat.sender === "USER") {
+      return {
+        id: liveChat.messageId || `live-${liveChat.at}`,
+        taskId,
+        kind: "customer_message",
+        body: liveChat.content,
+        createdAt: new Date(liveChat.at).toISOString(),
+        visibleToCustomer: true,
+        mediaKind: liveChat.mediaKind ?? "text",
+        durationMs: liveChat.durationMs,
+        metadata: liveChat.metadata ?? null,
+      };
+    }
+    if (
+      liveChat.sender === "SYSTEM" &&
+      isCallEndedMessageMetadata(liveChat.metadata)
+    ) {
+      return {
+        id: liveChat.messageId || `live-${liveChat.at}`,
+        taskId,
+        kind: "system",
+        body: callEndedMessageBody(liveChat.content, liveChat.metadata),
+        createdAt: new Date(liveChat.at).toISOString(),
+        visibleToCustomer: false,
+        mediaKind: "text",
+        metadata: liveChat.metadata ?? null,
+      };
+    }
+    return null;
   }, [liveChat, taskId]);
 
   const thread = useMemo(() => {
@@ -1466,9 +1495,9 @@ const TaskChatThreadBody = forwardRef<
                   return <ImportantCard key={block.key} event={block.event} />;
                 }
                 const first = block.items[0];
+                const last = block.items[block.items.length - 1] ?? first;
                 const fromAgent = block.role === "agent";
                 if (inbox) {
-                  const last = block.items[block.items.length - 1] ?? first;
                   return (
                     <div
                       key={block.key}
@@ -1545,6 +1574,18 @@ const TaskChatThreadBody = forwardRef<
                         onOpenImage={setLightbox}
                       />
                     ))}
+                    {fromAgent &&
+                    last.delivery !== "failed" &&
+                    last.delivery !== "sending" ? (
+                      <div className="flex items-center justify-end gap-1 px-0.5">
+                        <AgentDeliveryTicks
+                          status={
+                            (last.receiptStatus as MessageReceiptStatus) ??
+                            "SENT"
+                          }
+                        />
+                      </div>
+                    ) : null}
                   </div>
                 );
               })}
@@ -1682,9 +1723,8 @@ const TaskChatThreadBody = forwardRef<
           {voicePreview ? (
             <div
               className={cn(
-                "mb-2 flex items-center gap-3 rounded-lg border border-border bg-surface-muted px-2 py-1.5",
-                inbox &&
-                  "mx-6 mt-4 mb-0 rounded-[12px] border-border bg-surface px-3 py-2.5",
+                "mb-2 flex items-center gap-3 rounded-[12px] border border-border bg-surface px-3 py-2.5",
+                inbox && "mx-6 mt-4 mb-0",
               )}
             >
               <ChatAudioPlayer
@@ -1693,7 +1733,7 @@ const TaskChatThreadBody = forwardRef<
                 durationMs={voicePreview.durationMs}
                 previewUrl={voicePreview.url}
                 fromAgent={false}
-                appearance={inbox ? "inbox-preview" : "workspace"}
+                appearance="inbox-preview"
               />
               <button
                 type="button"
@@ -1701,20 +1741,14 @@ const TaskChatThreadBody = forwardRef<
                   discardVoicePreview();
                   void startRecording();
                 }}
-                className={cn(
-                  "shrink-0 text-[11px] font-semibold text-muted hover:text-foreground",
-                  inbox && "text-[12px] font-medium text-[rgba(0,0,0,0.45)]",
-                )}
+                className="shrink-0 text-[12px] font-medium text-muted hover:text-foreground"
               >
                 Redo
               </button>
               <button
                 type="button"
                 onClick={discardVoicePreview}
-                className={cn(
-                  "shrink-0 text-[11px] font-semibold text-muted hover:text-foreground",
-                  inbox && "text-[12px] font-medium text-[rgba(0,0,0,0.45)]",
-                )}
+                className="shrink-0 text-[12px] font-medium text-muted hover:text-foreground"
               >
                 Cancel
               </button>
@@ -1743,7 +1777,7 @@ const TaskChatThreadBody = forwardRef<
                   active={recording}
                   streamRef={streamRef}
                   className="min-w-0 flex-1"
-                  barCount={inbox ? 40 : 32}
+                  barCount={40}
                   maxHeight={24}
                 />
                 <p className="shrink-0 text-sm font-medium tabular-nums text-foreground">

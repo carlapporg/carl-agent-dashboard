@@ -14,6 +14,10 @@ import {
   parseConfirmationPrefill,
 } from "@/types/confirmation";
 import { receiptStatusFromMessage } from "@/lib/realtime/parse-message-receipt";
+import {
+  callEndedMessageBody,
+  isCallEndedMessageMetadata,
+} from "@/types/call";
 
 export function uiStatusFromAgent(status: AgentTaskStatus): TaskStatus {
   switch (status) {
@@ -256,16 +260,18 @@ export function mapAgentMessageToTimeline(
         ? "customer_message"
         : "system";
   const mediaKind = mediaKindFromMessage(message);
+  const body = isCallEndedMessageMetadata(message.metadata)
+    ? callEndedMessageBody(message.content, message.metadata)
+    : message.content ||
+      message.caption ||
+      captionFromMetadata(message.metadata) ||
+      "";
 
   return {
     id: message.id,
     taskId: message.taskId,
     kind,
-    body:
-      message.content ||
-      message.caption ||
-      captionFromMetadata(message.metadata) ||
-      "",
+    body,
     createdAt: message.createdAt || message.sentAt || new Date().toISOString(),
     visibleToCustomer: message.sender !== "SYSTEM",
     mediaKind,

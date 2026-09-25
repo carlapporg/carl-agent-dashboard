@@ -12,9 +12,18 @@ import {
 } from "livekit-client";
 import type { LivekitCreds } from "@/types/call";
 
+export type RemoteMediaState = {
+  hasRemote: boolean;
+  /** True when the peer published audio and muted (or disabled) their mic. */
+  micMuted: boolean;
+  /** True when the peer published video and muted (or disabled) their camera. */
+  cameraMuted: boolean;
+};
+
 type SessionHandlers = {
   onState?: (label: string, active: boolean) => void;
   onUnexpectedDisconnect?: (callId: string) => void;
+  onRemoteMedia?: (state: RemoteMediaState) => void;
 };
 
 let room: Room | null = null;
@@ -41,6 +50,43 @@ function attachExistingRemoteTracks(current: Room) {
       }
     }
   }
+}
+
+function readRemoteMediaState(current: Room): RemoteMediaState {
+  const remotes = [...current.remoteParticipants.values()];
+  if (remotes.length === 0) {
+    return { hasRemote: false, micMuted: false, cameraMuted: false };
+  }
+  // One customer peer per agent call room.
+  const peer = remotes[0]!;
+  const audioPubs = [...peer.audioTrackPublications.values()];
+  const videoPubs = [...peer.videoTrackPublications.values()];
+  // Only treat as muted once they have published that media — avoids a
+  // false "muted" flash before the first TrackSubscribed.
+  const micMuted =
+    audioPubs.length > 0 ? !peer.isMicrophoneEnabled : false;
+  const cameraMuted =
+    videoPubs.length > 0 ? !peer.isCameraEnabled : false;
+  return { hasRemote: true, micMuted, cameraMuted };
+}
+
+function emitRemoteMedia(current: Room) {
+  handlers.onRemoteMedia?.(readRemoteMediaState(current));
+}
+
+function wireRemoteMediaListeners(current: Room) {
+  const refresh = () => {
+    if (room !== current) return;
+    emitRemoteMedia(current);
+  };
+  current.on(RoomEvent.TrackMuted, refresh);
+  current.on(RoomEvent.TrackUnmuted, refresh);
+  current.on(RoomEvent.TrackSubscribed, refresh);
+  current.on(RoomEvent.TrackUnsubscribed, refresh);
+  current.on(RoomEvent.ParticipantConnected, refresh);
+  current.on(RoomEvent.ParticipantDisconnected, refresh);
+  current.on(RoomEvent.TrackPublished, refresh);
+  current.on(RoomEvent.TrackUnpublished, refresh);
 }
 
 async function enableMicrophone(current: Room) {
@@ -90,6 +136,11 @@ export async function disconnectLivekitSession() {
   if (remoteAudioEl) {
     remoteAudioEl.srcObject = null;
   }
+  handlers.onRemoteMedia?.({
+    hasRemote: false,
+    micMuted: false,
+    cameraMuted: false,
+  });
   if (!current) {
     intentionalDisconnect = false;
     return;
@@ -107,6 +158,15 @@ export async function setLivekitMicrophoneEnabled(enabled: boolean) {
   if (!room) return;
   try {
     await room.localParticipant.setMicrophoneEnabled(enabled);
+  } catch {
+    /* ignore */
+  }
+}
+
+export async function setLivekitCameraEnabled(enabled: boolean) {
+  if (!room) return;
+  try {
+    await room.localParticipant.setCameraEnabled(enabled);
   } catch {
     /* ignore */
   }
@@ -132,6 +192,7 @@ export async function refreshLivekitSession(input: {
     await current.connect(creds.url, creds.token);
     await enableMicrophone(current);
     attachExistingRemoteTracks(current);
+    emitRemoteMedia(current);
     handlers.onState?.("Connected", true);
     return true;
   } catch {
@@ -225,6 +286,8 @@ export async function joinLivekitSession(input: {
       attachRemoteAudio(track);
     });
 
+    wireRemoteMediaListeners(nextRoom);
+
     nextRoom.on(RoomEvent.Disconnected, () => {
       if (room !== nextRoom) return;
       handlers.onState?.("Disconnected", false);
@@ -257,6 +320,7 @@ export async function joinLivekitSession(input: {
 
     await enableMicrophone(nextRoom);
     attachExistingRemoteTracks(nextRoom);
+    emitRemoteMedia(nextRoom);
     handlers.onState?.("Connected", true);
     settle(true);
     return true;
