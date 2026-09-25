@@ -449,6 +449,9 @@ function mapPaymentError(error: unknown): string {
       return "This task is not assigned to you.";
     }
     if (error.status === 400) {
+      if (msg.includes("uuid") || msg.includes("uuid is expected")) {
+        return "Payment id missing or invalid. Request payment again, then reveal.";
+      }
       if (msg.includes("confirm")) {
         return "User must confirm booking first.";
       }

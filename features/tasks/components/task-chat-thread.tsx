@@ -65,6 +65,8 @@ type TaskChatThreadProps = {
   showTemplates?: boolean;
   disabled?: boolean;
   disabledHint?: string;
+  /** When true, hide/disable the call button while chat can stay open. */
+  callDisabled?: boolean;
   className?: string;
   title?: string;
   subtitle?: string;
@@ -706,6 +708,7 @@ const TaskChatThreadBody = forwardRef<
     showTemplates = true,
     disabled = false,
     disabledHint,
+    callDisabled = false,
     className,
     title = "Conversation",
     subtitle,
@@ -1423,13 +1426,12 @@ const TaskChatThreadBody = forwardRef<
             ) : null}
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            {!disabled ? (
-              <CallButton
-                taskId={taskId}
-                customerName={clientLabel}
-                taskTitle={title}
-              />
-            ) : null}
+            <CallButton
+              taskId={taskId}
+              customerName={clientLabel}
+              taskTitle={title}
+              disabled={callDisabled || disabled}
+            />
             {newBanner ? (
               <span className="rounded-full bg-accent px-2 py-0.5 text-[11px] font-semibold text-accent-foreground">
                 New

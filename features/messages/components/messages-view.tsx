@@ -15,6 +15,7 @@ import { useOps } from "@/features/ops/ops-provider";
 import { useAgentMe } from "@/features/agents/hooks";
 import {
   canMessageClient,
+  canCallClient,
   isFailedOrCancelled,
   messageClientHint,
 } from "@/features/tasks/lib/workflow";
@@ -607,13 +608,13 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
                       customerName={task.customerName}
                       taskTitle={task.title}
                       taskNumber={task.number}
-                      disabled={!canMessageClient(task)}
+                      disabled={!canCallClient(task)}
                     />
                     <Link
                       href={ROUTES.taskPanel(task.id, "chat")}
                       className="text-[12px] font-semibold text-accent hover:text-accent-hover"
                     >
-                      Open workspace
+                      Open task
                     </Link>
                   </div>
                 </div>
@@ -661,6 +662,7 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
                     }
                     disabled={!canMessageClient(task)}
                     disabledHint={messageClientHint(task)}
+                    callDisabled={!canCallClient(task)}
                     onThreadUpdate={handleSelectedThreadUpdate}
                   />
                 ) : null}

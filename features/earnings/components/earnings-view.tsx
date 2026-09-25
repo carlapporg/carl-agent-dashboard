@@ -1,9 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import {
+  useMemo,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { useQuery } from "@tanstack/react-query";
 import { EmptyState } from "@/components/feedback/empty-state";
+import { MetricStatCard } from "@/features/dashboard/components/metric-stat-card";
 import {
   getEarningsLedgerAction,
   getEarningsSummaryAction,
@@ -37,7 +43,16 @@ function formatMoney(dollars: number): string {
   }).format(dollars);
 }
 
-/** Only used when the API did not send a dollar field. */
+/** Compact money for metric cards (keeps type hierarchy readable). */
+function formatMoneyShort(dollars: number): string {
+  if (!Number.isFinite(dollars)) return "—";
+  return new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: dollars % 1 === 0 ? 0 : 2,
+  }).format(dollars);
+}
+
 function dollarsFromCents(cents: number): number {
   return cents / 100;
 }
@@ -102,39 +117,39 @@ function tipStatusHint(status: string): string {
   }
 }
 
-function Card({
-  label,
-  value,
-  hint,
-  emphasize,
+function MetricIcon({ src }: { src: string }) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={src} alt="" width={26} height={26} className="size-[26px]" />
+  );
+}
+
+function SectionCard({
+  title,
+  description,
+  action,
+  children,
 }: {
-  label: string;
-  value: string;
-  hint?: string;
-  emphasize?: boolean;
+  title: string;
+  description?: string;
+  action?: ReactNode;
+  children: ReactNode;
 }) {
   return (
-    <div className="rounded-[var(--radius-card)] border border-border bg-surface p-4 shadow-[var(--shadow-card)] sm:p-5">
-      <p
-        className={cn(
-          "font-bold tracking-[-0.02em] text-foreground",
-          emphasize ? "text-base sm:text-lg" : "text-sm",
-        )}
-      >
-        {label}
-      </p>
-      <p
-        className={cn(
-          "mt-2 font-normal leading-none tracking-tight text-foreground",
-          emphasize
-            ? "text-[28px] sm:text-[32px]"
-            : "text-[22px] sm:text-[26px]",
-        )}
-      >
-        {value}
-      </p>
-      {hint ? <p className="mt-3 text-sm text-muted">{hint}</p> : null}
-    </div>
+    <section className="overflow-hidden rounded-[15px] border border-border bg-surface shadow-[var(--shadow-card)]">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-4 md:px-5">
+        <div className="min-w-0">
+          <h2 className="text-[18px] font-semibold tracking-[-0.04em] text-foreground">
+            {title}
+          </h2>
+          {description ? (
+            <p className="mt-0.5 text-[12px] text-muted">{description}</p>
+          ) : null}
+        </div>
+        {action}
+      </div>
+      {children}
+    </section>
   );
 }
 
@@ -201,35 +216,43 @@ export function EarningsView() {
     tipsQuery.isFetching ||
     rateQuery.isFetching;
 
+  const hourlyRate = rateQuery.data
+    ? formatMoney(rateDollars(rateQuery.data.current))
+    : "—";
+
   return (
     <div className="space-y-6">
       <header className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+          <h1 className="text-[28px] font-semibold tracking-[-0.05em] text-foreground">
             Earnings
           </h1>
+          <p className="mt-1 text-sm text-muted">
+            Payroll status, pay breakdown, and tips for the selected range.
+          </p>
         </div>
-        <div className="flex w-fit max-w-full flex-wrap items-end gap-3">
-          <label className="flex w-[9.75rem] shrink-0 flex-col gap-1.5">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.04em] text-muted">
+        <div className="flex w-fit max-w-full flex-wrap items-end gap-2 rounded-[40px] border border-border bg-surface px-3 py-2 shadow-[var(--shadow-card)] sm:gap-3 sm:px-4">
+          <label className="flex w-[9.5rem] shrink-0 flex-col gap-1">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.06em] text-muted-dim">
               From
             </span>
             <input
               type="date"
               value={from}
               onChange={(event) => setFrom(event.target.value)}
-              className="box-border h-10 w-full rounded-[var(--radius-md)] border border-border bg-surface px-2.5 text-sm text-foreground"
+              className="box-border h-8 w-full border-0 bg-transparent p-0 text-sm font-medium text-foreground outline-none"
             />
           </label>
-          <label className="flex w-[9.75rem] shrink-0 flex-col gap-1.5">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.04em] text-muted">
+          <span className="mb-1.5 hidden h-6 w-px bg-border sm:block" aria-hidden />
+          <label className="flex w-[9.5rem] shrink-0 flex-col gap-1">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.06em] text-muted-dim">
               To
             </span>
             <input
               type="date"
               value={to}
               onChange={(event) => setTo(event.target.value)}
-              className="box-border h-10 w-full rounded-[var(--radius-md)] border border-border bg-surface px-2.5 text-sm text-foreground"
+              className="box-border h-8 w-full border-0 bg-transparent p-0 text-sm font-medium text-foreground outline-none"
             />
           </label>
           <button
@@ -241,9 +264,17 @@ export function EarningsView() {
               void tipsQuery.refetch();
               void rateQuery.refetch();
             }}
-            className="inline-flex h-9 w-auto shrink-0 items-center justify-center rounded-[var(--radius-md)] border border-border bg-surface px-3 text-xs font-semibold text-foreground hover:bg-surface-hover disabled:opacity-50"
+            className="inline-flex h-[35px] shrink-0 items-center gap-1.5 rounded-[40px] bg-accent-soft px-4 text-[12px] font-medium tracking-[-0.05em] text-accent hover:bg-accent/15 disabled:opacity-50"
           >
-            {isFetching ? "…" : "Refresh"}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/figma/payments/refresh-04.svg"
+              alt=""
+              width={14}
+              height={14}
+              className={cn("size-3.5", isFetching && "animate-spin")}
+            />
+            {isFetching ? "Refreshing" : "Refresh"}
           </button>
         </div>
       </header>
@@ -253,11 +284,11 @@ export function EarningsView() {
       ) : null}
 
       {!rangeError && summaryQuery.isPending && !summary ? (
-        <div className="grid gap-4 sm:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, index) => (
+        <div className="grid gap-[25px] sm:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, index) => (
             <div
               key={index}
-              className="h-28 animate-pulse rounded-[var(--radius-card)] border border-border bg-surface-muted"
+              className="h-[150px] animate-pulse rounded-[10px] border border-border bg-surface-muted"
             />
           ))}
         </div>
@@ -277,98 +308,115 @@ export function EarningsView() {
       {summary ? (
         <>
           {summary.source === "ledger_plus_preview" ? (
-            <p className="rounded-[var(--radius-md)] border border-warning bg-warning-soft px-4 py-3 text-sm text-warning-foreground">
+            <p className="rounded-[40px] border border-warning bg-warning-soft px-4 py-3 text-sm text-warning-foreground">
               Estimated. This month is not closed yet.
             </p>
           ) : null}
 
-          <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Card
-              label="Pending"
-              value={formatMoney(summary.payroll.pending)}
-              hint="Earned but not yet approved"
-              emphasize
-            />
-            <Card
-              label="Approved"
-              value={formatMoney(summary.payroll.approved)}
-              hint="Approved but not yet paid"
-              emphasize
-            />
-            <Card
-              label="Paid"
-              value={formatMoney(summary.payroll.paid)}
-              hint="Payment marked as paid"
-              emphasize
-            />
-          </section>
-
-          <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Card
+          {/* Hero metrics — match Payments overview cards */}
+          <div className="grid gap-[25px] sm:grid-cols-2 xl:grid-cols-4">
+            <MetricStatCard
               label="Gross"
-              value={formatMoney(summary.gross)}
-              hint="Total of all earned amounts"
+              value={formatMoneyShort(summary.gross)}
+              hint="Total earned this range"
+              icon={<MetricIcon src="/figma/payments/coin-dollar.svg" />}
+              variant="featured"
+              className="dash-slide-in"
+              style={{ animationDelay: "0ms" } as CSSProperties}
             />
-            <Card
-              label="Hours"
-              value={formatHours(summary.hoursWorked)}
-              hint="Includes Available and Busy hours only"
+            <MetricStatCard
+              label="Pending"
+              value={formatMoneyShort(summary.payroll.pending)}
+              hint="Earned, not approved yet"
+              icon={<MetricIcon src="/figma/payments/refresh-04.svg" />}
+              variant="plain"
+              className="dash-slide-in"
+              style={{ animationDelay: "60ms" } as CSSProperties}
             />
-            <Card
-              label="Hourly rate"
-              value={formatMoney(summary.hourlyRate)}
-              hint="—"
+            <MetricStatCard
+              label="Approved"
+              value={formatMoneyShort(summary.payroll.approved)}
+              hint="Approved, waiting payout"
+              icon={<MetricIcon src="/figma/dashboard/check-square-02.svg" />}
+              variant="plainCyan"
+              className="dash-slide-in"
+              style={{ animationDelay: "120ms" } as CSSProperties}
             />
-          </section>
+            <MetricStatCard
+              label="Paid"
+              value={formatMoneyShort(summary.payroll.paid)}
+              hint="Already marked paid"
+              icon={<MetricIcon src="/figma/payments/wallet-01.svg" />}
+              variant="plainGreen"
+              className="dash-slide-in"
+              style={{ animationDelay: "180ms" } as CSSProperties}
+            />
+          </div>
 
-          <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {/* Breakdown strip */}
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             {[
-              { label: "Wages", value: summary.earned.wages, hint: "Hourly pay only. Tips are excluded." },
-              { label: "Tips", value: summary.earned.tips, hint: "Separate from wages" },
-              { label: "Bonuses", value: summary.earned.bonuses, hint: "Additional compensation" },
-              { label: "Adjustments", value: summary.earned.adjustments, hint: "Manual corrections" },
-              { label: "Reimbursements", value: summary.earned.reimbursements, hint: "Eligible expenses reimbursed" },
-              { label: "Penalties", value: summary.earned.penalties, hint: "Amounts deducted" },
+              {
+                label: "Wages",
+                value: formatMoney(summary.earned.wages),
+                hint: "Hourly pay",
+              },
+              {
+                label: "Tips",
+                value: formatMoney(summary.earned.tips),
+                hint: "Customer tips",
+              },
+              {
+                label: "Bonuses",
+                value: formatMoney(summary.earned.bonuses),
+                hint: "Extra pay",
+              },
+              {
+                label: "Hours",
+                value: formatHours(summary.hoursWorked),
+                hint: "Available + Busy",
+              },
+              {
+                label: "Rate",
+                value: rateQuery.isPending ? "…" : `${hourlyRate}/hr`,
+                hint: "Current hourly",
+              },
             ].map((item) => (
-              <Card
+              <div
                 key={item.label}
-                label={item.label}
-                value={formatMoney(item.value)}
-                hint={item.hint}
-              />
+                className="rounded-[12px] border border-border bg-surface px-4 py-3.5 shadow-[var(--shadow-card)]"
+              >
+                <p className="text-[12px] font-medium tracking-[-0.03em] text-muted">
+                  {item.label}
+                </p>
+                <p className="mt-1.5 text-[22px] font-semibold tabular-nums tracking-[-0.04em] text-foreground">
+                  {item.value}
+                </p>
+                <p className="mt-1 text-[11px] text-muted-dim">{item.hint}</p>
+              </div>
             ))}
-          </section>
-        </>
-      ) : null}
+          </div>
 
-      <section className="overflow-hidden rounded-[var(--radius-card)] border border-border bg-surface shadow-[var(--shadow-card)]">
-        <div className="border-b border-border px-4 py-3">
-          <h2 className="text-sm font-semibold text-foreground">Hourly rate</h2>
-        </div>
-        {rateQuery.isError ? (
-          <p className="px-4 py-6 text-sm text-muted">
-            {rateQuery.error instanceof Error
-              ? rateQuery.error.message
-              : "Can't load the rate."}
-          </p>
-        ) : rateQuery.data ? (
-          <div className="space-y-4 px-4 py-4">
-            <p className="text-lg font-normal text-foreground">
-              {formatMoney(rateDollars(rateQuery.data.current))}
-            </p>
-            {rateQuery.data.history.length > 0 ? (
-              <ul className="divide-y divide-border border-t border-border">
+          {rateQuery.data && rateQuery.data.history.length > 0 ? (
+            <SectionCard
+              title="Hourly rate history"
+              description="Past rates that applied in your account."
+            >
+              <ul className="divide-y divide-border">
                 {rateQuery.data.history.map((row, index) => (
                   <li
                     key={`${row.effectiveFrom ?? "rate"}-${index}`}
-                    className="flex flex-col gap-1 py-3 sm:flex-row sm:items-center sm:justify-between"
+                    className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-center sm:justify-between md:px-5"
                   >
                     <div>
-                      <p className="text-sm font-semibold text-foreground">
+                      <p className="text-sm font-semibold tabular-nums text-foreground">
                         {formatMoney(rateDollars(row))}
+                        <span className="ml-1 text-xs font-medium text-muted">
+                          /hr
+                        </span>
                       </p>
                       {row.note ? (
-                        <p className="text-[12px] text-muted">{row.note}</p>
+                        <p className="mt-0.5 text-[12px] text-muted">{row.note}</p>
                       ) : null}
                     </div>
                     <p className="text-[12px] text-muted">
@@ -378,25 +426,23 @@ export function EarningsView() {
                   </li>
                 ))}
               </ul>
-            ) : null}
-          </div>
-        ) : (
-          <p className="px-4 py-6 text-sm text-muted">Loading rate…</p>
-        )}
-      </section>
+            </SectionCard>
+          ) : null}
+        </>
+      ) : null}
 
-      <section className="overflow-hidden rounded-[var(--radius-card)] border border-border bg-surface shadow-[var(--shadow-card)]">
-        <div className="border-b border-border px-4 py-3">
-          <h2 className="text-sm font-semibold text-foreground">Ledger</h2>
-        </div>
+      <SectionCard
+        title="Ledger"
+        description="Wage, tip, and bonus lines for this range."
+      >
         {ledgerQuery.isError ? (
-          <p className="px-4 py-6 text-sm text-muted">
+          <p className="px-4 py-6 text-sm text-muted md:px-5">
             {ledgerQuery.error instanceof Error
               ? ledgerQuery.error.message
               : "Can't load the ledger."}
           </p>
         ) : ledgerRows.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm text-muted">
+          <p className="px-4 py-10 text-center text-sm text-muted md:px-5">
             No ledger lines for this period.
           </p>
         ) : (
@@ -404,7 +450,7 @@ export function EarningsView() {
             {ledgerRows.map((row) => (
               <li
                 key={row.id}
-                className="flex flex-col gap-1 border-b border-border px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
+                className="flex flex-col gap-1 border-b border-border px-4 py-3.5 last:border-b-0 sm:flex-row sm:items-center sm:justify-between md:px-5"
               >
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
@@ -433,34 +479,31 @@ export function EarningsView() {
                       ? ` · ${formatMoney(row.hourlyRate)}/h`
                       : ""}
                   </p>
-                  <p className="mt-0.5 text-[11px] text-muted">
+                  <p className="mt-0.5 text-[11px] text-muted-dim">
                     {formatStamp(row.createdAt)}
                   </p>
                 </div>
-                <p className="shrink-0 text-sm font-normal tabular-nums text-foreground">
+                <p className="shrink-0 text-sm font-semibold tabular-nums text-foreground">
                   {formatMoney(row.amount)}
                 </p>
               </li>
             ))}
           </ul>
         )}
-      </section>
+      </SectionCard>
 
-      <section className="overflow-hidden rounded-[var(--radius-card)] border border-border bg-surface shadow-[var(--shadow-card)]">
-        <div className="border-b border-border px-4 py-3">
-          <h2 className="text-sm font-semibold text-foreground">Tips</h2>
-          <p className="mt-0.5 text-[11px] text-muted">
-            Customer tips. These are not added into the wage line.
-          </p>
-        </div>
+      <SectionCard
+        title="Tips"
+        description="Customer tips. Not included in the wage line."
+      >
         {tipsQuery.isError ? (
-          <p className="px-4 py-6 text-sm text-muted">
+          <p className="px-4 py-6 text-sm text-muted md:px-5">
             {tipsQuery.error instanceof Error
               ? tipsQuery.error.message
               : "Can't load tips."}
           </p>
         ) : !tipsQuery.data || tipsQuery.data.tips.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm text-muted">
+          <p className="px-4 py-10 text-center text-sm text-muted md:px-5">
             No tips in this period.
           </p>
         ) : (
@@ -470,7 +513,7 @@ export function EarningsView() {
             ))}
           </ul>
         )}
-      </section>
+      </SectionCard>
     </div>
   );
 }
@@ -478,7 +521,7 @@ export function EarningsView() {
 function TipRow({ tip }: { tip: EarningsTip }) {
   const hint = tipStatusHint(tip.status);
   return (
-    <li className="flex flex-col gap-1 border-b border-border px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
+    <li className="flex flex-col gap-1 border-b border-border px-4 py-3.5 last:border-b-0 sm:flex-row sm:items-center sm:justify-between md:px-5">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <Link
@@ -495,12 +538,12 @@ function TipRow({ tip }: { tip: EarningsTip }) {
         {tip.note ? (
           <p className="mt-1 text-sm text-foreground">{tip.note}</p>
         ) : null}
-        <p className="mt-0.5 text-[11px] text-muted">
+        <p className="mt-0.5 text-[11px] text-muted-dim">
           {formatStamp(tip.createdAt)}
           {tip.paidOutAt ? ` · Paid out ${formatStamp(tip.paidOutAt)}` : ""}
         </p>
       </div>
-      <p className="shrink-0 text-sm font-normal tabular-nums text-foreground">
+      <p className="shrink-0 text-sm font-semibold tabular-nums text-foreground">
         {formatMoney(tip.amount)}
       </p>
     </li>

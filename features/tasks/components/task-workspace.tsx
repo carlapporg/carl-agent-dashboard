@@ -26,7 +26,6 @@ import { TaskConfirmationPanel } from "@/features/tasks/components/task-confirma
 import { VenueSuggestionsPanel } from "@/features/tasks/components/venue-suggestions-panel";
 import { BookingPaymentPanel } from "@/features/tasks/components/booking-payment-panel";
 import { TaskCustomerSnippet } from "@/features/tasks/components/task-customer-snippet";
-import { TaskFacts } from "@/features/tasks/components/task-facts";
 import { PageChromeSetter } from "@/features/shell/page-chrome";
 import { taskDisplayCode, taskDisplayTitle } from "@/lib/tasks/details";
 import {
@@ -40,6 +39,7 @@ import { CompleteTaskReceiptDialog } from "@/features/tasks/components/complete-
 import { TaskSubtasks } from "@/features/tasks/components/task-subtasks";
 import {
   canCompleteTask,
+  canCallClient,
   canMessageClient,
   canStartTask,
   canUpdateAgentStatus,
@@ -499,8 +499,6 @@ export function TaskWorkspace({
         <div className="grid gap-5 xl:grid-cols-[minmax(0,455px)_minmax(0,1fr)] xl:items-start">
           {/* Left — Figma: confirmation summary + editable task details */}
           <div className="space-y-5">
-            <TaskFacts task={task} />
-
             <VenueSuggestionsPanel task={task} />
 
             <TaskConfirmationPanel
@@ -697,6 +695,7 @@ export function TaskWorkspace({
                 clientLabel={task.customerName}
                 disabled={!canMessageClient(task)}
                 disabledHint={messageClientHint(task)}
+                callDisabled={!canCallClient(task)}
               />
             </div>
           </div>

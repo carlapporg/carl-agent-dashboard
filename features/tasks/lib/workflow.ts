@@ -326,19 +326,23 @@ export function isFailedOrCancelled(task: Task): boolean {
 
 export function canMessageClient(task: Task): boolean {
   if (isOfferOpen(task)) return false;
+  if (task.backendStatus === "REJECTED") return false;
+  return true;
+}
+
+/** Calls stay closed after the task is finished; chat can still stay open. */
+export function canCallClient(task: Task): boolean {
+  if (!canMessageClient(task)) return false;
   if (task.backendStatus === "COMPLETED" || task.status === "completed") {
     return false;
   }
-  if (task.backendStatus === "REJECTED") return false;
+  if (isFailedOrCancelled(task)) return false;
   return true;
 }
 
 export function messageClientHint(task: Task): string | undefined {
   if (isOfferOpen(task)) {
     return "Accept the offer before messaging the client.";
-  }
-  if (task.backendStatus === "COMPLETED" || task.status === "completed") {
-    return "This task is completed, so messages cannot be sent.";
   }
   if (task.backendStatus === "REJECTED") {
     return "This offer was rejected, so messages cannot be sent.";

@@ -1,4 +1,5 @@
 import type { TaskPayment, TaskPaymentStatus } from "@/types/task-payment";
+import { isTaskPaymentUuid } from "@/types/task-payment";
 
 const KEY = "carl.agent.task-payments";
 
@@ -36,6 +37,7 @@ function writeAll(map: Record<string, StoredPayment>) {
 }
 
 export function rememberTaskPayment(payment: TaskPayment) {
+  if (!isTaskPaymentUuid(payment.id)) return;
   const map = readAll();
   map[payment.taskId] = {
     taskId: payment.taskId,
@@ -58,7 +60,7 @@ export function patchStoredTaskPayment(
   const map = readAll();
   const prev = map[taskId];
   const paymentId = patch.paymentId ?? prev?.paymentId;
-  if (!paymentId) return;
+  if (!isTaskPaymentUuid(paymentId)) return;
   map[taskId] = {
     taskId,
     paymentId,
@@ -74,7 +76,14 @@ export function patchStoredTaskPayment(
 }
 
 export function readStoredTaskPayment(taskId: string): StoredPayment | null {
-  return readAll()[taskId] ?? null;
+  const row = readAll()[taskId] ?? null;
+  if (!row) return null;
+  // Drop corrupted dummy ids (notification / Stripe) so reveal can recover.
+  if (!isTaskPaymentUuid(row.paymentId)) {
+    clearStoredTaskPayment(taskId);
+    return null;
+  }
+  return row;
 }
 
 export function clearStoredTaskPayment(taskId: string) {

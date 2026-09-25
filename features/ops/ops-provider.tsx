@@ -85,6 +85,8 @@ import {
   readStoredTaskPayment,
 } from "@/lib/tasks/task-payment-store";
 import {
+  isTaskPaymentUuid,
+  last4FromPaymentText,
   mergePaymentStatus,
   parseTaskPaymentPayload,
   type TaskPaymentStatus,
@@ -1089,9 +1091,15 @@ export function AgentOpsProvider({
       const parsed = parseTaskPaymentPayload(payload);
       if (!parsed?.taskId) return;
       const stored = readStoredTaskPayment(parsed.taskId);
-      const paymentId = parsed.paymentId || stored?.paymentId;
-      if (!paymentId) return;
       const prevLive = paymentsByTaskIdRef.current[parsed.taskId];
+      // Prefer a real payment UUID. Never let notification/Stripe ids overwrite it.
+      const paymentId =
+        (isTaskPaymentUuid(parsed.paymentId) ? parsed.paymentId : undefined) ||
+        (isTaskPaymentUuid(stored?.paymentId) ? stored.paymentId : undefined) ||
+        (isTaskPaymentUuid(prevLive?.paymentId)
+          ? prevLive.paymentId
+          : undefined);
+      if (!paymentId) return;
       const status = mergePaymentStatus(
         prevLive?.status ?? stored?.status,
         statusHint ?? parsed.status,
@@ -1365,10 +1373,20 @@ export function AgentOpsProvider({
       const item = parseNotificationPayload(payload);
       // Feed often arrives when socket card_ready was missed — sync booking panel.
       if (
-        item?.kind === "payment_approved" ||
-        (item?.title ?? "").toLowerCase().includes("virtual card")
+        item &&
+        (item.kind === "payment_approved" ||
+          item.title.toLowerCase().includes("virtual card"))
       ) {
-        onTaskPaymentEvent(payload, "card_issued");
+        // Pass taskId/last4 explicitly — raw notification `id` is NOT paymentId.
+        onTaskPaymentEvent(
+          {
+            taskId: item.taskId,
+            last4: last4FromPaymentText(`${item.title} ${item.body}`),
+            status: "card_issued",
+            data: payload,
+          },
+          "card_issued",
+        );
       }
       if (!item) return;
       const api = notificationsRef.current;

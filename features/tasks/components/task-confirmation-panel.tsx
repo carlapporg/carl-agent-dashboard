@@ -7,7 +7,6 @@ import {
 } from "@/features/tasks/actions/task-actions";
 import { ConfirmationBackendPreview } from "@/features/tasks/components/confirmation-backend-preview";
 import { ConfirmationSchemaFields } from "@/features/tasks/components/confirmation-schema-fields";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,7 +23,6 @@ import {
   canSendTaskConfirmation,
   computeLineItemsSubtotal,
   computeSuggestedConfirmationCost,
-  confirmationStatusLabel,
   fieldInputType,
   isConfirmationConfirmed,
   isConfirmationDraft,
@@ -55,30 +53,37 @@ type TaskConfirmationPanelProps = {
   onSent?: (confirmation: TaskConfirmation) => void;
 };
 
-function statusVariant(
-  status: TaskConfirmation["status"],
-): "warning" | "success" | "danger" | "muted" | "info" {
-  if (status === "DRAFT") return "info";
-  if (status === "PENDING") return "warning";
-  if (status === "CONFIRMED") return "success";
-  if (status === "DECLINED") return "danger";
-  return "muted";
+type FlowStep = "initial" | "waiting" | "approved";
+
+const FLOW_STEPS: Array<{ id: FlowStep; label: string }> = [
+  { id: "initial", label: "Initial" },
+  { id: "waiting", label: "Waiting for client" },
+  { id: "approved", label: "Approved" },
+];
+
+function flowStep(confirmation: TaskConfirmation | null): FlowStep {
+  if (isConfirmationConfirmed(confirmation)) return "approved";
+  if (isConfirmationPending(confirmation)) return "waiting";
+  return "initial";
 }
 
-function statusHelp(status: TaskConfirmation["status"]): string {
-  if (status === "DRAFT") {
-    return "Preview ready. Send it to the customer, or edit the fields and send again.";
+function stepHelp(
+  step: FlowStep,
+  confirmation: TaskConfirmation | null,
+): string {
+  if (confirmation?.status === "DECLINED") {
+    return "The client declined. Edit the details and send again.";
   }
-  if (status === "PENDING") {
-    return "Waiting for the customer to approve or reject the details.";
+  if (step === "waiting") {
+    return "Waiting for the customer to approve or reject.";
   }
-  if (status === "CONFIRMED") {
-    return "The client approved the details. Click Complete Task to upload the receipt and finish.";
+  if (step === "approved") {
+    return "Client approved. Click Complete Task to upload the receipt and finish.";
   }
-  if (status === "DECLINED") {
-    return "The client declined. Edit the details below and send again.";
+  if (isConfirmationDraft(confirmation)) {
+    return "Draft ready. Send it to the customer, or edit and send again.";
   }
-  return "This request was replaced by a newer one.";
+  return "Add or edit details, then send confirmation to the client.";
 }
 
 export function TaskConfirmationPanel({
@@ -109,6 +114,7 @@ export function TaskConfirmationPanel({
   const waiting = isConfirmationPending(confirmation);
   const approved = isConfirmationConfirmed(confirmation);
   const declined = confirmation?.status === "DECLINED";
+  const step = flowStep(confirmation);
 
   // Editable form: open by default until sent/pending; reopen on decline/draft/edit.
   const showEditableForm =
@@ -268,59 +274,84 @@ export function TaskConfirmationPanel({
     });
   }
 
+  const stepIndex = FLOW_STEPS.findIndex((s) => s.id === step);
+
   return (
     <section
       id="panel-confirmation"
       className="overflow-hidden rounded-[15px] border border-border bg-surface p-5 shadow-(--shadow-card)"
     >
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <h2 className="text-[24px] font-semibold tracking-[-0.05em] text-foreground">
-            Task details
-          </h2>
-          <p className="mt-2 text-[16px] font-normal leading-[1.3] tracking-[-0.04em] text-muted">
-            Add client details here, if the client asks to change them. Changes
-            are sent on the confirmation draft.
-          </p>
-        </div>
-        {confirmation ? (
-          <Badge variant={statusVariant(confirmation.status)}>
-            {confirmationStatusLabel(confirmation.status)}
-          </Badge>
-        ) : null}
+      <div className="min-w-0">
+        <h2 className="text-[24px] font-semibold tracking-[-0.05em] text-foreground">
+          Task details
+        </h2>
+        <p className="mt-2 text-[16px] font-normal leading-[1.3] tracking-[-0.04em] text-muted">
+          One place for client details. Status moves as you send and they reply.
+        </p>
       </div>
 
-      {confirmation ? (
-        <div
-          className={cn(
-            "mt-4 rounded-xl border px-4 py-3",
-            isDraft &&
-              "border-sky-200 bg-sky-50 dark:border-sky-500/40 dark:bg-sky-500/10",
-            waiting &&
-              "border-amber-200 bg-amber-50 dark:border-amber-500/40 dark:bg-amber-500/10",
-            approved &&
-              "border-emerald-200 bg-emerald-50 dark:border-emerald-500/40 dark:bg-emerald-500/10",
-            declined &&
-              "border-red-200 bg-red-50 dark:border-red-500/40 dark:bg-red-500/10",
-            confirmation.status === "SUPERSEDED" &&
-              "border-border bg-surface-hover",
-          )}
-        >
-          <p className="text-sm font-semibold text-foreground">
-            {isDraft
-              ? "Draft preview"
-              : waiting
-                ? "Waiting for Customer"
-                : confirmationStatusLabel(confirmation.status)}
-          </p>
-          <p className="mt-0.5 text-sm text-muted">
-            {statusHelp(confirmation.status)}
-          </p>
-          <ConfirmationBackendPreview
-            confirmation={confirmation}
-            className="mt-3"
-          />
-          {isDraft && canSend && !showEditableForm ? (
+      {/* Single card flow: Initial → Waiting → Approved */}
+      <ol className="mt-5 flex items-center gap-0">
+        {FLOW_STEPS.map((item, index) => {
+          const done = index < stepIndex;
+          const active = index === stepIndex;
+          return (
+            <li key={item.id} className="flex min-w-0 flex-1 items-center">
+              <div className="flex min-w-0 flex-col items-center gap-1.5 text-center">
+                <span
+                  className={cn(
+                    "flex size-7 items-center justify-center rounded-full text-[12px] font-bold",
+                    done && "bg-accent text-accent-foreground",
+                    active &&
+                      !declined &&
+                      "bg-accent text-accent-foreground ring-4 ring-accent/20",
+                    active &&
+                      declined &&
+                      "bg-danger text-white ring-4 ring-danger/20",
+                    !done &&
+                      !active &&
+                      "bg-surface-muted text-muted-dim",
+                  )}
+                  aria-current={active ? "step" : undefined}
+                >
+                  {done ? "✓" : index + 1}
+                </span>
+                <span
+                  className={cn(
+                    "max-w-[6.5rem] text-[11px] font-semibold leading-tight tracking-[-0.02em]",
+                    active || done ? "text-foreground" : "text-muted-dim",
+                  )}
+                >
+                  {item.label}
+                </span>
+              </div>
+              {index < FLOW_STEPS.length - 1 ? (
+                <span
+                  className={cn(
+                    "mb-5 mx-1 h-0.5 min-w-[12px] flex-1 rounded-full",
+                    index < stepIndex ? "bg-accent" : "bg-border",
+                  )}
+                  aria-hidden
+                />
+              ) : null}
+            </li>
+          );
+        })}
+      </ol>
+
+      <p
+        className={cn(
+          "mt-4 text-sm",
+          declined ? "font-medium text-danger" : "text-muted",
+        )}
+      >
+        {stepHelp(step, confirmation)}
+      </p>
+
+      {confirmation && !showEditableForm ? (
+        <div className="mt-4 border-t border-border pt-4">
+          <ConfirmationBackendPreview confirmation={confirmation} />
+          {isDraft && canSend ? (
             <div className="mt-3">
               <Button
                 type="button"
@@ -346,7 +377,7 @@ export function TaskConfirmationPanel({
       ) : null}
 
       {showEditableForm ? (
-        <div className="mt-5 space-y-4">
+        <div className="mt-5 space-y-4 border-t border-border pt-4">
           {membershipLine ? (
             <div className="rounded-[10px] border border-accent/25 bg-accent/[0.06] px-3 py-2.5">
               <p className="text-xs font-semibold uppercase tracking-wide text-accent">

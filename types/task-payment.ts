@@ -118,6 +118,57 @@ export function canRevealTaskCard(status: TaskPaymentStatus): boolean {
   return status === "card_issued" || status === "spent";
 }
 
+/** Nest payment routes use ParseUUIDPipe on `:paymentId`. */
+const PAYMENT_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isTaskPaymentUuid(value: unknown): value is string {
+  return typeof value === "string" && PAYMENT_UUID_RE.test(value.trim());
+}
+
+/** Pull last4 from bodies like "Card •••• 0449 ready…". */
+export function last4FromPaymentText(text: string | null | undefined): string | null {
+  if (!text) return null;
+  const match = text.match(/••••\s*(\d{4})|·{4}\s*(\d{4})|\*{4}\s*(\d{4})/);
+  return match?.[1] ?? match?.[2] ?? match?.[3] ?? null;
+}
+
+function looksLikeNotificationRecord(data: Record<string, unknown>): boolean {
+  if (typeof data.kind === "string") return true;
+  if (typeof data.title === "string" && typeof data.body === "string") {
+    return true;
+  }
+  return false;
+}
+
+function looksLikePaymentRecord(data: Record<string, unknown>): boolean {
+  if (typeof data.paymentId === "string") return true;
+  if (typeof data.spendAmountCents === "number") return true;
+  if (typeof data.chargeAmountCents === "number") return true;
+  if (typeof data.spendDisplay === "string") return true;
+  if (typeof data.status === "string") {
+    return taskPaymentStatusSchema.safeParse(data.status).success;
+  }
+  return false;
+}
+
+function readPaymentIdCandidate(data: Record<string, unknown>): string | undefined {
+  if (typeof data.paymentId === "string" && data.paymentId.trim()) {
+    return data.paymentId.trim();
+  }
+  // Never treat notification `id` as payment id (dummy + live bug).
+  if (looksLikeNotificationRecord(data)) return undefined;
+  if (
+    typeof data.id === "string" &&
+    data.id.trim() &&
+    data.taskId &&
+    looksLikePaymentRecord(data)
+  ) {
+    return data.id.trim();
+  }
+  return undefined;
+}
+
 /** Forward-only payment status (never card_issued → captured). */
 const PAYMENT_STATUS_RANK: Record<TaskPaymentStatus, number> = {
   requires_payment: 0,
@@ -192,8 +243,11 @@ export function parseTaskPaymentPayload(payload: unknown): {
 
   for (const data of candidates) {
     if (!paymentId) {
-      if (typeof data.paymentId === "string") paymentId = data.paymentId;
-      else if (typeof data.id === "string" && data.taskId) paymentId = data.id;
+      const candidate = readPaymentIdCandidate(data);
+      // Keep Stripe ic_… / junk out of reveal URLs.
+      if (candidate && isTaskPaymentUuid(candidate)) {
+        paymentId = candidate;
+      }
     }
     if (!taskId && typeof data.taskId === "string") taskId = data.taskId;
     if (last4 == null && typeof data.last4 === "string") last4 = data.last4;
@@ -219,8 +273,7 @@ export function parseTaskPaymentPayload(payload: unknown): {
         : typeof root.title === "string"
           ? root.title
           : "";
-    const match = body.match(/••••\s*(\d{4})|·{4}\s*(\d{4})|\*{4}\s*(\d{4})/);
-    if (match) last4 = match[1] ?? match[2] ?? match[3] ?? null;
+    last4 = last4FromPaymentText(body);
   }
 
   if (!paymentId && !taskId) return null;

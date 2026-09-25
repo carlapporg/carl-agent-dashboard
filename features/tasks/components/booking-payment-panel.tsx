@@ -13,6 +13,7 @@ import {
   revealTaskPaymentCardAction,
 } from "@/features/tasks/actions/task-actions";
 import { useOps } from "@/features/ops/ops-provider";
+import { useNotifications } from "@/features/notifications/notification-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog, Dialog } from "@/components/ui/dialog";
@@ -33,11 +34,26 @@ import {
   dollarsToSpendCents,
   formatCardExp,
   formatPan,
+  isTaskPaymentUuid,
+  last4FromPaymentText,
   mergePaymentStatus,
   taskPaymentStatusLabel,
   type TaskPayment,
   type VirtualCardSecrets,
 } from "@/types/task-payment";
+
+function spendFromConfirmation(
+  confirmation: TaskConfirmation | null | undefined,
+): string {
+  if (!confirmation || !isConfirmationConfirmed(confirmation)) return "";
+  const raw = String(
+    confirmation.costDisplay || confirmation.cost || "",
+  ).trim();
+  if (!raw) return "";
+  // "USD 200", "$200.00", "200" → digits for the spend field
+  const match = raw.replace(/,/g, "").match(/(\d+(?:\.\d{1,2})?)/);
+  return match?.[1] ?? "";
+}
 
 type BookingPaymentPanelProps = {
   taskId: string;
@@ -93,8 +109,11 @@ export function BookingPaymentPanel({
 }: BookingPaymentPanelProps) {
   const { toast } = useToast();
   const ops = useOps();
+  const notifications = useNotifications();
   const [pending, startTransition] = useTransition();
-  const [spendDollars, setSpendDollars] = useState("");
+  const [spendDollars, setSpendDollars] = useState(() =>
+    spendFromConfirmation(confirmation),
+  );
   const [payment, setPayment] = useState<TaskPayment | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [revealOpen, setRevealOpen] = useState(false);
@@ -103,6 +122,13 @@ export function BookingPaymentPanel({
   const [revealPending, setRevealPending] = useState(false);
 
   const confirmed = isConfirmationConfirmed(confirmation);
+  const approvedSpend = spendFromConfirmation(confirmation);
+
+  // Use the client-approved confirmation total — no re-typing.
+  useEffect(() => {
+    if (!confirmed || !approvedSpend) return;
+    setSpendDollars(approvedSpend);
+  }, [confirmed, confirmation?.id, approvedSpend]);
 
   const applyPayment = useCallback((next: TaskPayment) => {
     setPayment(next);
@@ -165,7 +191,10 @@ export function BookingPaymentPanel({
     setPayment((prev) => {
       const nextStatus = mergePaymentStatus(prev?.status, live.status);
       const next: TaskPayment = {
-        id: live.paymentId || prev?.id || "",
+        id:
+          (isTaskPaymentUuid(live.paymentId) ? live.paymentId : undefined) ||
+          (isTaskPaymentUuid(prev?.id) ? prev.id : undefined) ||
+          "",
         taskId,
         confirmationId: prev?.confirmationId ?? confirmation?.id ?? null,
         userId: prev?.userId ?? "",
@@ -210,6 +239,48 @@ export function BookingPaymentPanel({
     liveForTask?.paymentId,
     taskId,
   ]);
+
+  // Dummy/live: bell "Virtual card ready" must flip the panel even if
+  // task.card_ready socket was missed or lacked paymentId.
+  useEffect(() => {
+    if (!payment || !isTaskPaymentUuid(payment.id)) return;
+    if (payment.status === "card_issued" || payment.status === "spent") return;
+    if (
+      payment.status !== "requires_payment" &&
+      payment.status !== "captured"
+    ) {
+      return;
+    }
+    const hit = notifications.items.find((item) => {
+      const isCard =
+        item.kind === "payment_approved" ||
+        item.title.toLowerCase().includes("virtual card");
+      if (!isCard) return false;
+      if (item.taskId) return item.taskId === taskId;
+      // Some dummy notifications omit taskId — apply while this task is waiting.
+      return true;
+    });
+    if (!hit) return;
+    const last4 = last4FromPaymentText(`${hit.title} ${hit.body}`);
+    setPayment((prev) => {
+      if (!prev || !isTaskPaymentUuid(prev.id)) return prev;
+      if (prev.status === "card_issued" || prev.status === "spent") return prev;
+      const next = {
+        ...prev,
+        status: mergePaymentStatus(prev.status, "card_issued"),
+        last4: last4 ?? prev.last4,
+        hasCard: true,
+        updatedAt: new Date().toISOString(),
+      };
+      rememberTaskPayment(next);
+      patchStoredTaskPayment(taskId, {
+        paymentId: next.id,
+        status: next.status,
+        last4: next.last4,
+      });
+      return next;
+    });
+  }, [notifications.items, payment, taskId]);
 
   useEffect(() => {
     if (!revealOpen) return;
@@ -265,6 +336,13 @@ export function BookingPaymentPanel({
 
   function onReveal() {
     if (!payment || !canRevealTaskCard(payment.status)) return;
+    if (!isTaskPaymentUuid(payment.id)) {
+      toast(
+        "Payment id missing. Request payment again on this task, then reveal.",
+        "error",
+      );
+      return;
+    }
     setRevealPending(true);
     startTransition(async () => {
       const result = await revealTaskPaymentCardAction(taskId, payment.id);
@@ -336,24 +414,28 @@ export function BookingPaymentPanel({
             </p>
           ) : null}
           <div className="max-w-[12rem]">
-            <Label htmlFor="booking-spend">Merchant spend ($)</Label>
+            <Label htmlFor="booking-spend">Booking total ($)</Label>
             <Input
               id="booking-spend"
               inputMode="decimal"
               placeholder="85.00"
               value={spendDollars}
-              onChange={(event) => setSpendDollars(event.target.value)}
+              readOnly
               disabled={disabled || pending}
               className="mt-1.5"
+              aria-readonly="true"
             />
           </div>
           <p className="text-xs text-muted">
-            Customer will be charged a bit more to cover card fees (~2.9% +
-            $0.30). You only spend up to the amount you enter.
+            {approvedSpend
+              ? `Locked to the client-approved total ($${approvedSpend}). Customer pays a bit more for card fees (~2.9% + $0.30).`
+              : "Waiting for an approved confirmation total. Customer pays a bit more for card fees (~2.9% + $0.30)."}
           </p>
           <Button
             type="submit"
-            disabled={disabled || pending || !spendDollars.trim()}
+            disabled={
+              disabled || pending || !spendDollars.trim() || !approvedSpend
+            }
             loading={pending}
           >
             Request payment
@@ -389,13 +471,13 @@ export function BookingPaymentPanel({
 
           <dl className="grid gap-2 text-sm sm:grid-cols-2">
             <div>
-              <dt className="text-xs text-muted">Your spend limit</dt>
+              <dt className="text-xs text-muted">Booking total</dt>
               <dd className="font-semibold text-foreground">
                 ${payment.spendDisplay}
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-muted">Customer pays</dt>
+              <dt className="text-xs text-muted">Customer charge</dt>
               <dd className="font-semibold text-foreground">
                 ${payment.chargeDisplay}
               </dd>
