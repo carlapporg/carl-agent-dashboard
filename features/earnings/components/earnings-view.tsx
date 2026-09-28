@@ -16,6 +16,7 @@ import {
   getEarningsTipsAction,
   getHourlyRateAction,
 } from "@/features/earnings/actions";
+import { PayRequestPanel } from "@/features/earnings/components/pay-request-panel";
 import { ROUTES } from "@/lib/constants/routes";
 import { queryKeys } from "@/lib/query/keys";
 import { cn } from "@/lib/utils/cn";
@@ -278,6 +279,8 @@ export function EarningsView() {
           </button>
         </div>
       </header>
+
+      <PayRequestPanel />
 
       {rangeError ? (
         <EmptyState title="Invalid range" description={rangeError} />

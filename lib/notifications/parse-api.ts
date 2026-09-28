@@ -15,12 +15,28 @@ const KINDS: NotificationKind[] = [
   "confirmation_declined",
   "receipt_accepted",
   "receipt_rejected",
+  "pay_sent",
 ];
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object"
     ? (value as Record<string, unknown>)
     : null;
+}
+
+function readPayId(record: Record<string, unknown>): string | undefined {
+  if (typeof record.payId === "string" && record.payId.trim()) {
+    return record.payId.trim();
+  }
+  const meta = asRecord(record.metadata);
+  if (meta && typeof meta.payId === "string" && meta.payId.trim()) {
+    return meta.payId.trim();
+  }
+  const pay = asRecord(record.pay);
+  if (pay && typeof pay.id === "string" && pay.id.trim()) {
+    return pay.id.trim();
+  }
+  return undefined;
 }
 
 export function unwrapNotificationList(data: unknown): unknown[] {
@@ -87,6 +103,7 @@ export function parseNotificationItem(row: unknown): NotificationItem | null {
     createdAt: record.createdAt,
     read: record.read === true,
     taskId: typeof record.taskId === "string" ? record.taskId : undefined,
+    payId: readPayId(record),
     panel:
       panel === "brief" ||
       panel === "chat" ||

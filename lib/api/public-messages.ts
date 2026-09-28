@@ -5,6 +5,8 @@ export const USER_MESSAGES = {
   passwordMinLength: "Password must be at least 8 characters",
   passwordMismatch: "Passwords do not match",
   firstNameRequired: "Please enter your first name",
+  dateOfBirthRequired: "Please enter your date of birth",
+  dateOfBirthInvalid: "Enter a real date of birth",
   emailTaken: "An account with this email already exists.",
   registerSuccess: "Account created successfully.",
   invalidCredentials: "Invalid email or password",

@@ -3,12 +3,14 @@
 import {
   useCallback,
   useEffect,
+  useRef,
   useState,
   useTransition,
   type FormEvent,
 } from "react";
 import {
   cancelTaskPaymentAction,
+  getOpenTaskPaymentAction,
   requestTaskPaymentAction,
   revealTaskPaymentCardAction,
 } from "@/features/tasks/actions/task-actions";
@@ -21,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/providers/toast-provider";
 import {
+  clearStoredTaskPayment,
   patchStoredTaskPayment,
   readStoredTaskPayment,
   rememberTaskPayment,
@@ -120,9 +123,27 @@ export function BookingPaymentPanel({
   const [secrets, setSecrets] = useState<VirtualCardSecrets | null>(null);
   const [secretsBlurred, setSecretsBlurred] = useState(false);
   const [revealPending, setRevealPending] = useState(false);
+  const closedPaymentIdRef = useRef<string | null>(null);
 
   const confirmed = isConfirmationConfirmed(confirmation);
   const approvedSpend = spendFromConfirmation(confirmation);
+
+  const applyPayment = useCallback((next: TaskPayment) => {
+    if (
+      next.status === "cancelled" ||
+      next.status === "failed" ||
+      next.status === "expired"
+    ) {
+      closedPaymentIdRef.current = next.id;
+      clearStoredTaskPayment(next.taskId);
+      setPayment(next);
+      return;
+    }
+    if (next.id !== closedPaymentIdRef.current) {
+      rememberTaskPayment(next);
+    }
+    setPayment(next);
+  }, []);
 
   // Use the client-approved confirmation total — no re-typing.
   useEffect(() => {
@@ -130,21 +151,22 @@ export function BookingPaymentPanel({
     setSpendDollars(approvedSpend);
   }, [confirmed, confirmation?.id, approvedSpend]);
 
-  const applyPayment = useCallback((next: TaskPayment) => {
-    setPayment(next);
-    rememberTaskPayment(next);
-    if (
-      next.status === "cancelled" ||
-      next.status === "failed" ||
-      next.status === "expired"
-    ) {
-      // Keep id in storage so relaunch still knows, but UI can dismiss.
-    }
-  }, []);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const result = await getOpenTaskPaymentAction(taskId);
+      if (cancelled || !result.ok || !result.payment) return;
+      applyPayment(result.payment);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [taskId, applyPayment]);
 
   useEffect(() => {
     const stored = readStoredTaskPayment(taskId);
     if (!stored) return;
+    if (stored.paymentId === closedPaymentIdRef.current) return;
     setPayment((current) => {
       const nextStatus = mergePaymentStatus(current?.status, stored.status);
       if (
@@ -189,6 +211,23 @@ export function BookingPaymentPanel({
     const live = liveForTask;
     if (!live) return;
     setPayment((prev) => {
+      if (
+        closedPaymentIdRef.current &&
+        live.paymentId === closedPaymentIdRef.current &&
+        live.status !== "cancelled" &&
+        live.status !== "failed" &&
+        live.status !== "expired"
+      ) {
+        return prev;
+      }
+      if (
+        prev &&
+        isTaskPaymentUuid(prev.id) &&
+        isTaskPaymentUuid(live.paymentId) &&
+        prev.id !== live.paymentId
+      ) {
+        return prev;
+      }
       const nextStatus = mergePaymentStatus(prev?.status, live.status);
       const next: TaskPayment = {
         id:
@@ -251,13 +290,21 @@ export function BookingPaymentPanel({
     ) {
       return;
     }
+    const paymentAt = new Date(payment.updatedAt || payment.createdAt).getTime();
     const hit = notifications.items.find((item) => {
       const isCard =
         item.kind === "payment_approved" ||
         item.title.toLowerCase().includes("virtual card");
       if (!isCard) return false;
-      if (item.taskId) return item.taskId === taskId;
-      // Some dummy notifications omit taskId — apply while this task is waiting.
+      if (item.taskId && item.taskId !== taskId) return false;
+      const hitAt = new Date(item.createdAt).getTime();
+      if (
+        Number.isFinite(hitAt) &&
+        Number.isFinite(paymentAt) &&
+        hitAt + 2000 < paymentAt
+      ) {
+        return false;
+      }
       return true;
     });
     if (!hit) return;
@@ -312,6 +359,15 @@ export function BookingPaymentPanel({
         return;
       }
       applyPayment(result.payment);
+      if (result.alreadyOpen) {
+        toast(
+          result.payment.status === "card_issued" || result.payment.hasCard
+            ? "This booking already has a card. Reveal it below."
+            : "This booking already has a payment. It is shown below.",
+          "success",
+        );
+        return;
+      }
       setSpendDollars("");
       toast("Payment requested. Waiting for the customer.", "success");
     });
@@ -326,11 +382,15 @@ export function BookingPaymentPanel({
         setConfirmCancel(false);
         return;
       }
-      applyPayment(result.payment);
+      applyPayment(
+        result.payment.status === "spent"
+          ? result.payment
+          : { ...result.payment, status: "cancelled", hasCard: false },
+      );
       setConfirmCancel(false);
       setRevealOpen(false);
       setSecrets(null);
-      toast("Payment request cancelled.", "success");
+      toast("Card cancelled. You can request payment again.", "success");
     });
   }
 
@@ -409,8 +469,8 @@ export function BookingPaymentPanel({
         <form className="mt-4 space-y-3" onSubmit={requestPayment}>
           {terminal && payment ? (
             <p className="text-sm text-muted">
-              Last request: {taskPaymentStatusLabel(payment.status)}. Start a
-              new one below.
+              Last request: {taskPaymentStatusLabel(payment.status)}. You can
+              request a new card below.
             </p>
           ) : null}
           <div className="max-w-[12rem]">
@@ -438,7 +498,7 @@ export function BookingPaymentPanel({
             }
             loading={pending}
           >
-            Request payment
+            {terminal ? "Request again" : "Request payment"}
           </Button>
         </form>
       ) : null}

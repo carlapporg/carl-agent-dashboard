@@ -50,6 +50,7 @@ export const registerCredentialsSchema = z.object({
     .trim()
     .optional()
     .transform((value) => value || undefined),
+  dateOfBirth: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
 
 export type RegisterCredentials = z.infer<typeof registerCredentialsSchema>;
@@ -63,6 +64,7 @@ export type RegisterFormState =
         confirmPassword?: string[];
         firstName?: string[];
         lastName?: string[];
+        dateOfBirth?: string[];
       };
       message?: string;
     }

@@ -55,6 +55,9 @@ export const queryKeys = {
     ledger: (range: { from: string; to: string }) =>
       [...queryKeys.earnings.all, "ledger", range] as const,
     hourlyRate: () => [...queryKeys.earnings.all, "hourly-rate"] as const,
+    payOptions: (day?: string) =>
+      [...queryKeys.earnings.all, "pay-options", day ?? ""] as const,
+    pay: (id: string) => [...queryKeys.earnings.all, "pay", id] as const,
   },
   payoutSettings: {
     all: ["payout-settings"] as const,

@@ -73,3 +73,30 @@ export async function getHourlyRateAction(): Promise<ActionResult<HourlyRate>> {
     return fail(error);
   }
 }
+
+export async function getPayOptionsAction(day?: string) {
+  try {
+    return { ok: true as const, data: await earningsApi.getPayOptions(day) };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function requestPayAction(
+  mode: "weekly" | "biweekly" | "monthly" | "daily",
+  day?: string,
+) {
+  try {
+    return { ok: true as const, data: await earningsApi.requestPay(mode, day) };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function getPayAction(payId: string) {
+  try {
+    return { ok: true as const, data: await earningsApi.getPay(payId) };
+  } catch (error) {
+    return fail(error);
+  }
+}

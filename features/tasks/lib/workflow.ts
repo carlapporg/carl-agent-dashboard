@@ -327,6 +327,14 @@ export function isFailedOrCancelled(task: Task): boolean {
 export function canMessageClient(task: Task): boolean {
   if (isOfferOpen(task)) return false;
   if (task.backendStatus === "REJECTED") return false;
+  if (
+    task.backendStatus === "FAILED" ||
+    task.backendStatus === "CANCELLED" ||
+    task.status === "failed" ||
+    task.status === "cancelled"
+  ) {
+    return false;
+  }
   return true;
 }
 
@@ -353,7 +361,7 @@ export function messageClientHint(task: Task): string | undefined {
     task.status === "failed" ||
     task.status === "cancelled"
   ) {
-    return "Tell the client why this task failed.";
+    return "This task is closed, so messages cannot be sent.";
   }
   return undefined;
 }
@@ -365,12 +373,12 @@ export function closedTaskMessage(task: Task): string {
     task.status === "failed" ||
     task.status === "cancelled"
   ) {
-    return "This task failed. You cannot start it, send confirmation, or change status. You can still message the client to explain why.";
+    return "This task is closed. You cannot message or change it.";
   }
   if (task.backendStatus === "REJECTED") {
     return "This offer was rejected. No further actions are available.";
   }
-  return "This task is completed. It is read-only.";
+  return "This task is completed. Work is closed. You can still message the client.";
 }
 
 /** @deprecated Prefer currentStageId — kept for progress bar. */

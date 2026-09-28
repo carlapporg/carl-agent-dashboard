@@ -90,6 +90,8 @@ export const API_ENDPOINTS = {
      */
     taskPayments: (taskId: string) =>
       `/agents/me/tasks/${taskId}/payments` as const,
+    taskPaymentCurrent: (taskId: string) =>
+      `/agents/me/tasks/${taskId}/payments/current` as const,
     taskPaymentCard: (taskId: string, paymentId: string) =>
       `/agents/me/tasks/${taskId}/payments/${paymentId}/card` as const,
     taskPaymentCancel: (taskId: string, paymentId: string) =>
@@ -160,6 +162,9 @@ export const API_ENDPOINTS = {
     earningsTips: "/agents/me/earnings/tips",
     earningsHourlyRate: "/agents/me/earnings/hourly-rate",
     earningsLedger: "/agents/me/earnings/ledger",
+    earningsPayOptions: "/agents/me/earnings/pay-options",
+    earningsPayRequests: "/agents/me/earnings/pay-requests",
+    earningsPay: (id: string) => `/agents/me/earnings/pays/${id}` as const,
     /** Agent payout / Stripe Connect + manual ACH bank. */
     payoutSettings: "/agents/me/payout-settings",
     payoutConnectLink: "/agents/me/payout-settings/connect-link",

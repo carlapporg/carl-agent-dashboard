@@ -69,6 +69,24 @@ export const registerFormSchema = z
       .max(100)
       .optional()
       .transform((value) => value || undefined),
+    dateOfBirth: z
+      .string()
+      .trim()
+      .min(1, USER_MESSAGES.dateOfBirthRequired)
+      .regex(/^\d{4}-\d{2}-\d{2}$/, USER_MESSAGES.dateOfBirthInvalid)
+      .refine((value) => {
+        const dob = new Date(`${value}T00:00:00.000Z`);
+        if (Number.isNaN(dob.getTime())) return false;
+        const today = new Date();
+        const todayUtc = new Date(
+          Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()),
+        );
+        if (dob.getTime() > todayUtc.getTime()) return false;
+        const oldest = new Date(
+          Date.UTC(today.getUTCFullYear() - 120, today.getUTCMonth(), today.getUTCDate()),
+        );
+        return dob.getTime() >= oldest.getTime();
+      }, USER_MESSAGES.dateOfBirthInvalid),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: USER_MESSAGES.passwordMismatch,
@@ -84,6 +102,7 @@ export function parseRegisterFormData(formData: FormData) {
     confirmPassword: String(formData.get("confirmPassword") ?? ""),
     firstName: String(formData.get("firstName") ?? ""),
     lastName: String(formData.get("lastName") ?? ""),
+    dateOfBirth: String(formData.get("dateOfBirth") ?? ""),
   });
 }
 
@@ -108,16 +127,38 @@ export function validateRegisterFirstName(value: string): string | undefined {
   return undefined;
 }
 
+export function validateRegisterDateOfBirth(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return USER_MESSAGES.dateOfBirthRequired;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return USER_MESSAGES.dateOfBirthInvalid;
+  }
+  const dob = new Date(`${trimmed}T00:00:00.000Z`);
+  if (Number.isNaN(dob.getTime())) return USER_MESSAGES.dateOfBirthInvalid;
+  const today = new Date();
+  const todayUtc = new Date(
+    Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()),
+  );
+  if (dob.getTime() > todayUtc.getTime()) return USER_MESSAGES.dateOfBirthInvalid;
+  const oldest = new Date(
+    Date.UTC(today.getUTCFullYear() - 120, today.getUTCMonth(), today.getUTCDate()),
+  );
+  if (dob.getTime() < oldest.getTime()) return USER_MESSAGES.dateOfBirthInvalid;
+  return undefined;
+}
+
 export function isRegisterFormValid(
   email: string,
   password: string,
   confirmPassword: string,
   firstName: string,
+  dateOfBirth: string,
 ): boolean {
   return (
     validateRegisterEmail(email) === undefined &&
     validateRegisterPassword(password) === undefined &&
     validateRegisterConfirmPassword(password, confirmPassword) === undefined &&
-    validateRegisterFirstName(firstName) === undefined
+    validateRegisterFirstName(firstName) === undefined &&
+    validateRegisterDateOfBirth(dateOfBirth) === undefined
   );
 }

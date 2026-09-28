@@ -16,6 +16,7 @@ import { PasswordChecks } from "@/features/auth/components/password-checks";
 import {
   isRegisterFormValid,
   validateRegisterConfirmPassword,
+  validateRegisterDateOfBirth,
   validateRegisterEmail,
   validateRegisterFirstName,
   validateRegisterPassword,
@@ -48,6 +49,7 @@ export function RegisterForm({ demoMode = false }: RegisterFormProps) {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
   const [emailError, setEmailError] = useState<string | undefined>();
   const [passwordError, setPasswordError] = useState<string | undefined>();
   const [confirmPasswordError, setConfirmPasswordError] = useState<
@@ -55,6 +57,7 @@ export function RegisterForm({ demoMode = false }: RegisterFormProps) {
   >();
   const [firstNameError, setFirstNameError] = useState<string | undefined>();
   const [lastNameError, setLastNameError] = useState<string | undefined>();
+  const [dateOfBirthError, setDateOfBirthError] = useState<string | undefined>();
   const [showSuccess, setShowSuccess] = useState(false);
   const [bannerMessage, setBannerMessage] = useState<string | undefined>();
 
@@ -69,6 +72,7 @@ export function RegisterForm({ demoMode = false }: RegisterFormProps) {
     password,
     confirmPassword,
     firstName,
+    dateOfBirth,
   );
   const isBusy = pending || showSuccess || isRedirecting;
 
@@ -86,6 +90,9 @@ export function RegisterForm({ demoMode = false }: RegisterFormProps) {
       setFirstNameError(state.errors.firstName[0]);
     }
     if (state?.errors?.lastName?.[0]) setLastNameError(state.errors.lastName[0]);
+    if (state?.errors?.dateOfBirth?.[0]) {
+      setDateOfBirthError(state.errors.dateOfBirth[0]);
+    }
 
     if (state?.message) {
       setBannerMessage(state.message);
@@ -124,18 +131,21 @@ export function RegisterForm({ demoMode = false }: RegisterFormProps) {
       confirmPassword,
     );
     const nextFirstNameError = validateRegisterFirstName(firstName);
+    const nextDateOfBirthError = validateRegisterDateOfBirth(dateOfBirth);
 
     setEmailError(nextEmailError);
     setPasswordError(nextPasswordError);
     setConfirmPasswordError(nextConfirmError);
     setFirstNameError(nextFirstNameError);
+    setDateOfBirthError(nextDateOfBirthError);
     setBannerMessage(undefined);
 
     if (
       nextEmailError ||
       nextPasswordError ||
       nextConfirmError ||
-      nextFirstNameError
+      nextFirstNameError ||
+      nextDateOfBirthError
     ) {
       if (nextEmailError) emailRef.current?.focus();
       return;
@@ -197,6 +207,33 @@ export function RegisterForm({ demoMode = false }: RegisterFormProps) {
             {lastNameError ?? ""}
           </p>
         </div>
+      </div>
+
+      <div>
+        <Label htmlFor="dateOfBirth">Date of birth</Label>
+        <Input
+          id="dateOfBirth"
+          name="dateOfBirth"
+          type="date"
+          autoComplete="bday"
+          value={dateOfBirth}
+          onChange={(event) => {
+            const next = event.target.value;
+            setDateOfBirth(next);
+            if (dateOfBirthError) {
+              setDateOfBirthError(validateRegisterDateOfBirth(next));
+            }
+          }}
+          onBlur={() =>
+            setDateOfBirthError(validateRegisterDateOfBirth(dateOfBirth))
+          }
+          hasError={Boolean(dateOfBirthError)}
+          disabled={isBusy}
+          required
+        />
+        <p className="mt-1.5 min-h-5 text-sm text-danger-foreground">
+          {dateOfBirthError ?? ""}
+        </p>
       </div>
 
       <div>

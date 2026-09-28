@@ -196,10 +196,10 @@ export function PayoutSettingsView() {
         </Button>
       </header>
 
-      <section className="overflow-hidden rounded-[var(--radius-card)] border border-border bg-surface shadow-[var(--shadow-card)]">
-        <div className="border-b border-border px-4 py-3 sm:px-5">
+      <section className="flex min-h-[320px] flex-col overflow-hidden rounded-[var(--radius-card)] border border-border bg-surface shadow-[var(--shadow-card)]">
+        <div className="border-b border-border px-5 py-5 sm:px-6">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-base font-semibold text-foreground">
+            <h2 className="text-lg font-semibold text-foreground">
               Stripe Connect
             </h2>
             <Badge variant={statusBadgeVariant(settings.onboardingStatus)}>
@@ -207,7 +207,7 @@ export function PayoutSettingsView() {
             </Badge>
           </div>
         </div>
-        <div className="space-y-4 px-4 py-4 sm:px-5">
+        <div className="flex flex-1 flex-col justify-between gap-8 px-5 py-8 sm:px-6 sm:py-10">
           {!settings.stripeConfigured ? (
             <p className="rounded-[var(--radius-md)] border border-warning/30 bg-warning-soft px-3 py-2 text-sm text-warning-foreground">
               Stripe is not configured on the server. Connect is unavailable.
@@ -215,12 +215,12 @@ export function PayoutSettingsView() {
             </p>
           ) : null}
 
-          <dl className="grid gap-3 sm:grid-cols-2">
+          <dl className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
             <div>
               <dt className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted">
                 Connect account
               </dt>
-              <dd className="mt-1 text-sm text-foreground">
+              <dd className="mt-1.5 text-sm text-foreground">
                 {settings.hasConnectAccount ? "Created" : "None yet"}
               </dd>
             </div>
@@ -228,7 +228,7 @@ export function PayoutSettingsView() {
               <dt className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted">
                 Payouts enabled
               </dt>
-              <dd className="mt-1 text-sm text-foreground">
+              <dd className="mt-1.5 text-sm text-foreground">
                 {settings.payoutsEnabled ? "Yes" : "No"}
               </dd>
             </div>
@@ -236,7 +236,7 @@ export function PayoutSettingsView() {
               <dt className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted">
                 Details submitted
               </dt>
-              <dd className="mt-1 text-sm text-foreground">
+              <dd className="mt-1.5 text-sm text-foreground">
                 {settings.detailsSubmitted ? "Yes" : "No"}
               </dd>
             </div>
@@ -244,7 +244,7 @@ export function PayoutSettingsView() {
               <dt className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted">
                 Stripe bank
               </dt>
-              <dd className="mt-1 text-sm text-foreground">
+              <dd className="mt-1.5 text-sm text-foreground">
                 {settings.bankName || "—"}{" "}
                 {settings.bankLast4 ? (
                   <span className="text-muted">
@@ -255,7 +255,7 @@ export function PayoutSettingsView() {
             </div>
           </dl>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-3 border-t border-border pt-5">
             {settings.onboardingStatus === "complete" ? (
               <span className="inline-flex h-[length:var(--control-height)] items-center rounded-[var(--radius-md)] border border-accent/25 bg-accent/10 px-4 text-sm font-semibold text-accent">
                 Connected

@@ -14,6 +14,7 @@ export const ROUTES = {
   adminChat: "/admin-chat",
   payments: "/payments",
   earnings: "/earnings",
+  earningsPay: (payId: string) => `/earnings/pays/${payId}` as const,
   payoutSettings: "/payout-settings",
   history: "/history",
   workDiary: "/work-diary",

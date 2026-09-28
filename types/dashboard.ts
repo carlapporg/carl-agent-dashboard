@@ -79,7 +79,8 @@ export type NotificationKind =
   | "confirmation_confirmed"
   | "confirmation_declined"
   | "receipt_accepted"
-  | "receipt_rejected";
+  | "receipt_rejected"
+  | "pay_sent";
 
 export type NotificationItem = {
   id: string;
@@ -90,6 +91,7 @@ export type NotificationItem = {
   read: boolean;
   taskId?: string;
   panel?: "payment" | "chat" | "brief" | "log" | "receipt";
+  payId?: string;
   /** Cleared from the bell tray; still shown in History until removed there. */
   hiddenFromBell?: boolean;
 };

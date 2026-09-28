@@ -482,7 +482,11 @@ export async function requestTaskPaymentAction(
   spendAmountCents: number,
   confirmationId?: string | null,
 ): Promise<
-  | { ok: true; payment: import("@/types/task-payment").TaskPayment }
+  | {
+      ok: true;
+      payment: import("@/types/task-payment").TaskPayment;
+      alreadyOpen?: boolean;
+    }
   | { ok: false; message: string }
 > {
   try {
@@ -493,6 +497,21 @@ export async function requestTaskPaymentAction(
       ...(confirmationId ? { confirmationId } : {}),
     });
     revalidateTaskPage(taskId);
+    return { ok: true, payment: payment.payment, alreadyOpen: payment.alreadyOpen };
+  } catch (error) {
+    return { ok: false, message: mapPaymentError(error) };
+  }
+}
+
+export async function getOpenTaskPaymentAction(
+  taskId: string,
+): Promise<
+  | { ok: true; payment: import("@/types/task-payment").TaskPayment | null }
+  | { ok: false; message: string }
+> {
+  try {
+    const { taskPaymentsApi } = await import("@/lib/api/task-payments");
+    const payment = await taskPaymentsApi.current(taskId);
     return { ok: true, payment };
   } catch (error) {
     return { ok: false, message: mapPaymentError(error) };

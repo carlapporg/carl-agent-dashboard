@@ -24,7 +24,7 @@ export const taskPaymentsApi = {
       currency?: string;
       confirmationId?: string;
     },
-  ): Promise<TaskPayment> {
+  ): Promise<{ payment: TaskPayment; alreadyOpen: boolean }> {
     const data = await apiRequest(API_ENDPOINTS.agents.taskPayments(taskId), {
       method: "POST",
       body,
@@ -32,7 +32,31 @@ export const taskPaymentsApi = {
       looseEnvelope: true,
       dedupe: false,
     });
-    return unwrapPayment(data);
+    const record =
+      data && typeof data === "object"
+        ? (data as Record<string, unknown>)
+        : {};
+    return {
+      payment: unwrapPayment(data),
+      alreadyOpen: record.alreadyOpen === true,
+    };
+  },
+
+  async current(taskId: string): Promise<TaskPayment | null> {
+    const data = await apiRequest(
+      API_ENDPOINTS.agents.taskPaymentCurrent(taskId),
+      {
+        method: "GET",
+        schema: z.unknown(),
+        looseEnvelope: true,
+      },
+    );
+    const record =
+      data && typeof data === "object"
+        ? (data as Record<string, unknown>)
+        : {};
+    if (!record.payment) return null;
+    return unwrapPayment({ payment: record.payment });
   },
 
   async getCard(

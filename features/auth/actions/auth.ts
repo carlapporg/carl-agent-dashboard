@@ -174,11 +174,12 @@ export async function registerAction(
         confirmPassword: fieldErrors.confirmPassword,
         firstName: fieldErrors.firstName,
         lastName: fieldErrors.lastName,
+        dateOfBirth: fieldErrors.dateOfBirth,
       },
     };
   }
 
-  const { email, password, firstName, lastName } = validated.data;
+  const { email, password, firstName, lastName, dateOfBirth } = validated.data;
   const key = await clientKey(email);
 
   try {
@@ -195,6 +196,7 @@ export async function registerAction(
       password,
       firstName,
       lastName,
+      dateOfBirth,
     });
 
     if (registered.role !== "AGENT") {

@@ -32,6 +32,7 @@ export const authApi = {
         password: parsed.password,
         firstName: parsed.firstName,
         lastName: parsed.lastName,
+        dateOfBirth: parsed.dateOfBirth,
       },
       schema: backendUserSchema,
       skipAuth: true,

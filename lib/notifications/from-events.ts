@@ -21,7 +21,10 @@ function nested(value: unknown, key: string): Record<string, unknown> | null {
   return root ? asRecord(root[key]) : null;
 }
 
-export function hrefForNotification(item: Pick<NotificationItem, "taskId" | "panel">) {
+export function hrefForNotification(
+  item: Pick<NotificationItem, "taskId" | "panel" | "payId">,
+) {
+  if (item.payId) return ROUTES.earningsPay(item.payId);
   if (item.taskId && item.panel) return ROUTES.taskPanel(item.taskId, item.panel);
   if (item.taskId) return ROUTES.task(item.taskId);
   return ROUTES.notifications;
@@ -57,6 +60,8 @@ export function kindLabel(kind: NotificationKind): string {
       return "Receipt accepted";
     case "receipt_rejected":
       return "Receipt rejected";
+    case "pay_sent":
+      return "Pay sent";
     default:
       return "Update";
   }
