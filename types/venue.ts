@@ -33,6 +33,14 @@ export const venueRefreshResultSchema = z.object({
 
 export type VenueRefreshResult = z.infer<typeof venueRefreshResultSchema>;
 
+export const venueSendResultSchema = z.object({
+  taskId: z.string().optional(),
+  suggestions: z.array(venueSuggestionSchema).default([]),
+  message: z.unknown().optional(),
+});
+
+export type VenueSendResult = z.infer<typeof venueSendResultSchema>;
+
 const VENUE_SUGGEST_TASK_TYPES = new Set([
   "RESTAURANT_RESERVATION",
   "HOTEL_BOOKING",

@@ -34,16 +34,10 @@ function formatPeriod(value: string | null | undefined) {
   });
 }
 
-function clampDay(value: string) {
-  const today = todayInput();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || value > today) return today;
-  return value;
-}
-
 export function PayRequestPanel() {
   const queryClient = useQueryClient();
   const [justSent, setJustSent] = useState<PayRecord | null>(null);
-  const [day, setDay] = useState(todayInput);
+  const day = todayInput();
   const optionsQuery = useQuery({
     queryKey: queryKeys.earnings.payOptions(day),
     queryFn: async () => {
@@ -79,18 +73,8 @@ export function PayRequestPanel() {
         Ask for pay
       </h2>
       <p className="mt-1 text-sm text-muted">
-        Weekly, biweekly, or monthly. One request at a time. One day is for testing.
+        Weekly, biweekly, monthly, or one day. One request at a time.
       </p>
-      <label className="mt-3 flex items-center gap-2 text-sm text-muted">
-        Test day
-        <input
-          type="date"
-          value={day}
-          max={todayInput()}
-          onChange={(event) => setDay(clampDay(event.target.value))}
-          className="rounded-lg border border-border bg-surface px-2 py-1 text-sm text-foreground"
-        />
-      </label>
 
       {optionsQuery.isPending && !options ? (
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

@@ -132,11 +132,9 @@ function avatarTone(seed: string): string {
 function ConversationAvatar({
   name,
   size = 42,
-  showOnline = false,
 }: {
   name: string;
   size?: number;
-  showOnline?: boolean;
 }) {
   return (
     <span className="relative shrink-0" style={{ width: size, height: size }}>
@@ -149,12 +147,6 @@ function ConversationAvatar({
       >
         {initialsFromName(name)}
       </span>
-      {showOnline ? (
-        <span
-          className="absolute bottom-0 right-0 size-[7px] rounded-full border border-white bg-[#27ca40]"
-          aria-hidden
-        />
-      ) : null}
     </span>
   );
 }
@@ -522,10 +514,7 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
                       )}
                       style={{ "--row-i": index } as CSSProperties}
                     >
-                      <ConversationAvatar
-                        name={customerName}
-                        showOnline={c.unreadCount === 0}
-                      />
+                      <ConversationAvatar name={customerName} />
                       <span className="min-w-0 flex-1 pt-0.5">
                         <span className="flex items-start justify-between gap-2">
                           <span
@@ -587,9 +576,11 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
                     <h3 className="truncate text-[12px] font-semibold text-foreground">
                       {task.customerName}
                     </h3>
-                    <p className="truncate text-[12px] font-medium text-muted">
-                      {taskContext ? `${taskContext} · Online` : "Online"}
-                    </p>
+                    {taskContext ? (
+                      <p className="truncate text-[12px] font-medium text-muted">
+                        {taskContext}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1 text-right">

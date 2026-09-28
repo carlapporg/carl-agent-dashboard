@@ -27,7 +27,12 @@ export function stageIndex(status: TaskStatus): number {
 export function stageProgressPercent(status: TaskStatus): number {
   const idx = stageIndex(status);
   if (idx < 0) return 0;
-  return Math.round((idx / (TASK_STAGES.length - 1)) * 100);
+  // Offered and Assigned have not started, so the bar stays empty.
+  const assignedAt = TASK_STAGES.findIndex((stage) => stage.status === "assigned");
+  const span = TASK_STAGES.length - 1 - assignedAt;
+  if (span <= 0) return 0;
+  const step = Math.max(0, idx - assignedAt);
+  return Math.round((step / span) * 100);
 }
 
 type StageRingProps = {

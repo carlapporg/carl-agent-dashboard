@@ -69,6 +69,12 @@ export const API_ENDPOINTS = {
      */
     taskVenueSuggestionsRefresh: (taskId: string) =>
       `/agents/me/tasks/${taskId}/venue-suggestions/refresh` as const,
+    /** POST { query } — store place matches. Does not message the user. */
+    taskVenueSuggestionsSearch: (taskId: string) =>
+      `/agents/me/tasks/${taskId}/venue-suggestions/search` as const,
+    /** POST { suggestionIds? } — same Pick a place cards as task start. */
+    taskVenueSuggestionsSend: (taskId: string) =>
+      `/agents/me/tasks/${taskId}/venue-suggestions/send` as const,
     /**
      * GET latest receipt/document (any status). 404 if none.
      * POST multipart { file, note? } — booking confirmation must be CONFIRMED.

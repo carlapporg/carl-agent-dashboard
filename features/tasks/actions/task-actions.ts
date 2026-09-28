@@ -416,6 +416,51 @@ export type VenueRefreshActionResult =
     }
   | { ok: false; message: string };
 
+export async function searchVenueSuggestionsAction(
+  taskId: string,
+  query: string,
+): Promise<VenueRefreshActionResult> {
+  try {
+    const { venueSuggestionsApi } = await import(
+      "@/lib/api/venue-suggestions"
+    );
+    const result = await venueSuggestionsApi.search(taskId, query);
+    revalidateTaskPage(taskId);
+    return {
+      ok: true,
+      query: result.query ?? query,
+      suggestions: result.suggestions,
+      metadata:
+        result.metadata && typeof result.metadata === "object"
+          ? (result.metadata as Record<string, unknown>)
+          : null,
+    };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function sendVenueSuggestionsAction(
+  taskId: string,
+  suggestionIds: string[],
+): Promise<VenueRefreshActionResult> {
+  try {
+    const { venueSuggestionsApi } = await import(
+      "@/lib/api/venue-suggestions"
+    );
+    const result = await venueSuggestionsApi.send(taskId, suggestionIds);
+    revalidateTaskPage(taskId);
+    return {
+      ok: true,
+      query: null,
+      suggestions: result.suggestions,
+      metadata: null,
+    };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
 export async function refreshVenueSuggestionsAction(
   taskId: string,
 ): Promise<VenueRefreshActionResult> {

@@ -691,7 +691,7 @@ export function TaskWorkspace({
                   canMessageClient(task) && !isFailedOrCancelled(task)
                 }
                 title={task.customerName}
-                subtitle="Online"
+                subtitle={taskDisplayTitle(task)}
                 clientLabel={task.customerName}
                 disabled={!canMessageClient(task)}
                 disabledHint={messageClientHint(task)}
