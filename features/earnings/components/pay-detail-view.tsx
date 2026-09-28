@@ -108,33 +108,6 @@ export function PayDetailView({ payId }: { payId: string }) {
         ) : null}
       </section>
 
-      <section className="overflow-hidden rounded-[15px] border border-border bg-surface shadow-[var(--shadow-card)]">
-        <div className="border-b border-border px-4 py-3 md:px-5">
-          <h2 className="text-sm font-semibold text-foreground">Timesheet</h2>
-        </div>
-        {pay.timesheet.length === 0 ? (
-          <p className="px-4 py-8 text-sm text-muted md:px-5">
-            No timesheet lines.
-          </p>
-        ) : (
-          <ul>
-            {pay.timesheet.map((row, index) => (
-              <li
-                key={`${row.startedAt}-${row.status}-${index}`}
-                className="border-b border-border px-4 py-3 text-sm last:border-b-0 md:px-5"
-              >
-                <p className="font-medium capitalize text-foreground">
-                  {titleCase(row.status)}
-                </p>
-                <p className="mt-0.5 text-muted">
-                  {when(row.startedAt)}
-                  {row.endedAt ? ` to ${when(row.endedAt)}` : ""}
-                </p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
     </div>
   );
 }
