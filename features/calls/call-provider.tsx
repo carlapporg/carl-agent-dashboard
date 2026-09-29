@@ -129,6 +129,10 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const [connectionLabel, setConnectionLabel] = useState("Idle");
   const [elapsedSec, setElapsedSec] = useState(0);
   const [busy, setBusy] = useState(false);
+  /** Outbound call id the phone has actually answered. */
+  const [outboundAnsweredId, setOutboundAnsweredId] = useState<string | null>(
+    null,
+  );
 
   const roomAudioRef = useRef<HTMLAudioElement | null>(null);
   const callIdRef = useRef<string | null>(null);
@@ -211,6 +215,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
     setConnectionLabel("Idle");
     setElapsedSec(0);
     setBusy(false);
+    setOutboundAnsweredId(null);
     activeStartedRef.current = null;
   }, [clearRefreshTimer]);
   resetToIdleRef.current = resetToIdle;
@@ -230,6 +235,14 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const applyOutboundRinging = useCallback((row: Call) => {
     outboundCallIdsRef.current.add(row.id);
     pendingOutboundTaskIdsRef.current.delete(row.taskId);
+    directionRef.current = "outgoing";
+    callIdRef.current = row.id;
+    if (
+      phaseRef.current !== "ending" &&
+      !answeredOutboundIdsRef.current.has(row.id)
+    ) {
+      phaseRef.current = "outgoing";
+    }
     setCall((prev) => {
       const saved = outboundCredsRef.current.get(row.id) ?? prev?.livekit ?? null;
       return mergeCallPreserveName(prev, {
@@ -242,13 +255,15 @@ export function CallProvider({ children }: { children: ReactNode }) {
       });
     });
     setDirection("outgoing");
-    // Don't yank UI back to ringing if we already connected.
-    setPhase((p) =>
-      p === "active" || p === "connecting" || p === "ending" ? p : "outgoing",
-    );
-    setConnectionLabel((label) =>
-      label === "Connected" || label === "Connecting…" ? label : "Calling…",
-    );
+    // Room join is not an answer. Stay on calling until the phone picks up.
+    if (!answeredOutboundIdsRef.current.has(row.id)) {
+      setPhase((p) => (p === "ending" ? p : "outgoing"));
+      setConnectionLabel("Calling…");
+    } else {
+      setPhase((p) =>
+        p === "active" || p === "connecting" || p === "ending" ? p : "outgoing",
+      );
+    }
     stopIncomingRingtone();
   }, [resolveCustomerName]);
 
@@ -736,6 +751,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
         }
         if (isOutbound && name === "call.accepted") {
           answeredOutboundIdsRef.current.add(parsed.id);
+          setOutboundAnsweredId(parsed.id);
         }
         stopIncomingRingtone();
 
@@ -871,12 +887,14 @@ export function CallProvider({ children }: { children: ReactNode }) {
     setLivekitRemoteAudioElement(roomAudioRef.current);
     setLivekitSessionHandlers({
       onState: (label, active) => {
-        const id = callIdRef.current;
-        const waiting =
-          ((id != null && outboundCallIdsRef.current.has(id)) ||
-            directionRef.current === "outgoing") &&
-          !(id != null && answeredOutboundIdsRef.current.has(id));
-        if (waiting) {
+        const id = getLivekitCallId() ?? callIdRef.current;
+        const outbound = id
+          ? outboundCallIdsRef.current.has(id)
+          : directionRef.current === "outgoing";
+        const answered = id
+          ? answeredOutboundIdsRef.current.has(id)
+          : false;
+        if (outbound && !answered) {
           setPhase("outgoing");
           setConnectionLabel("Calling…");
           return;
@@ -975,6 +993,10 @@ export function CallProvider({ children }: { children: ReactNode }) {
         .join(" · ")
     : "";
 
+  const waitingForAnswer =
+    direction === "outgoing" &&
+    phase !== "ending" &&
+    outboundAnsweredId !== call?.id;
   const showIncoming =
     phase === "incoming" && direction === "incoming" && Boolean(call);
   const showOutboundBar =
@@ -1014,8 +1036,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
           peerName={peer}
           taskHint={taskHint}
           mode={
-            phase === "outgoing" ||
-            (phase === "connecting" && direction === "outgoing")
+            waitingForAnswer
               ? "outgoing"
               : phase === "connecting"
                 ? "connecting"
@@ -1024,8 +1045,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
                   : "active"
           }
           statusLabel={
-            phase === "outgoing" ||
-            (phase === "connecting" && direction === "outgoing" && !isLivekitJoined())
+            waitingForAnswer
               ? "Ringing… waiting for answer"
               : phase === "connecting"
                 ? "Connecting…"
