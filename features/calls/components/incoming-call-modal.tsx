@@ -27,7 +27,7 @@ export function IncomingCallModal({
             Incoming {callType === "VIDEO" ? "video" : "audio"} call
           </p>
           <p className="mt-3 text-xl font-semibold tracking-tight text-foreground">
-            {peerName}
+            {peerName} is calling
           </p>
           <p className="mt-1 text-sm text-muted">{taskHint}</p>
           <div className="mx-auto mt-5 flex size-16 items-center justify-center rounded-full bg-accent text-accent-foreground">

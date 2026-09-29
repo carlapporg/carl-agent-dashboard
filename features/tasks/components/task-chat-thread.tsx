@@ -32,6 +32,7 @@ import {
 import type { MessageReceiptStatus } from "@/types/message";
 import {
   callEndedMessageBody,
+  callMessageHasTranscript,
   isCallEndedMessageMetadata,
   isCallTranscriptReadyMessageMetadata,
 } from "@/types/call";
@@ -175,9 +176,9 @@ function isVisibleInThread(event: TimelineEvent): boolean {
 function messageTone(event: ChatItem): MessageTone {
   if (event.kind === "agent_message") return "agent";
   if (event.kind === "customer_message") return "client";
-  // Call duration lines stay centered system text (not payment ImportantCard).
+  // Transcript lines are a card. A plain "call ended" line stays centered text.
+  if (callMessageHasTranscript(event.metadata)) return "call";
   if (isCallEndedMessageMetadata(event.metadata)) return "system";
-  if (isCallTranscriptReadyMessageMetadata(event.metadata)) return "call";
   if (
     IMPORTANT_KINDS.includes(event.kind) ||
     (event.kind === "system" && IMPORTANT_BODY.test(event.body))
@@ -635,7 +636,11 @@ const ChatBubble = memo(function ChatBubble({
 
 const CallCardLine = memo(function CallCardLine({ event }: { event: ChatItem }) {
   return (
-    <CallTranscriptCard metadata={event.metadata} createdAt={event.createdAt} />
+    <CallTranscriptCard
+      metadata={event.metadata}
+      createdAt={event.createdAt}
+      title={event.body}
+    />
   );
 });
 

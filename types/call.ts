@@ -115,6 +115,16 @@ export function metadataFlag(metadata: unknown, key: string): boolean {
   return (metadata as Record<string, unknown>)[key] === true;
 }
 
+/** Call line that should open the transcript card, not plain text. */
+export function callMessageHasTranscript(metadata: unknown): boolean {
+  return (
+    isCallTranscriptReadyMessageMetadata(metadata) ||
+    (isCallEndedMessageMetadata(metadata) &&
+      (metadataFlag(metadata, "canViewTranscript") ||
+        metadataFlag(metadata, "openTranscript")))
+  );
+}
+
 function formatDurationSec(sec: number): string {
   const safe = Math.max(0, Math.floor(sec));
   if (safe <= 0) return "Call ended";

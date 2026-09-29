@@ -17,6 +17,7 @@ type LoadedTranscript = { text: string | null; summary: string | null };
 type CallTranscriptCardProps = {
   metadata: unknown;
   createdAt: string;
+  title?: string;
 };
 
 function clockLabel(value: string): string {
@@ -33,14 +34,26 @@ function accessMessage(error: unknown): string {
   return "Can't open this right now.";
 }
 
+function cardHeading(title?: string): string {
+  const cleaned = (title ?? "")
+    .replace(/\s*·\s*view transcript\s*/gi, "")
+    .trim();
+  return cleaned || "Call";
+}
+
 export function CallTranscriptCard({
   metadata,
   createdAt,
+  title,
 }: CallTranscriptCardProps) {
   const callId = callIdFromMessageMetadata(metadata);
-  const canViewTranscript = metadataFlag(metadata, "canViewTranscript");
-  const canViewSummary = metadataFlag(metadata, "canViewSummary");
-  const canPlayRecording = metadataFlag(metadata, "canPlayRecording");
+  const canViewTranscript =
+    metadataFlag(metadata, "canViewTranscript") ||
+    metadataFlag(metadata, "openTranscript");
+  const canViewSummary =
+    metadataFlag(metadata, "canViewSummary") || canViewTranscript;
+  const canPlayRecording =
+    metadataFlag(metadata, "canPlayRecording") || canViewTranscript;
 
   const [transcript, setTranscript] = useState<LoadedTranscript | null>(null);
   const [summaryState, setSummaryState] = useState<
@@ -149,7 +162,7 @@ export function CallTranscriptCard({
         Call
       </p>
       <p className="mt-0.5 text-sm font-semibold text-foreground">
-        Transcript ready
+        {cardHeading(title)}
       </p>
 
       {canViewSummary && summaryState === "loading" ? (
