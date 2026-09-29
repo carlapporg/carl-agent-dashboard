@@ -4,6 +4,7 @@ import {
   isPendingReject,
 } from "@/features/ops/rejected-offers";
 import { isRejectingOrRejected, hasOpenRejectUi } from "@/features/ops/auto-accept-offer";
+import { preferPeerName } from "@/lib/realtime/parse-call";
 import type { Task } from "@/types/task";
 
 const RANK: Record<string, number> = {
@@ -80,8 +81,18 @@ export function shouldIgnoreClosedSocketUpdate(
 }
 
 function withFreshDeadline(merged: Task, base: Task, incoming: Task): Task {
-  if (taskProgressRank(merged) >= 2) {
-    return { ...merged, expiresAt: undefined, rejectUntil: null };
+  const customerName =
+    preferPeerName(
+      merged.customerName,
+      incoming.customerName,
+      base.customerName,
+    ) ?? merged.customerName;
+  const named =
+    customerName === merged.customerName
+      ? merged
+      : { ...merged, customerName };
+  if (taskProgressRank(named) >= 2) {
+    return { ...named, expiresAt: undefined, rejectUntil: null };
   }
   // Prefer the incoming Nest reject window — don't keep a longer stale expiresAt.
   const rejectUntil = incoming.rejectUntil ?? base.rejectUntil ?? null;
@@ -91,7 +102,7 @@ function withFreshDeadline(merged: Task, base: Task, incoming: Task): Task {
     base.rejectUntil ||
     base.expiresAt;
   return {
-    ...merged,
+    ...named,
     rejectUntil,
     expiresAt,
   };

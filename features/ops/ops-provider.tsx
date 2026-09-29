@@ -31,6 +31,7 @@ import { notificationFromOffer } from "@/lib/notifications/from-events";
 import { parseNotificationPayload } from "@/lib/notifications/parse-api";
 import { playNotificationChimeIfEnabled } from "@/lib/notifications/sound";
 import { mapSocketAssignedPayload, uiStatusFromAgent } from "@/lib/api/map-task";
+import { preferPeerName } from "@/lib/realtime/parse-call";
 import {
   accessTokenFromUnknown,
   publishAccessToken,
@@ -566,6 +567,14 @@ export function AgentOpsProvider({
           existing.status === task.status &&
           existing.updatedAt === task.updatedAt
         ) {
+          const customerName = preferPeerName(
+            task.customerName,
+            existing.customerName,
+          );
+          if (customerName && customerName !== existing.customerName) {
+            byId.set(task.id, { ...existing, customerName });
+            changed = true;
+          }
           continue;
         }
         const next = keepStatusOverlays(existing, mergeByProgress(existing, task));

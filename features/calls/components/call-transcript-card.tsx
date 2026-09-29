@@ -107,12 +107,13 @@ export function CallTranscriptCard({
   }, [callId, canViewSummary]);
 
   useEffect(() => {
-    if (!audioUrl) return;
     const node = audioRef.current;
-    if (!node) return;
-    void node.play().catch(() => {
-      setPlayError("Press play on the recording.");
-    });
+    if (!node || !audioUrl) return;
+    const onError = () => {
+      setPlayError("The recording file did not load.");
+    };
+    node.addEventListener("error", onError);
+    return () => node.removeEventListener("error", onError);
   }, [audioUrl]);
 
   async function openTranscript() {
@@ -144,7 +145,17 @@ export function CallTranscriptCard({
         setPlayError(result.message);
         return;
       }
+      const node = audioRef.current;
+      if (node) {
+        node.src = result.url;
+        node.load();
+      }
       setAudioUrl(result.url);
+      try {
+        await node?.play();
+      } catch {
+        setPlayError("Press the play triangle on the gray bar.");
+      }
     } catch (error) {
       setPlayError(accessMessage(error));
     } finally {
@@ -207,15 +218,12 @@ export function CallTranscriptCard({
         <p className="mt-2 text-[12px] text-muted">{playError}</p>
       ) : null}
 
-      {audioUrl ? (
-        <audio
-          ref={audioRef}
-          src={audioUrl}
-          controls
-          className="mt-2 w-full"
-          preload="none"
-        />
-      ) : null}
+      <audio
+        ref={audioRef}
+        controls
+        preload="metadata"
+        className={audioUrl ? "mt-2 w-full" : "hidden"}
+      />
 
       {time ? <p className="mt-1.5 text-[10px] text-muted">{time}</p> : null}
 
