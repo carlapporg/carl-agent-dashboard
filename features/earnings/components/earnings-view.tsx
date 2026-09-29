@@ -16,7 +16,6 @@ import {
   getEarningsTipsAction,
   getHourlyRateAction,
 } from "@/features/earnings/actions";
-import { PayRequestPanel } from "@/features/earnings/components/pay-request-panel";
 import { ROUTES } from "@/lib/constants/routes";
 import { queryKeys } from "@/lib/query/keys";
 import { cn } from "@/lib/utils/cn";
@@ -280,15 +279,13 @@ export function EarningsView() {
         </div>
       </header>
 
-      <PayRequestPanel />
-
       {rangeError ? (
         <EmptyState title="Invalid range" description={rangeError} />
       ) : null}
 
       {!rangeError && summaryQuery.isPending && !summary ? (
-        <div className="grid gap-[25px] sm:grid-cols-2 xl:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, index) => (
+        <div className="grid gap-[25px] sm:grid-cols-2 xl:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, index) => (
             <div
               key={index}
               className="h-[150px] animate-pulse rounded-[10px] border border-border bg-surface-muted"
@@ -317,7 +314,7 @@ export function EarningsView() {
           ) : null}
 
           {/* Hero metrics — match Payments overview cards */}
-          <div className="grid gap-[25px] sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-[25px] sm:grid-cols-2 xl:grid-cols-3">
             <MetricStatCard
               label="Gross"
               value={formatMoneyShort(summary.gross)}
@@ -330,20 +327,11 @@ export function EarningsView() {
             <MetricStatCard
               label="Pending"
               value={formatMoneyShort(summary.payroll.pending)}
-              hint="Earned, not approved yet"
+              hint="Earned, not paid yet"
               icon={<MetricIcon src="/figma/payments/refresh-04.svg" />}
               variant="plain"
               className="dash-slide-in"
               style={{ animationDelay: "60ms" } as CSSProperties}
-            />
-            <MetricStatCard
-              label="Approved"
-              value={formatMoneyShort(summary.payroll.approved)}
-              hint="Approved, waiting payout"
-              icon={<MetricIcon src="/figma/dashboard/check-square-02.svg" />}
-              variant="plainCyan"
-              className="dash-slide-in"
-              style={{ animationDelay: "120ms" } as CSSProperties}
             />
             <MetricStatCard
               label="Paid"
@@ -352,7 +340,7 @@ export function EarningsView() {
               icon={<MetricIcon src="/figma/payments/wallet-01.svg" />}
               variant="plainGreen"
               className="dash-slide-in"
-              style={{ animationDelay: "180ms" } as CSSProperties}
+              style={{ animationDelay: "120ms" } as CSSProperties}
             />
           </div>
 

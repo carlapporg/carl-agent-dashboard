@@ -20,6 +20,7 @@ const KINDS: NotificationKind[] = [
   "receipt_accepted",
   "receipt_rejected",
   "pay_sent",
+  "pay_rejected",
 ];
 
 let memoryItems: NotificationItem[] = [];

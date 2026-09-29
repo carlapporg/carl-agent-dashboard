@@ -80,7 +80,8 @@ export type NotificationKind =
   | "confirmation_declined"
   | "receipt_accepted"
   | "receipt_rejected"
-  | "pay_sent";
+  | "pay_sent"
+  | "pay_rejected";
 
 export type NotificationItem = {
   id: string;

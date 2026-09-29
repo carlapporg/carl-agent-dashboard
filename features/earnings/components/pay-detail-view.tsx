@@ -94,6 +94,9 @@ export function PayDetailView({ payId }: { payId: string }) {
         {pay.paidAt ? (
           <p className="mt-1 text-muted">Paid {when(pay.paidAt)}</p>
         ) : null}
+        {pay.rejectedAt ? (
+          <p className="mt-1 text-muted">Declined {when(pay.rejectedAt)}</p>
+        ) : null}
         {pay.proofUrl ? (
           <p className="mt-3">
             <a

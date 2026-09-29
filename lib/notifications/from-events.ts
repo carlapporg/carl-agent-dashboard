@@ -62,6 +62,8 @@ export function kindLabel(kind: NotificationKind): string {
       return "Receipt rejected";
     case "pay_sent":
       return "Pay sent";
+    case "pay_rejected":
+      return "Pay request declined";
     default:
       return "Update";
   }

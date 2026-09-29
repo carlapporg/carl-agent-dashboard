@@ -18,6 +18,7 @@ import {
   getPayoutSettingsAction,
   saveManualBankAction,
 } from "@/features/payout-settings/actions";
+import { PayRequestPanel } from "@/features/earnings/components/pay-request-panel";
 import { queryKeys } from "@/lib/query/keys";
 import type {
   PayoutAccountType,
@@ -295,6 +296,8 @@ export function PayoutSettingsView() {
           {settingsQuery.isFetching ? "Refreshing…" : "Refresh"}
         </Button>
       </header>
+
+      <PayRequestPanel />
 
       <section className="flex min-h-[320px] flex-col overflow-hidden rounded-[var(--radius-card)] border border-border bg-surface shadow-[var(--shadow-card)]">
         <div className="border-b border-border px-5 py-5 sm:px-6">

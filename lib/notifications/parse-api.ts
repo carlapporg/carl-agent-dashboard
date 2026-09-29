@@ -16,6 +16,7 @@ const KINDS: NotificationKind[] = [
   "receipt_accepted",
   "receipt_rejected",
   "pay_sent",
+  "pay_rejected",
 ];
 
 function asRecord(value: unknown): Record<string, unknown> | null {

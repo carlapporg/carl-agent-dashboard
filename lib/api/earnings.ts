@@ -160,6 +160,7 @@ const payRecordSchema = z.object({
   proofUrl: z.string().nullable().optional(),
   timesheet: timesheetSchema,
   paidAt: z.string().nullable().optional(),
+  rejectedAt: z.string().nullable().optional(),
 });
 
 const payChoiceSchema = z.object({
@@ -168,6 +169,15 @@ const payChoiceSchema = z.object({
   reason: z.string().nullable().optional(),
   periodStart: z.string().nullable().optional(),
   periodEnd: z.string().nullable().optional(),
+  unpaidRanges: z
+    .array(
+      z.object({
+        periodStart: z.string(),
+        periodEnd: z.string(),
+      }),
+    )
+    .nullable()
+    .optional(),
   quote: z
     .object({
       hoursWorked: hours,
