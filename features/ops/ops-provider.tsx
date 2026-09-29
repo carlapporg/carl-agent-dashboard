@@ -94,6 +94,7 @@ import {
 import {
   callEndedMessageBody,
   isCallEndedMessageMetadata,
+  isCallTranscriptReadyMessageMetadata,
 } from "@/types/call";
 import type { Task } from "@/types/task";
 import type { Socket } from "socket.io-client";
@@ -1038,14 +1039,17 @@ export function AgentOpsProvider({
         }
       } else if (
         incoming.sender === "SYSTEM" &&
-        isCallEndedMessageMetadata(incoming.metadata)
+        (isCallEndedMessageMetadata(incoming.metadata) ||
+          isCallTranscriptReadyMessageMetadata(incoming.metadata))
       ) {
-        // Connected-call duration line from Nest — show in thread, no toast.
+        // Call duration or transcript card from Nest — show in thread, no toast.
         setLiveChat({
           at: Date.now(),
           taskId: incoming.taskId,
           sender: "SYSTEM",
-          content: callEndedMessageBody(incoming.content, incoming.metadata),
+          content: isCallEndedMessageMetadata(incoming.metadata)
+            ? callEndedMessageBody(incoming.content, incoming.metadata)
+            : incoming.content || "Call transcript ready",
           messageId: incoming.messageId,
           mediaKind: "text",
           metadata: incoming.metadata,

@@ -77,6 +77,25 @@ function unwrapLivekit(data: unknown): LivekitCreds {
   throw new Error("Invalid LiveKit token response");
 }
 
+const callTranscriptSchema = z
+  .object({
+    callId: z.string().optional(),
+    text: z.string().nullable().optional(),
+    summary: z.string().nullable().optional(),
+  })
+  .passthrough();
+
+const callRecordingSchema = z
+  .object({
+    url: z.string().min(1),
+  })
+  .passthrough();
+
+export type CallTranscript = {
+  text: string | null;
+  summary: string | null;
+};
+
 export const callsApi = {
   async start(taskId: string, type: CallType = "AUDIO"): Promise<Call> {
     const data = await apiRequest(API_ENDPOINTS.calls.root, {
@@ -144,5 +163,32 @@ export const callsApi = {
       dedupe: false,
     });
     return unwrapLivekit(data);
+  },
+
+  /** Full transcript text and short summary. Audio is not included. */
+  async getTranscript(callId: string): Promise<CallTranscript> {
+    const data = await apiRequest(API_ENDPOINTS.calls.transcript(callId), {
+      method: "GET",
+      schema: callTranscriptSchema,
+    });
+    const text = typeof data.text === "string" ? data.text.trim() : "";
+    const summary = typeof data.summary === "string" ? data.summary.trim() : "";
+    return {
+      text: text || null,
+      summary: summary || null,
+    };
+  },
+
+  /**
+   * Recording link for playback. Throws ApiError 404 when none was kept.
+   * The URL is not stored on the chat message.
+   */
+  async getRecordingUrl(callId: string): Promise<string> {
+    const data = await apiRequest(API_ENDPOINTS.calls.recording(callId), {
+      method: "GET",
+      schema: callRecordingSchema,
+      dedupe: false,
+    });
+    return data.url;
   },
 };

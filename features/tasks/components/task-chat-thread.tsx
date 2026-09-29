@@ -16,6 +16,7 @@ import { sendUpdateAction, markMessagesDeliveredAction, markMessagesReadAction }
 import { ChatAudioPlayer } from "@/features/tasks/components/chat-audio-player";
 import { LiveVoiceWaveform } from "@/features/tasks/components/live-voice-waveform";
 import { CallButton } from "@/features/calls/components/call-button";
+import { CallTranscriptCard } from "@/features/calls/components/call-transcript-card";
 import {
   ChatImageBubble,
   ChatImageLightbox,
@@ -32,6 +33,7 @@ import type { MessageReceiptStatus } from "@/types/message";
 import {
   callEndedMessageBody,
   isCallEndedMessageMetadata,
+  isCallTranscriptReadyMessageMetadata,
 } from "@/types/call";
 import {
   CHAT_ATTACH_ACCEPT,
@@ -93,12 +95,13 @@ type PendingMedia = {
   previewUrl: string;
 };
 
-type MessageTone = "agent" | "client" | "system" | "important";
+type MessageTone = "agent" | "client" | "system" | "important" | "call";
 
 type ThreadBlock =
   | { type: "day"; key: string; label: string }
   | { type: "unread"; key: string }
   | { type: "system"; key: string; event: ChatItem }
+  | { type: "call"; key: string; event: ChatItem }
   | { type: "important"; key: string; event: ChatItem }
   | { type: "cluster"; key: string; role: "agent" | "client"; items: ChatItem[] };
 
@@ -174,6 +177,7 @@ function messageTone(event: ChatItem): MessageTone {
   if (event.kind === "customer_message") return "client";
   // Call duration lines stay centered system text (not payment ImportantCard).
   if (isCallEndedMessageMetadata(event.metadata)) return "system";
+  if (isCallTranscriptReadyMessageMetadata(event.metadata)) return "call";
   if (
     IMPORTANT_KINDS.includes(event.kind) ||
     (event.kind === "system" && IMPORTANT_BODY.test(event.body))
@@ -260,7 +264,7 @@ function buildBlocks(
       blocks.push({ type: "unread", key: "unread" });
     }
     const tone = messageTone(event);
-    if (tone === "system" || tone === "important") {
+    if (tone === "system" || tone === "important" || tone === "call") {
       blocks.push({ type: tone, key: event.id, event });
       i += 1;
       continue;
@@ -629,6 +633,12 @@ const ChatBubble = memo(function ChatBubble({
   );
 });
 
+const CallCardLine = memo(function CallCardLine({ event }: { event: ChatItem }) {
+  return (
+    <CallTranscriptCard metadata={event.metadata} createdAt={event.createdAt} />
+  );
+});
+
 const SystemLine = memo(function SystemLine({ event }: { event: ChatItem }) {
   return (
     <div
@@ -825,13 +835,16 @@ const TaskChatThreadBody = forwardRef<
     }
     if (
       liveChat.sender === "SYSTEM" &&
-      isCallEndedMessageMetadata(liveChat.metadata)
+      (isCallEndedMessageMetadata(liveChat.metadata) ||
+        isCallTranscriptReadyMessageMetadata(liveChat.metadata))
     ) {
       return {
         id: liveChat.messageId || `live-${liveChat.at}`,
         taskId,
         kind: "system",
-        body: callEndedMessageBody(liveChat.content, liveChat.metadata),
+        body: isCallEndedMessageMetadata(liveChat.metadata)
+          ? callEndedMessageBody(liveChat.content, liveChat.metadata)
+          : liveChat.content || "Call transcript ready",
         createdAt: new Date(liveChat.at).toISOString(),
         visibleToCustomer: false,
         mediaKind: "text",
@@ -840,6 +853,14 @@ const TaskChatThreadBody = forwardRef<
     }
     return null;
   }, [liveChat, taskId]);
+
+  // Keep each system call line. A newer live message must not erase the last one.
+  useEffect(() => {
+    if (!liveItem || liveItem.kind !== "system") return;
+    setExtras((prev) =>
+      prev.some((row) => row.id === liveItem.id) ? prev : [...prev, liveItem],
+    );
+  }, [liveItem]);
 
   const thread = useMemo(() => {
     const merged = mergeThread(
@@ -1492,6 +1513,9 @@ const TaskChatThreadBody = forwardRef<
                 }
                 if (block.type === "system") {
                   return <SystemLine key={block.key} event={block.event} />;
+                }
+                if (block.type === "call") {
+                  return <CallCardLine key={block.key} event={block.event} />;
                 }
                 if (block.type === "important") {
                   return <ImportantCard key={block.key} event={block.event} />;

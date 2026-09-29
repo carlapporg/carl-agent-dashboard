@@ -98,3 +98,45 @@ export async function refreshCallTokenAction(
     return fail(error);
   }
 }
+
+function callAccessFail(error: unknown): { ok: false; message: string; code?: string } {
+  if (isApiError(error) && (error.status === 401 || error.status === 403)) {
+    return {
+      ok: false,
+      code: "FORBIDDEN",
+      message: "Only people on this call can open it.",
+    };
+  }
+  return fail(error);
+}
+
+export async function getCallTranscriptAction(
+  callId: string,
+): Promise<CallActionResult<{ text: string | null; summary: string | null }>> {
+  try {
+    return { ok: true, data: await callsApi.getTranscript(callId) };
+  } catch (error) {
+    return callAccessFail(error);
+  }
+}
+
+export async function getCallRecordingAction(
+  callId: string,
+): Promise<
+  | { ok: true; url: string }
+  | { ok: false; missing: true }
+  | { ok: false; missing: false; message: string }
+> {
+  try {
+    return { ok: true, url: await callsApi.getRecordingUrl(callId) };
+  } catch (error) {
+    if (
+      isApiError(error) &&
+      (error.status === 404 || error.code === "NOT_FOUND")
+    ) {
+      return { ok: false, missing: true };
+    }
+    const failed = callAccessFail(error);
+    return { ok: false, missing: false, message: failed.message };
+  }
+}

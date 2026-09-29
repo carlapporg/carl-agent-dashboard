@@ -29,6 +29,7 @@ import { setViewingMessagesTaskId } from "@/lib/messages/viewing-chat";
 import {
   callEndedMessageBody,
   isCallEndedMessageMetadata,
+  isCallTranscriptReadyMessageMetadata,
 } from "@/types/call";
 import { taskListSubtitle, taskPlaceLabel } from "@/lib/tasks/place-label";
 import { ROUTES } from "@/lib/constants/routes";
@@ -316,7 +317,10 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
     const isUser = live.sender === "USER";
     const isCallEnded =
       live.sender === "SYSTEM" && isCallEndedMessageMetadata(live.metadata);
-    if (!isUser && !isCallEnded) return;
+    const isTranscriptReady =
+      live.sender === "SYSTEM" &&
+      isCallTranscriptReadyMessageMetadata(live.metadata);
+    if (!isUser && !isCallEnded && !isTranscriptReady) return;
 
     const existingLoad = timelinesRef.current[live.taskId];
     // If we never loaded this thread (or last load failed), fetch history
@@ -334,7 +338,9 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
 
     const body = isCallEnded
       ? callEndedMessageBody(live.content, live.metadata)
-      : previewForIncomingMessage({
+      : isTranscriptReady
+        ? live.content || "Call transcript ready"
+        : previewForIncomingMessage({
           taskId: live.taskId,
           sender: live.sender,
           content: live.content,
@@ -348,10 +354,10 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
     const nextEvent: TimelineEvent = {
       id: live.messageId ?? `live-${live.at}`,
       taskId: live.taskId,
-      kind: isCallEnded ? "system" : "customer_message",
+      kind: isCallEnded || isTranscriptReady ? "system" : "customer_message",
       body,
       createdAt: new Date(live.at).toISOString(),
-      visibleToCustomer: !isCallEnded,
+      visibleToCustomer: !isCallEnded && !isTranscriptReady,
       mediaKind: live.mediaKind ?? "text",
       durationMs: live.durationMs,
       metadata: live.metadata ?? null,

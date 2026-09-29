@@ -6,6 +6,7 @@ import { isVenuePickedMessageMetadata } from "@/types/venue";
 import {
   callEndedMessageBody,
   isCallEndedMessageMetadata,
+  isCallTranscriptReadyMessageMetadata,
 } from "@/types/call";
 
 export type IncomingTaskMessage = {
@@ -81,7 +82,8 @@ export function parseIncomingTaskMessage(
     !content &&
     mediaKind === "text" &&
     !isVenuePickedMessageMetadata(metadata) &&
-    !isCallEndedMessageMetadata(metadata)
+    !isCallEndedMessageMetadata(metadata) &&
+    !isCallTranscriptReadyMessageMetadata(metadata)
   ) {
     return null;
   }

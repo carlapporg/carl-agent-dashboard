@@ -206,5 +206,9 @@ export const API_ENDPOINTS = {
     reject: (id: string) => `/calls/${id}/reject` as const,
     end: (id: string) => `/calls/${id}/end` as const,
     token: (id: string) => `/calls/${id}/token` as const,
+    /** GET transcript text + summary. Caller or agent on that call only. */
+    transcript: (id: string) => `/calls/${id}/transcript` as const,
+    /** GET { callId, url }. 404 when no recording was kept. */
+    recording: (id: string) => `/calls/${id}/recording` as const,
   },
 } as const;

@@ -83,6 +83,38 @@ export function isCallEndedMessageMetadata(
   return kind === "call_ended" || kind === "callEnded";
 }
 
+/** Nest SYSTEM chat row once Whisper has a transcript (`metadata.kind: call_transcript_ready`). */
+export type CallTranscriptReadyMetadata = {
+  kind: "call_transcript_ready";
+  callId?: string;
+  transcriptStatus?: string;
+  canViewTranscript?: boolean;
+  openTranscript?: boolean;
+  canPlayRecording?: boolean;
+  canViewSummary?: boolean;
+};
+
+export function isCallTranscriptReadyMessageMetadata(
+  metadata: unknown,
+): metadata is CallTranscriptReadyMetadata {
+  if (!metadata || typeof metadata !== "object") return false;
+  const kind = (metadata as { kind?: unknown }).kind;
+  return kind === "call_transcript_ready" || kind === "callTranscriptReady";
+}
+
+export function callIdFromMessageMetadata(metadata: unknown): string | null {
+  if (!metadata || typeof metadata !== "object") return null;
+  const id = (metadata as { callId?: unknown }).callId;
+  if (typeof id !== "string") return null;
+  const trimmed = id.trim();
+  return trimmed || null;
+}
+
+export function metadataFlag(metadata: unknown, key: string): boolean {
+  if (!metadata || typeof metadata !== "object") return false;
+  return (metadata as Record<string, unknown>)[key] === true;
+}
+
 function formatDurationSec(sec: number): string {
   const safe = Math.max(0, Math.floor(sec));
   if (safe <= 0) return "Call ended";
