@@ -151,6 +151,8 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const resetToIdleRef = useRef<() => Promise<void>>(async () => {});
   /** Call ids we started (outbound) — never show Accept/Reject for these. */
   const outboundCallIdsRef = useRef<Set<string>>(new Set());
+  /** Outbound calls the mobile user has accepted. Room join is not an answer. */
+  const answeredOutboundIdsRef = useRef<Set<string>>(new Set());
   /** Task ids with an in-flight POST /calls (invite may arrive before response). */
   const pendingOutboundTaskIdsRef = useRef<Set<string>>(new Set());
   /** Caller LiveKit creds from POST /calls — never replace with socket peer tokens. */
@@ -197,6 +199,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
     if (callIdRef.current) {
       outboundCallIdsRef.current.delete(callIdRef.current);
       outboundCredsRef.current.delete(callIdRef.current);
+      answeredOutboundIdsRef.current.delete(callIdRef.current);
     }
     setPhase("idle");
     setCall(null);
@@ -280,6 +283,16 @@ export function CallProvider({ children }: { children: ReactNode }) {
     [clearRefreshTimer, toast],
   );
 
+  const outboundStillRinging = useCallback((callId?: string | null) => {
+    const id = callId ?? callIdRef.current;
+    const outbound =
+      (id != null && outboundCallIdsRef.current.has(id)) ||
+      directionRef.current === "outgoing";
+    if (!outbound) return false;
+    if (id != null && answeredOutboundIdsRef.current.has(id)) return false;
+    return true;
+  }, []);
+
   const ensureJoined = useCallback(
     async (
       incoming: Call,
@@ -287,10 +300,15 @@ export function CallProvider({ children }: { children: ReactNode }) {
     ) => {
       if (isLivekitJoined(incoming.id)) {
         enableLocalMedia(incoming, true);
-        setPhase("active");
-        setConnectionLabel("Connected");
-        if (!activeStartedRef.current) {
-          activeStartedRef.current = Date.now();
+        if (outboundStillRinging(incoming.id)) {
+          setPhase("outgoing");
+          setConnectionLabel("Calling…");
+        } else {
+          setPhase("active");
+          setConnectionLabel("Connected");
+          if (!activeStartedRef.current) {
+            activeStartedRef.current = Date.now();
+          }
         }
         return;
       }
@@ -299,8 +317,13 @@ export function CallProvider({ children }: { children: ReactNode }) {
         await ensureJoinedInflightRef.current;
         if (isLivekitJoined(incoming.id)) {
           enableLocalMedia(incoming, true);
-          setPhase("active");
-          setConnectionLabel("Connected");
+          if (outboundStillRinging(incoming.id)) {
+            setPhase("outgoing");
+            setConnectionLabel("Calling…");
+          } else {
+            setPhase("active");
+            setConnectionLabel("Connected");
+          }
         }
         return;
       }
@@ -308,8 +331,13 @@ export function CallProvider({ children }: { children: ReactNode }) {
       const run = (async () => {
         const next = mergeCallPreserveName(callRef.current, incoming);
         setCall(next);
-        setPhase("connecting");
-        setConnectionLabel("Connecting…");
+        if (outboundStillRinging(next.id)) {
+          setPhase("outgoing");
+          setConnectionLabel("Calling…");
+        } else {
+          setPhase("connecting");
+          setConnectionLabel("Connecting…");
+        }
 
         // Outbound: ONLY use POST /calls (or /token) agent-scoped creds.
         // Socket livekit on invite/accepted is often the peer token → leave reason 2.
@@ -342,8 +370,13 @@ export function CallProvider({ children }: { children: ReactNode }) {
 
         if (isLivekitJoined(next.id)) {
           enableLocalMedia(next, true);
-          setPhase("active");
-          setConnectionLabel("Connected");
+          if (outboundStillRinging(next.id)) {
+            setPhase("outgoing");
+            setConnectionLabel("Calling…");
+          } else {
+            setPhase("active");
+            setConnectionLabel("Connected");
+          }
           return;
         }
 
@@ -369,8 +402,8 @@ export function CallProvider({ children }: { children: ReactNode }) {
         }
 
         enableLocalMedia(withCreds, true);
-        // Stay on ringing UI until callee accepts (mobile joins on accept).
-        if (isOutbound && phaseRef.current === "connecting") {
+        // Joining the room is not an answer. Stay on calling until the phone picks up.
+        if (outboundStillRinging(withCreds.id)) {
           setPhase("outgoing");
           setConnectionLabel("Calling…");
         } else {
@@ -392,7 +425,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [enableLocalMedia, scheduleTokenRefresh, toast],
+    [enableLocalMedia, outboundStillRinging, scheduleTokenRefresh, toast],
   );
   ensureJoinedRef.current = ensureJoined;
 
@@ -689,11 +722,22 @@ export function CallProvider({ children }: { children: ReactNode }) {
 
       if (name === "call.accepted" || name === "call.connected") {
         if (callIdRef.current && callIdRef.current !== parsed.id) return;
-        stopIncomingRingtone();
-
         const isOutbound =
           outboundCallIdsRef.current.has(parsed.id) ||
           directionRef.current === "outgoing";
+        // call.connected can fire when the agent joins the room while the
+        // phone is still ringing. Only call.accepted means they picked up.
+        if (
+          isOutbound &&
+          name === "call.connected" &&
+          !answeredOutboundIdsRef.current.has(parsed.id)
+        ) {
+          return;
+        }
+        if (isOutbound && name === "call.accepted") {
+          answeredOutboundIdsRef.current.add(parsed.id);
+        }
+        stopIncomingRingtone();
 
         // Keep caller LiveKit creds — never adopt socket livekit (peer token).
         const merged = mergeCallPreserveName(callRef.current, {
@@ -827,6 +871,16 @@ export function CallProvider({ children }: { children: ReactNode }) {
     setLivekitRemoteAudioElement(roomAudioRef.current);
     setLivekitSessionHandlers({
       onState: (label, active) => {
+        const id = callIdRef.current;
+        const waiting =
+          ((id != null && outboundCallIdsRef.current.has(id)) ||
+            directionRef.current === "outgoing") &&
+          !(id != null && answeredOutboundIdsRef.current.has(id));
+        if (waiting) {
+          setPhase("outgoing");
+          setConnectionLabel("Calling…");
+          return;
+        }
         setConnectionLabel(label);
         if (active) {
           setPhase("active");
