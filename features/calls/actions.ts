@@ -49,6 +49,16 @@ export async function startCallAction(
   }
 }
 
+export async function getIncomingCallAction(): Promise<
+  CallActionResult<Call | null>
+> {
+  try {
+    return { ok: true, data: await callsApi.incoming() };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
 export async function getCallAction(
   callId: string,
 ): Promise<CallActionResult<Call>> {

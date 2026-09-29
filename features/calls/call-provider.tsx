@@ -13,6 +13,7 @@ import {
 import {
   acceptCallAction,
   endCallAction,
+  getIncomingCallAction,
   refreshCallTokenAction,
   rejectCallAction,
   startCallAction,
@@ -296,6 +297,44 @@ export function CallProvider({ children }: { children: ReactNode }) {
       }, waitMs);
     },
     [clearRefreshTimer, toast],
+  );
+
+  const presentIncoming = useCallback(
+    (row: Call) => {
+      if (outboundCallIdsRef.current.has(row.id)) return;
+      if (
+        directionRef.current === "outgoing" &&
+        callIdRef.current === row.id
+      ) {
+        return;
+      }
+      const onAnsweredCall =
+        isLivekitJoined() &&
+        (phaseRef.current === "active" || phaseRef.current === "ending") &&
+        (directionRef.current !== "outgoing" ||
+          answeredOutboundIdsRef.current.has(callIdRef.current ?? ""));
+      if (onAnsweredCall && callIdRef.current !== row.id) return;
+      if (phaseRef.current === "incoming" && callIdRef.current === row.id) {
+        return;
+      }
+      if (isLivekitJoined() && getLivekitCallId() !== row.id) {
+        void disconnectLivekitSession();
+      }
+      const named = {
+        ...row,
+        customerName: resolveCustomerName(row),
+      };
+      directionRef.current = "incoming";
+      callIdRef.current = named.id;
+      phaseRef.current = "incoming";
+      setCall(named);
+      setDirection("incoming");
+      setPhase("incoming");
+      setConnectionLabel("Incoming call");
+      setOutboundAnsweredId(null);
+      startIncomingRingtone();
+    },
+    [resolveCustomerName],
   );
 
   const outboundStillRinging = useCallback((callId?: string | null) => {
@@ -663,22 +702,20 @@ export function CallProvider({ children }: { children: ReactNode }) {
         // That must stay outbound (ringing + Cancel), never Accept/Reject.
         const isOurOutbound =
           outboundCallIdsRef.current.has(parsed.id) ||
-          pendingOutboundTaskIdsRef.current.has(parsed.taskId) ||
-          directionRef.current === "outgoing" ||
-          phaseRef.current === "outgoing";
-
-        // After we move past ringing, ignore invite echoes — re-applying
-        // "outgoing" was interrupting the connected mic session.
-        if (
-          phaseRef.current === "connecting" ||
-          phaseRef.current === "active" ||
-          phaseRef.current === "ending" ||
-          isLivekitJoined(parsed.id)
-        ) {
-          return;
-        }
+          (pendingOutboundTaskIdsRef.current.has(parsed.taskId) &&
+            directionRef.current === "outgoing");
 
         if (isOurOutbound) {
+          // After we move past ringing, ignore invite echoes — re-applying
+          // "outgoing" was interrupting the connected mic session.
+          if (
+            phaseRef.current === "connecting" ||
+            phaseRef.current === "active" ||
+            phaseRef.current === "ending" ||
+            isLivekitJoined(parsed.id)
+          ) {
+            return;
+          }
           applyOutboundRinging({
             ...parsed,
             customerName: resolveCustomerName(
@@ -688,18 +725,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        // True inbound: only from idle.
-        if (phaseRef.current !== "idle") return;
-
-        const named = {
-          ...parsed,
-          customerName: resolveCustomerName(parsed),
-        };
-        setCall(named);
-        setDirection("incoming");
-        setPhase("incoming");
-        setConnectionLabel("Incoming call");
-        startIncomingRingtone();
+        presentIncoming(parsed);
         return;
       }
 
@@ -880,7 +906,33 @@ export function CallProvider({ children }: { children: ReactNode }) {
         socket.off(eventName, fn);
       }
     };
-  }, [connected, toast, applyOutboundRinging, enableLocalMedia, resolveCustomerName]);
+  }, [connected, toast, applyOutboundRinging, enableLocalMedia, presentIncoming, resolveCustomerName]);
+
+  // The ring is a one-time socket event. Ask again when the page connects
+  // or comes back, in case that event was missed.
+  useEffect(() => {
+    if (!connected) return;
+    let cancelled = false;
+
+    async function pullIncoming() {
+      const result = await getIncomingCallAction();
+      if (cancelled || !result.ok || !result.data) return;
+      if (String(result.data.status).toUpperCase() !== "RINGING") return;
+      presentIncoming(result.data);
+    }
+
+    void pullIncoming();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void pullIncoming();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    const timer = window.setInterval(() => void pullIncoming(), 5000);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisible);
+      window.clearInterval(timer);
+    };
+  }, [connected, presentIncoming]);
 
   // Wire remote <audio> + session UI callbacks once.
   useEffect(() => {

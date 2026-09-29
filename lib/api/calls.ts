@@ -108,6 +108,20 @@ export const callsApi = {
     return unwrapCall(data);
   },
 
+  async incoming(): Promise<Call | null> {
+    const data = await apiRequest(API_ENDPOINTS.calls.incoming, {
+      method: "GET",
+      schema: z.unknown(),
+      looseEnvelope: true,
+    });
+    if (data == null) return null;
+    try {
+      return unwrapCall(data);
+    } catch {
+      return null;
+    }
+  },
+
   async get(callId: string): Promise<Call> {
     const data = await apiRequest(API_ENDPOINTS.calls.one(callId), {
       method: "GET",

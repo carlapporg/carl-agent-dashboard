@@ -201,6 +201,8 @@ export const API_ENDPOINTS = {
   /** LiveKit calls (agent ↔ customer on a task). */
   calls: {
     root: "/calls",
+    /** GET ringing call for the signed-in user. Null when none. */
+    incoming: "/calls/incoming",
     one: (id: string) => `/calls/${id}` as const,
     accept: (id: string) => `/calls/${id}/accept` as const,
     reject: (id: string) => `/calls/${id}/reject` as const,
