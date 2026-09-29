@@ -137,6 +137,11 @@ export function TaskWorkspace({
   const rejecting =
     decision.flight === "reject" || decision.settled === "rejected";
 
+  const hydrateOpenTasks = ops?.hydrateOpenTasks;
+  useEffect(() => {
+    hydrateOpenTasks?.([taskState]);
+  }, [hydrateOpenTasks, taskState]);
+
   useEffect(() => {
     if (isRejectingOrRejected(taskProp.id)) {
       setTask(pinWhileRejecting(taskProp));

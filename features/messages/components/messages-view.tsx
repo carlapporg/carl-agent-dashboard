@@ -154,6 +154,10 @@ function ConversationAvatar({
 
 export function MessagesView({ conversations, tasks }: MessagesViewProps) {
   const ops = useOps();
+  const hydrateOpenTasks = ops?.hydrateOpenTasks;
+  useEffect(() => {
+    hydrateOpenTasks?.(Object.values(tasks));
+  }, [hydrateOpenTasks, tasks]);
   const { data: agent } = useAgentMe();
   const agentLabel = agent ? getAgentDisplayName(agent) : "You";
   const rejectedTick = useRejectedOfferTick();
