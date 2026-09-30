@@ -2,23 +2,25 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Dialog } from "@/components/ui/dialog";
 import {
   getCallRecordingAction,
   getCallTranscriptAction,
 } from "@/features/calls/actions";
-import {
-  callIdFromMessageMetadata,
-  metadataFlag,
-} from "@/types/call";
+import { callIdFromMessageMetadata } from "@/types/call";
 
-type LoadedTranscript = { text: string | null; summary: string | null };
+type LoadedTranscript = {
+  text: string | null;
+  summary: string | null;
+  status: string | null;
+};
 
 type CallTranscriptCardProps = {
   metadata: unknown;
   createdAt: string;
   title?: string;
 };
+
+type Phase = "idle" | "loading" | "making" | "ready" | "error";
 
 function clockLabel(value: string): string {
   const date = new Date(value);
@@ -41,70 +43,88 @@ function cardHeading(title?: string): string {
   return cleaned || "Call";
 }
 
+function metaStatus(metadata: unknown): string | null {
+  if (!metadata || typeof metadata !== "object") return null;
+  const status = (metadata as { transcriptStatus?: unknown }).transcriptStatus;
+  return typeof status === "string" ? status : null;
+}
+
+function isMaking(status: string | null | undefined): boolean {
+  return status === "pending" || status === "processing";
+}
+
+function Spinner() {
+  return (
+    <span
+      className="size-3 shrink-0 animate-spin rounded-full border-2 border-current border-r-transparent"
+      aria-hidden
+    />
+  );
+}
+
 export function CallTranscriptCard({
   metadata,
   createdAt,
   title,
 }: CallTranscriptCardProps) {
   const callId = callIdFromMessageMetadata(metadata);
-  const canViewTranscript =
-    metadataFlag(metadata, "canViewTranscript") ||
-    metadataFlag(metadata, "openTranscript");
-  const canViewSummary =
-    metadataFlag(metadata, "canViewSummary") || canViewTranscript;
-  const canPlayRecording =
-    metadataFlag(metadata, "canPlayRecording") || canViewTranscript;
-
+  const hintedStatus = metaStatus(metadata);
+  const [open, setOpen] = useState(false);
+  const [phase, setPhase] = useState<Phase>(
+    isMaking(hintedStatus) ? "making" : "idle",
+  );
   const [transcript, setTranscript] = useState<LoadedTranscript | null>(null);
-  const [summaryState, setSummaryState] = useState<
-    "idle" | "loading" | "ready" | "error"
-  >(canViewSummary ? "loading" : "idle");
-  const [summaryError, setSummaryError] = useState<string | null>(null);
-  const [transcriptOpen, setTranscriptOpen] = useState(false);
-  const [transcriptLoading, setTranscriptLoading] = useState(false);
-  const [transcriptError, setTranscriptError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [playHidden, setPlayHidden] = useState(false);
   const [playLoading, setPlayLoading] = useState(false);
   const [playError, setPlayError] = useState<string | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const loadedRef = useRef<Promise<LoadedTranscript> | null>(null);
 
-  function loadTranscript(): Promise<LoadedTranscript> {
-    if (!callId) return Promise.reject(new Error("Missing call"));
-    if (transcript) return Promise.resolve(transcript);
-    if (!loadedRef.current) {
-      loadedRef.current = getCallTranscriptAction(callId).then((result) => {
-        if (!result.ok) {
-          loadedRef.current = null;
-          throw new Error(result.message);
-        }
-        setTranscript(result.data);
-        return result.data;
-      });
-    }
-    return loadedRef.current;
-  }
+  const status = transcript?.status ?? hintedStatus;
+  const making = phase === "making" || (phase === "idle" && isMaking(status));
 
   useEffect(() => {
-    if (!canViewSummary || !callId) return;
+    if (!callId) return;
+    if (!open && !isMaking(hintedStatus) && !isMaking(transcript?.status)) {
+      return;
+    }
     let cancelled = false;
-    loadTranscript()
-      .then(() => {
-        if (!cancelled) setSummaryState("ready");
-      })
-      .catch((error: unknown) => {
+    let timer = 0;
+
+    async function tick() {
+      try {
+        const result = await getCallTranscriptAction(callId!);
         if (cancelled) return;
-        loadedRef.current = null;
-        setSummaryError(accessMessage(error));
-        setSummaryState("error");
-      });
+        if (!result.ok) {
+          setError(result.message);
+          setPhase("error");
+          return;
+        }
+        setTranscript(result.data);
+        setError(null);
+        if (isMaking(result.data.status)) {
+          setPhase("making");
+          timer = window.setTimeout(() => void tick(), 4000);
+          return;
+        }
+        setPhase("ready");
+      } catch (err) {
+        if (cancelled) return;
+        setError(accessMessage(err));
+        setPhase("error");
+      }
+    }
+
+    if (!transcript && phase !== "making") setPhase("loading");
+    void tick();
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
-    // Summary loads once per card.
+    // Poll while this card is open, or while the server is still writing the transcript.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [callId, canViewSummary]);
+  }, [callId, open, hintedStatus]);
 
   useEffect(() => {
     const node = audioRef.current;
@@ -115,21 +135,6 @@ export function CallTranscriptCard({
     node.addEventListener("error", onError);
     return () => node.removeEventListener("error", onError);
   }, [audioUrl]);
-
-  async function openTranscript() {
-    setTranscriptOpen(true);
-    setTranscriptError(null);
-    if (transcript) return;
-    setTranscriptLoading(true);
-    try {
-      await loadTranscript();
-    } catch (error) {
-      loadedRef.current = null;
-      setTranscriptError(accessMessage(error));
-    } finally {
-      setTranscriptLoading(false);
-    }
-  }
 
   async function playRecording() {
     if (!callId || playHidden || audioUrl) return;
@@ -156,102 +161,120 @@ export function CallTranscriptCard({
       } catch {
         setPlayError("Press the play triangle on the gray bar.");
       }
-    } catch (error) {
-      setPlayError(accessMessage(error));
+    } catch (err) {
+      setPlayError(accessMessage(err));
     } finally {
       setPlayLoading(false);
     }
   }
 
   const summaryText = transcript?.summary?.trim() || "";
-  const showPlay = canPlayRecording && !playHidden && !audioUrl;
+  const transcriptText = transcript?.text?.trim() || "";
   const time = clockLabel(createdAt);
+  const showPlay =
+    phase === "ready" && status !== "unavailable" && !playHidden && !audioUrl;
 
   return (
-    <div className="mx-auto w-full max-w-88 rounded-[15px] border border-border bg-surface px-3 py-2.5 shadow-[var(--shadow-card)]">
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">
-        Call
-      </p>
-      <p className="mt-0.5 text-sm font-semibold text-foreground">
-        {cardHeading(title)}
-      </p>
-
-      {canViewSummary && summaryState === "loading" ? (
-        <p className="mt-2 text-[12px] text-muted">Loading summary…</p>
-      ) : null}
-      {canViewSummary && summaryState === "ready" && summaryText ? (
-        <p className="mt-2 text-[13px] leading-snug text-foreground">
-          {summaryText}
-        </p>
-      ) : null}
-      {canViewSummary && summaryState === "error" && summaryError ? (
-        <p className="mt-2 text-[12px] text-muted">{summaryError}</p>
-      ) : null}
-
-      {showPlay || canViewTranscript ? (
-        <div className="mt-2.5 flex flex-wrap gap-2">
-          {canViewTranscript ? (
-            <Button
-              type="button"
-              variant="secondary"
-              className="h-8 px-3 text-[12px]"
-              onClick={() => void openTranscript()}
-            >
-              View transcript
-            </Button>
+    <div className="mx-auto w-full max-w-[280px] overflow-hidden rounded-2xl border border-border bg-surface">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+        className="flex w-full items-center gap-2 px-2.5 py-2 text-left"
+      >
+        <span className="grid size-7 shrink-0 place-items-center rounded-full bg-accent-soft text-accent">
+          <svg viewBox="0 0 20 20" className="size-3.5" fill="currentColor" aria-hidden>
+            <path d="M6.5 3.2a1.2 1.2 0 0 0-1.4.7L4.2 6.2a1.2 1.2 0 0 0 .3 1.3l1.5 1.2a9.4 9.4 0 0 0 5.3 5.3l1.2-1.5a1.2 1.2 0 0 1 1.3-.3l2.3.9a1.2 1.2 0 0 1 .7 1.4l-.6 2.1a1.2 1.2 0 0 1-1.2.8A13.3 13.3 0 0 1 2.3 4.9a1.2 1.2 0 0 1 .8-1.2l2.1-.6a1.2 1.2 0 0 1 1.3.1Z" />
+          </svg>
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[13px] font-semibold leading-4 text-foreground">
+            {cardHeading(title)}
+          </span>
+          {making ? (
+            <span className="mt-0.5 flex items-center gap-1 text-[11px] text-muted">
+              <Spinner />
+              Making transcript…
+            </span>
+          ) : time ? (
+            <span className="mt-0.5 block text-[11px] leading-4 text-muted">
+              {time}
+            </span>
           ) : null}
+        </span>
+        <svg
+          viewBox="0 0 20 20"
+          className={`size-4 shrink-0 text-muted transition-transform ${open ? "rotate-180" : ""}`}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          aria-hidden
+        >
+          <path d="M5 7.5 10 12.5 15 7.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+
+      {open ? (
+        <div className="border-t border-border px-2.5 py-2">
+          {phase === "loading" ? (
+            <p className="flex items-center gap-1.5 text-[12px] text-muted">
+              <Spinner />
+              Loading transcript…
+            </p>
+          ) : null}
+          {phase === "making" ? (
+            <p className="flex items-center gap-1.5 text-[12px] text-muted">
+              <Spinner />
+              Transcript is being made.
+            </p>
+          ) : null}
+          {phase === "error" && error ? (
+            <p className="text-[12px] text-muted">{error}</p>
+          ) : null}
+          {phase === "ready" && status === "failed" ? (
+            <p className="text-[12px] text-muted">Transcript could not be made.</p>
+          ) : null}
+          {phase === "ready" && status === "unavailable" ? (
+            <p className="text-[12px] text-muted">No recording was saved for this call.</p>
+          ) : null}
+          {phase === "ready" && summaryText ? (
+            <p className="text-[12px] leading-snug text-foreground">{summaryText}</p>
+          ) : null}
+          {phase === "ready" && transcriptText ? (
+            <p className="mt-1.5 max-h-40 overflow-y-auto whitespace-pre-wrap text-[12px] leading-snug text-foreground">
+              {transcriptText}
+            </p>
+          ) : null}
+          {phase === "ready" &&
+          status !== "failed" &&
+          status !== "unavailable" &&
+          !summaryText &&
+          !transcriptText ? (
+            <p className="text-[12px] text-muted">No transcript text yet.</p>
+          ) : null}
+
           {showPlay ? (
             <Button
               type="button"
               variant="secondary"
-              className="h-8 px-3 text-[12px]"
+              className="mt-2 h-7 px-2.5 text-[11px]"
               loading={playLoading}
               onClick={() => void playRecording()}
             >
               Play
             </Button>
           ) : null}
+          {playError ? (
+            <p className="mt-1.5 text-[11px] text-muted">{playError}</p>
+          ) : null}
+          <audio
+            ref={audioRef}
+            controls
+            preload="metadata"
+            className={audioUrl ? "mt-2 h-8 w-full" : "hidden"}
+          />
         </div>
       ) : null}
-
-      {playError ? (
-        <p className="mt-2 text-[12px] text-muted">{playError}</p>
-      ) : null}
-
-      <audio
-        ref={audioRef}
-        controls
-        preload="metadata"
-        className={audioUrl ? "mt-2 w-full" : "hidden"}
-      />
-
-      {time ? <p className="mt-1.5 text-[10px] text-muted">{time}</p> : null}
-
-      <Dialog
-        open={transcriptOpen}
-        onClose={() => setTranscriptOpen(false)}
-        title="Transcript"
-        className="max-w-lg"
-      >
-        {transcriptLoading ? (
-          <p className="text-sm text-muted">Loading transcript…</p>
-        ) : transcriptError ? (
-          <p className="text-sm text-muted">{transcriptError}</p>
-        ) : (
-          <p className="max-h-[50vh] overflow-y-auto whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-            {transcript?.text?.trim() || "No transcript text yet."}
-          </p>
-        )}
-        <div className="mt-4 flex justify-end">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => setTranscriptOpen(false)}
-          >
-            Close
-          </Button>
-        </div>
-      </Dialog>
     </div>
   );
 }

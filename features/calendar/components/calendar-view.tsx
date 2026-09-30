@@ -4,11 +4,11 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { EmptyState } from "@/components/feedback/empty-state";
+import { Skeleton } from "@/components/feedback/skeleton";
 import {
   getCalendarAvailabilityAction,
   getCalendarDayAction,
   getCalendarMonthAction,
-  getCalendarUpcomingAction,
   getCalendarWeekAction,
 } from "@/features/calendar/actions";
 import { PresenceTimeline } from "@/features/presence/components/presence-timeline";
@@ -19,19 +19,17 @@ import { cn } from "@/lib/utils/cn";
 import type {
   CalendarAvailabilitySummary,
   CalendarEvent,
-  CalendarUpcomingItem,
   CalendarWeekDay,
 } from "@/types/calendar";
 import type { Timesheet } from "@/types/timesheet";
 
-type Mode = "day" | "week" | "month" | "upcoming" | "availability";
+type Mode = "day" | "week" | "month" | "availability";
 type AvailMode = "day" | "range";
 
 const MODES: Array<{ id: Mode; label: string }> = [
   { id: "day", label: "Day" },
   { id: "week", label: "Week" },
   { id: "month", label: "Month" },
-  { id: "upcoming", label: "Upcoming" },
   { id: "availability", label: "Availability" },
 ];
 
@@ -385,38 +383,6 @@ function EventsList({
   );
 }
 
-function UpcomingRow({ item }: { item: CalendarUpcomingItem }) {
-  return (
-    <li className="flex flex-col gap-2 border-b border-border px-4 py-3 last:border-b-0 sm:flex-row sm:items-start sm:justify-between">
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <Link
-            href={ROUTES.task(item.taskId)}
-            className="truncate text-sm font-semibold text-foreground hover:text-accent"
-          >
-            {item.title}
-          </Link>
-          <span className="rounded-full bg-surface-muted px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.04em] text-muted">
-            {item.status}
-          </span>
-        </div>
-        <p className="mt-1.5 text-sm text-muted">
-          {formatStamp(item.startAt)}
-          {" → "}
-          {item.endAt ? formatStamp(item.endAt) : "Open"}
-        </p>
-        <p className="mt-0.5 text-[11px] text-muted">{item.type}</p>
-      </div>
-      <Link
-        href={ROUTES.task(item.taskId)}
-        className="shrink-0 text-[12px] font-semibold text-accent hover:underline"
-      >
-        Open task
-      </Link>
-    </li>
-  );
-}
-
 type MonthCell = {
   date: string;
   inMonth: boolean;
@@ -658,15 +624,50 @@ function WeekGrid({
   );
 }
 
-function LoadingCards({ count = 3 }: { count?: number }) {
+function HourCardSkeleton() {
   return (
-    <div className="grid gap-4 sm:grid-cols-3">
-      {Array.from({ length: count }).map((_, i) => (
-        <div
-          key={i}
-          className="h-28 animate-pulse rounded-[var(--radius-card)] border border-border bg-surface-muted"
-        />
-      ))}
+    <div className="rounded-[var(--radius-card)] border border-border bg-surface p-4 shadow-[var(--shadow-card)] sm:p-5">
+      <Skeleton className="h-4 w-24" />
+      <Skeleton className="mt-3 h-8 w-16" />
+      <Skeleton className="mt-4 h-3 w-28" />
+    </div>
+  );
+}
+
+function TimesheetLoading() {
+  return (
+    <div className="space-y-4" role="status" aria-label="Loading timesheet">
+      <div className="rounded-[var(--radius-card)] border border-border bg-surface p-4 shadow-[var(--shadow-card)] sm:p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <Skeleton className="h-3 w-16" />
+            <Skeleton className="mt-2 h-6 w-40" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Skeleton className="h-3 w-12" />
+              <Skeleton className="mt-2 h-4 w-28" />
+            </div>
+            <div>
+              <Skeleton className="h-3 w-14" />
+              <Skeleton className="mt-2 h-4 w-28" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <HourCardSkeleton />
+        <HourCardSkeleton />
+        <HourCardSkeleton />
+      </div>
+      <div className="rounded-[var(--radius-card)] border border-border bg-surface p-4 shadow-[var(--shadow-card)] sm:p-5">
+        <Skeleton className="h-4 w-32" />
+        <div className="mt-4 space-y-3">
+          <Skeleton className="h-10 w-full rounded-lg" />
+          <Skeleton className="h-10 w-full rounded-lg" />
+          <Skeleton className="h-10 w-[70%] rounded-lg" />
+        </div>
+      </div>
     </div>
   );
 }
@@ -747,18 +748,6 @@ export function CalendarView() {
     refetchOnWindowFocus: false,
   });
 
-  const upcomingQuery = useQuery({
-    queryKey: queryKeys.calendar.upcoming(20),
-    queryFn: async () => {
-      const result = await getCalendarUpcomingAction({ limit: 20 });
-      if (!result.ok) throw new Error(result.message);
-      return result.data;
-    },
-    enabled: mode === "upcoming",
-    staleTime: 30_000,
-    refetchOnWindowFocus: false,
-  });
-
   const availabilityQuery = useQuery({
     queryKey: queryKeys.calendar.availability(availQuery),
     queryFn: async () => {
@@ -804,9 +793,7 @@ export function CalendarView() {
         ? weekQuery
         : mode === "month"
           ? monthQuery
-          : mode === "upcoming"
-            ? upcomingQuery
-            : availabilityQuery;
+          : availabilityQuery;
 
   const isPending = active.isPending;
   const isFetching = active.isFetching;
@@ -979,7 +966,9 @@ export function CalendarView() {
         <EmptyState title="Invalid range" description={rangeError} />
       ) : null}
 
-      {!rangeError && isPending && !active.data ? <LoadingCards /> : null}
+      {!rangeError && (isPending || isFetching) && !active.data ? (
+        <TimesheetLoading />
+      ) : null}
 
       {!rangeError && isError && !active.data ? (
         <EmptyState
@@ -1038,7 +1027,24 @@ export function CalendarView() {
                       Open full day
                     </button>
                   </div>
-                  {weekDaySheetQuery.data?.timesheet ? (
+                  {weekDaySheetQuery.isPending ? (
+                    <div
+                      className="rounded-[var(--radius-card)] border border-border bg-surface p-4 shadow-[var(--shadow-card)] sm:p-5"
+                      role="status"
+                      aria-label="Loading login and logout"
+                    >
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div>
+                          <Skeleton className="h-3 w-20" />
+                          <Skeleton className="mt-2 h-4 w-36" />
+                        </div>
+                        <div>
+                          <Skeleton className="h-3 w-24" />
+                          <Skeleton className="mt-2 h-4 w-36" />
+                        </div>
+                      </div>
+                    </div>
+                  ) : weekDaySheetQuery.data?.timesheet ? (
                     <LoginLogoutStrip
                       loginAt={weekDaySheetQuery.data.timesheet.loginAt}
                       logoutAt={weekDaySheetQuery.data.timesheet.logoutAt}
@@ -1084,33 +1090,6 @@ export function CalendarView() {
             availability={monthQuery.data.availability}
           />
         </div>
-      ) : null}
-
-      {mode === "upcoming" && upcomingQuery.data ? (
-        <section className="overflow-hidden rounded-[var(--radius-card)] border border-border bg-surface shadow-[var(--shadow-card)]">
-          <div className="border-b border-border px-4 py-3">
-            <h2 className="text-sm font-semibold text-foreground">
-              Upcoming schedule
-            </h2>
-            <p className="mt-0.5 text-[11px] text-muted">
-              Next scheduled tasks assigned to you.
-            </p>
-          </div>
-          {upcomingQuery.data.items.length === 0 ? (
-            <p className="px-4 py-8 text-center text-sm text-muted">
-              No upcoming items.
-            </p>
-          ) : (
-            <ul>
-              {upcomingQuery.data.items.map((item) => (
-                <UpcomingRow
-                  key={`${item.taskId}-${item.startAt}`}
-                  item={item}
-                />
-              ))}
-            </ul>
-          )}
-        </section>
       ) : null}
 
       {mode === "availability" && !rangeError && availabilityQuery.data ? (

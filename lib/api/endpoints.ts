@@ -125,14 +125,25 @@ export const API_ENDPOINTS = {
       `/agents/me/tasks/${taskId}/messages/${messageId}/image` as const,
 
     /**
-     * Admin ↔ agent chat (text only).
+     * Admin ↔ agent chat.
      * POST { subject?, message? } → open/get OPEN chat
-     * GET list | GET :id (detail + messages) | GET :id/messages | POST :id/messages | POST :id/read
+     * GET list | GET :id | GET :id/messages
+     * POST :id/messages { content }
+     * POST :id/messages/image multipart file + optional caption
+     * POST :id/messages/file multipart file + optional caption
+     * GET :id/messages/:messageId/file raw bytes (bearer token)
+     * POST :id/read
      */
     adminChats: "/agents/me/admin-chats",
     adminChat: (id: string) => `/agents/me/admin-chats/${id}` as const,
     adminChatMessages: (id: string) =>
       `/agents/me/admin-chats/${id}/messages` as const,
+    adminChatMessageImage: (id: string) =>
+      `/agents/me/admin-chats/${id}/messages/image` as const,
+    adminChatMessageFile: (id: string) =>
+      `/agents/me/admin-chats/${id}/messages/file` as const,
+    adminChatMessageFileGet: (id: string, messageId: string) =>
+      `/agents/me/admin-chats/${id}/messages/${messageId}/file` as const,
     adminChatRead: (id: string) =>
       `/agents/me/admin-chats/${id}/read` as const,
 

@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { logoutAction } from "@/features/auth/actions/auth";
 import { useClearAppCache } from "@/features/agents/hooks";
 import {
   NavIcon,
@@ -128,7 +127,7 @@ export function DashboardSidebar() {
           onClick={() => {
             clearCache();
             clearManualPresence();
-            void logoutAction();
+            window.location.assign(ROUTES.sessionLogout);
           }}
         >
           <svg

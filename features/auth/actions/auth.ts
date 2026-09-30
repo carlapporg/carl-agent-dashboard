@@ -272,7 +272,6 @@ export async function logoutAction(): Promise<void> {
   }
 
   await destroySession();
-  redirect(ROUTES.login);
 }
 
 export async function clearSessionAfterPasswordChangeAction(): Promise<void> {

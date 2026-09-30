@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   getAdminChatAction,
   listAdminChatMessagesAction,
@@ -10,10 +11,18 @@ import {
   sendAdminChatMessageAction,
 } from "@/features/admin-chat/actions";
 import { useAdminChatSocket } from "@/features/admin-chat/hooks/use-admin-chat-socket";
+import {
+  ADMIN_CHAT_MEDIA,
+  adminChatFileSrc,
+  adminChatFileUploadUrl,
+  adminChatImageUploadUrl,
+  isAdminChatFile,
+  isAdminChatImage,
+} from "@/lib/api/admin-chat-media";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { useToast } from "@/components/providers/toast-provider";
+import { AnchoredMenu } from "@/components/ui/anchored-menu";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils/cn";
 import type {
   AdminChatConversation,
@@ -34,20 +43,21 @@ function formatRel(value: string | null | undefined): string {
     0,
     Math.floor((Date.now() - new Date(value).getTime()) / 60_000),
   );
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1) return "Just now";
+  if (mins < 60) return mins === 1 ? "1 Min ago" : `${mins} Min ago`;
   const h = Math.floor(mins / 60);
-  if (h < 24) return `${h}h ago`;
+  if (h < 24) return h === 1 ? "1 Hour ago" : `${h} Hour ago`;
   const d = Math.floor(h / 24);
-  return d === 1 ? "1d ago" : `${d}d ago`;
+  return d === 1 ? "1 Day ago" : `${d} Day ago`;
 }
 
 function formatClock(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleTimeString("en-US", {
-    hour: "numeric",
+  return date.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
     minute: "2-digit",
+    hour12: false,
   });
 }
 
@@ -123,8 +133,62 @@ function ticketCode(id: string): string {
 type TicketFilter = "open" | "closed" | "all";
 
 function previewFromMessage(message: AdminChatMessage): string {
-  const text = message.content.trim();
-  return text || "Message";
+  const caption = message.content.trim();
+  if (message.messageType === "IMAGE") return caption || "Photo";
+  if (message.messageType === "FILE") return caption || message.fileName || "Document";
+  return caption || "Message";
+}
+
+function attachmentSrc(message: AdminChatMessage): string {
+  const raw = message.imageUrl || message.fileUrl;
+  if (
+    raw &&
+    /^https?:\/\//i.test(raw) &&
+    !/\/agents\/me\/admin-chats\//.test(raw)
+  ) {
+    return raw;
+  }
+  return adminChatFileSrc(message.conversationId, message.id);
+}
+
+function ChatAttachment({ message }: { message: AdminChatMessage }) {
+  const caption = message.content.trim();
+  if (message.messageType === "IMAGE") {
+    const src = attachmentSrc(message);
+    return (
+      <div className="min-w-0">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={src}
+          alt={caption || "Photo"}
+          className="max-h-56 max-w-full rounded-[12px] object-cover"
+        />
+        {caption ? (
+          <p className="mt-2 whitespace-pre-wrap break-words">{caption}</p>
+        ) : null}
+      </div>
+    );
+  }
+  if (message.messageType === "FILE") {
+    const src = attachmentSrc(message);
+    const name = message.fileName?.trim() || "Document";
+    return (
+      <div className="min-w-0">
+        <a
+          href={src}
+          target="_blank"
+          rel="noreferrer"
+          className="font-medium text-[#377dff] underline"
+        >
+          {name}
+        </a>
+        {caption && caption !== name ? (
+          <p className="mt-2 whitespace-pre-wrap break-words">{caption}</p>
+        ) : null}
+      </div>
+    );
+  }
+  return <p className="whitespace-pre-wrap break-words">{message.content}</p>;
 }
 
 function SupportIcon({ className }: { className?: string }) {
@@ -158,31 +222,15 @@ function SupportIcon({ className }: { className?: string }) {
   );
 }
 
-function PlusIcon() {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" className="size-4" aria-hidden>
-      <path
-        d="M8 3.5v9M3.5 8h9"
-        stroke="currentColor"
-        strokeWidth="1.75"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
+function padCount(value: number): string {
+  return String(value).padStart(2, "0");
 }
 
-function SendIcon() {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" className="size-4" aria-hidden>
-      <path
-        d="m2.5 8 11-5.5L9.5 8l4 5.5-11-5.5Z"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
+const TICKET_FILTERS: { id: TicketFilter; label: string; bar: string }[] = [
+  { id: "open", label: "Open", bar: "OPEN" },
+  { id: "closed", label: "Close", bar: "CLOSE" },
+  { id: "all", label: "All", bar: "ALL" },
+];
 
 export function AdminChatView({
   initialConversations,
@@ -208,6 +256,7 @@ export function AdminChatView({
   const [threadError, setThreadError] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [opening, setOpening] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [hasOlder, setHasOlder] = useState(false);
@@ -215,8 +264,16 @@ export function AdminChatView({
   const [openSubject, setOpenSubject] = useState("");
   const [openMessage, setOpenMessage] = useState("");
   const [ticketFilter, setTicketFilter] = useState<TicketFilter>("open");
+  const [filterOpen, setFilterOpen] = useState(false);
+  const filterButtonRef = useRef<HTMLButtonElement>(null);
+  const filterMenuRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fetchGen = useRef(0);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const threads = useRef(
+    new Map<string, { messages: AdminChatMessage[]; hasOlder: boolean }>(),
+  );
   const stickToBottom = useRef(true);
   const prefetchedPreviews = useRef(new Set<string>());
 
@@ -279,8 +336,24 @@ export function AdminChatView({
         return upsertConversation(prev, next);
       });
 
-      if (!isOpenThread) return;
-      setMessages((prev) => mergeMessages(prev, [message]));
+      if (!isOpenThread) {
+        const saved = threads.current.get(message.conversationId);
+        if (saved) {
+          threads.current.set(message.conversationId, {
+            messages: mergeMessages(saved.messages, [message]),
+            hasOlder: saved.hasOlder,
+          });
+        }
+        return;
+      }
+      setMessages((prev) => {
+        const next = mergeMessages(prev, [message]);
+        threads.current.set(message.conversationId, {
+          messages: next,
+          hasOlder: threads.current.get(message.conversationId)?.hasOlder ?? false,
+        });
+        return next;
+      });
       if (message.sender === "ADMIN") {
         void markAdminChatReadAction(message.conversationId);
       }
@@ -355,7 +428,15 @@ export function AdminChatView({
     const conversationId = selectedId;
     const gen = ++fetchGen.current;
     let cancelled = false;
-    setThreadLoading(true);
+    const saved = threads.current.get(conversationId);
+    if (saved) {
+      setMessages(saved.messages);
+      setHasOlder(saved.hasOlder);
+      setThreadLoading(false);
+    } else {
+      setMessages([]);
+      setThreadLoading(true);
+    }
     setThreadError(null);
     stickToBottom.current = true;
 
@@ -378,8 +459,13 @@ export function AdminChatView({
           unreadCount: 0,
         }),
       );
+      const older = detail.data.messages.length >= PAGE_LIMIT;
+      threads.current.set(conversationId, {
+        messages: detail.data.messages,
+        hasOlder: older,
+      });
       setMessages(detail.data.messages);
-      setHasOlder(detail.data.messages.length >= PAGE_LIMIT);
+      setHasOlder(older);
       setThreadLoading(false);
 
       void markAdminChatReadAction(conversationId).then((readResult) => {
@@ -419,8 +505,13 @@ export function AdminChatView({
       toast(result.message, "error");
       return;
     }
-    setHasOlder(result.data.length >= PAGE_LIMIT);
-    setMessages((prev) => mergeMessages(result.data, prev));
+    const older = result.data.length >= PAGE_LIMIT;
+    setHasOlder(older);
+    setMessages((prev) => {
+      const next = mergeMessages(result.data, prev);
+      threads.current.set(selectedId, { messages: next, hasOlder: older });
+      return next;
+    });
   }
 
   async function handleSend() {
@@ -445,7 +536,14 @@ export function AdminChatView({
       return;
     }
     setDraft("");
-    setMessages((prev) => mergeMessages(prev, [result.data]));
+    setMessages((prev) => {
+      const next = mergeMessages(prev, [result.data]);
+      threads.current.set(selectedId, {
+        messages: next,
+        hasOlder: threads.current.get(selectedId)?.hasOlder ?? false,
+      });
+      return next;
+    });
     setConversations((prev) =>
       upsertConversation(prev, {
         ...(selected ?? {
@@ -460,6 +558,92 @@ export function AdminChatView({
         updatedAt: result.data.createdAt,
       }),
     );
+  }
+
+  async function handleUpload(kind: "image" | "file", file: File | undefined) {
+    if (!selectedId || !file || uploading || sending) return;
+    if (selected?.status === "CLOSED") {
+      toast("This chat is closed.", "error");
+      return;
+    }
+    if (kind === "image" && !isAdminChatImage(file)) {
+      toast("Use a jpeg, png, webp, gif, or heic photo.", "error");
+      return;
+    }
+    if (kind === "file" && !isAdminChatFile(file)) {
+      toast("Use a pdf, Word, Excel, text file, or a photo.", "error");
+      return;
+    }
+    const limit =
+      kind === "image" ? ADMIN_CHAT_MEDIA.maxImageBytes : ADMIN_CHAT_MEDIA.maxFileBytes;
+    if (file.size > limit) {
+      toast(
+        kind === "image"
+          ? "Photos must be 10 MB or smaller."
+          : "Files must be 15 MB or smaller.",
+        "error",
+      );
+      return;
+    }
+
+    const caption = draft.trim();
+    const form = new FormData();
+    form.set("file", file);
+    if (caption) form.set("caption", caption);
+    setUploading(true);
+    stickToBottom.current = true;
+    try {
+      const response = await fetch(
+        kind === "image"
+          ? adminChatImageUploadUrl(selectedId)
+          : adminChatFileUploadUrl(selectedId),
+        { method: "POST", body: form },
+      );
+      const raw: unknown = await response.json().catch(() => null);
+      const record =
+        raw && typeof raw === "object" ? (raw as Record<string, unknown>) : null;
+      if (!response.ok) {
+        const message =
+          record && typeof record.message === "string"
+            ? record.message
+            : "Couldn't send that file.";
+        toast(message, "error");
+        return;
+      }
+      const payload = record?.data ?? record;
+      if (!payload || typeof payload !== "object" || !("id" in payload)) {
+        toast("Couldn't send that file.", "error");
+        return;
+      }
+      const parsed = payload as AdminChatMessage;
+      setDraft("");
+      setMessages((prev) => {
+        const next = mergeMessages(prev, [parsed]);
+        threads.current.set(selectedId, {
+          messages: next,
+          hasOlder: threads.current.get(selectedId)?.hasOlder ?? false,
+        });
+        return next;
+      });
+      setConversations((prev) =>
+        upsertConversation(prev, {
+          ...(selected ?? {
+            id: selectedId,
+            status: "OPEN",
+            subject: null,
+            createdAt: parsed.createdAt,
+            closedAt: null,
+          }),
+          preview: previewFromMessage(parsed),
+          lastMessageAt: parsed.createdAt,
+          updatedAt: parsed.createdAt,
+        }),
+      );
+    } catch {
+      toast("Couldn't send that file.", "error");
+    } finally {
+      setUploading(false);
+    }
   }
 
   async function handleOpenChat() {
@@ -509,6 +693,10 @@ export function AdminChatView({
     );
 
     if (firstMessage) {
+      threads.current.set(conversation.id, {
+        messages: [firstMessage],
+        hasOlder: false,
+      });
       setMessages([firstMessage]);
     } else if (!result.data.created) {
       // Backend reused an open thread — still post the description as a follow-up.
@@ -541,9 +729,6 @@ export function AdminChatView({
   }
 
   function startNewChat() {
-    setSelectedId(null);
-    setMessages([]);
-    setThreadError(null);
     setComposerOpen(true);
     setOpenSubject("");
     setOpenMessage("");
@@ -571,7 +756,6 @@ export function AdminChatView({
     return true;
   });
   const hasConversations = conversations.length > 0;
-  const showNewChatComposer = composerOpen && !selectedId;
 
   const messageBlocks = useMemo(() => {
     const blocks: Array<
@@ -590,60 +774,116 @@ export function AdminChatView({
     return blocks;
   }, [messages]);
 
+  const filterCounts: Record<TicketFilter, number> = {
+    open: openCount,
+    closed: closedCount,
+    all: conversations.length,
+  };
+  const activeFilter =
+    TICKET_FILTERS.find((item) => item.id === ticketFilter) ?? TICKET_FILTERS[0];
+
   return (
-    <div className="grid min-h-128 gap-4 lg:h-[calc(100dvh-11rem)] lg:grid-cols-[minmax(17rem,0.9fr)_minmax(0,1.4fr)] lg:items-stretch">
-      <aside className="flex min-h-0 flex-col overflow-hidden rounded-[var(--radius-card)] border border-border bg-surface shadow-[var(--shadow-card)]">
-        <div className="flex shrink-0 flex-col gap-3 border-b border-border px-4 py-3">
-          <div className="flex items-center justify-between gap-2">
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-foreground">Tickets</p>
-              <p className="text-xs text-muted">
-                {openCount} open · {closedCount} closed
-              </p>
-            </div>
-            <Button
+    <div className="space-y-5">
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-[32px] font-medium leading-[1.3] tracking-[-0.05em] text-black">
+            Support Tickets
+          </h1>
+          <p className="mt-1 max-w-[589px] text-[16px] font-normal leading-[1.3] tracking-[-0.02em] text-black/50">
+            Track, manage, and resolve customer requests efficiently from one
+            place. Keep every issue organized, monitor progress, and make sure
+            no support request gets missed.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={startNewChat}
+          className="relative inline-flex h-[35px] shrink-0 items-center rounded-[40px] bg-white pl-[15px] pr-[45px] text-[12px] font-medium tracking-[-0.05em] text-black"
+        >
+          Create New Ticket
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/figma/support/plus.svg"
+            alt=""
+            width={29}
+            height={29}
+            className="absolute right-[3px] top-[3px]"
+          />
+        </button>
+      </header>
+
+    <div className="grid min-h-[640px] gap-5 lg:h-[min(720px,calc(100dvh-16rem))] lg:grid-cols-[297px_minmax(0,1fr)] lg:items-stretch">
+      <aside className="flex min-h-0 flex-col overflow-hidden rounded-[10px] bg-white">
+        <div className="shrink-0 px-[15px] pb-3 pt-[10px]">
+          <h2 className="text-[24px] font-semibold tracking-[-0.05em] text-[#1f1f21]">
+            Tickets
+          </h2>
+          <p className="mt-1 max-w-[267px] text-[14px] font-normal leading-[1.3] tracking-[-0.04em] text-black/80">
+            See all relevant tickets in one place and stay up to date on their
+            current status and activity.
+          </p>
+          <div className="relative mt-[15px]">
+            <button
+              ref={filterButtonRef}
               type="button"
-              variant="secondary"
-              className="h-9 gap-1.5 px-3 text-xs"
-              onClick={startNewChat}
+              aria-expanded={filterOpen}
+              aria-haspopup="menu"
+              onClick={() => setFilterOpen((open) => !open)}
+              className="flex h-[37px] w-full items-center justify-between rounded-[8px] bg-[#f7f7f7] px-[10px]"
             >
-              <PlusIcon />
-              New ticket
-            </Button>
-          </div>
-          <div className="flex gap-1 rounded-[var(--radius-md)] bg-surface-muted p-1">
-            {(
-              [
-                { id: "open", label: "Open", count: openCount },
-                { id: "closed", label: "Closed", count: closedCount },
-                { id: "all", label: "All", count: conversations.length },
-              ] as const
-            ).map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setTicketFilter(tab.id)}
-                className={cn(
-                  "flex-1 rounded-[8px] px-2 py-1.5 text-[11px] font-semibold transition-colors",
-                  ticketFilter === tab.id
-                    ? "bg-surface text-foreground shadow-sm"
-                    : "text-muted hover:text-foreground",
-                )}
-              >
-                {tab.label}
-                <span className="ml-1 tabular-nums opacity-70">{tab.count}</span>
-              </button>
-            ))}
+              <span className="text-[16px] font-medium leading-[1.3] tracking-[-0.05em] text-black">
+                {activeFilter.bar}
+                <span className="ml-2">{padCount(filterCounts[ticketFilter])}</span>
+              </span>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/figma/earnings/chevron-circle.svg"
+                alt=""
+                width={21}
+                height={21}
+                className={cn(filterOpen && "rotate-180")}
+              />
+            </button>
+            <AnchoredMenu
+              open={filterOpen}
+              triggerRef={filterButtonRef}
+              menuRef={filterMenuRef}
+              aria-label="Ticket status"
+              className="w-[287px] overflow-hidden rounded-[8px] border border-[#cacaca]/80 bg-white py-2 shadow-[0_0_5px_rgba(0,0,0,0.05)]"
+            >
+              {TICKET_FILTERS.map((item, index) => {
+                const selectedFilter = item.id === ticketFilter;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    role="menuitem"
+                    className={cn(
+                      "flex w-full items-center justify-between px-[10px] py-2.5 text-left text-[16px] font-medium leading-[1.3] tracking-[-0.05em]",
+                      selectedFilter ? "text-black" : "text-black/20",
+                      index > 0 && "border-t border-[#efefef]",
+                    )}
+                    onClick={() => {
+                      setTicketFilter(item.id);
+                      setFilterOpen(false);
+                    }}
+                  >
+                    <span>{item.label}</span>
+                    <span>{padCount(filterCounts[item.id])}</span>
+                  </button>
+                );
+              })}
+            </AnchoredMenu>
           </div>
         </div>
 
         {filteredConversations.length > 0 ? (
-          <ul className="min-h-0 flex-1 overflow-y-auto p-2">
+          <ul className="min-h-0 flex-1 space-y-[10px] overflow-y-auto px-[5px] pb-3">
             {filteredConversations.map((row) => {
               const active = row.id === selectedId;
               const unread = row.unreadCount ?? 0;
               return (
-                <li key={row.id} className="mb-1 last:mb-0">
+                <li key={row.id}>
                   <button
                     type="button"
                     onClick={() => {
@@ -651,39 +891,33 @@ export function AdminChatView({
                       setSelectedId(row.id);
                     }}
                     className={cn(
-                      "relative flex w-full items-start gap-2 rounded-[var(--radius-md)] border px-3 py-3 text-left transition-colors",
-                      active
-                        ? "border-accent/40 bg-accent-soft"
-                        : "border-transparent hover:border-border hover:bg-surface-hover",
+                      "flex min-h-[130px] w-full flex-col rounded-[8px] px-[10px] py-[10px] text-left",
+                      active ? "bg-[rgba(201,239,255,0.5)]" : "bg-[#f7f7f7]",
                     )}
                   >
-                    {active ? (
-                      <span className="absolute inset-y-2 left-0 w-1 rounded-full bg-accent" />
-                    ) : null}
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-start justify-between gap-2">
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-semibold text-foreground">
-                            {threadTitle(row)}
-                          </span>
-                          <span className="mt-0.5 block truncate text-[11px] text-muted">
-                            {ticketCode(row.id)} · {ticketStatusLabel(row.status)}
-                          </span>
+                    <span className="flex items-start justify-between gap-2">
+                      <span className="min-w-0">
+                        <span className="block text-[12px] font-semibold leading-[14px] tracking-[-0.05em] text-black">
+                          ADMIN
                         </span>
-                        <span className="inline-flex shrink-0 flex-col items-end gap-1">
-                          <span className="text-[11px] tabular-nums text-muted">
-                            {formatRel(row.lastMessageAt ?? row.updatedAt)}
-                          </span>
-                          {unread > 0 ? (
-                            <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-bold text-accent-foreground">
-                              {unread}
-                            </span>
-                          ) : null}
+                        <span className="block text-[12px] font-normal leading-[14px] tracking-[-0.05em] text-[#777583]">
+                          {ticketCode(row.id)}
                         </span>
                       </span>
-                      <span className="mt-1 line-clamp-1 text-xs text-muted">
-                        {row.preview ?? "No messages yet"}
+                      <span className="shrink-0 text-right text-[12px] font-medium leading-[14px] tracking-[-0.05em] text-black">
+                        {formatRel(row.lastMessageAt ?? row.updatedAt)}
+                        {unread > 0 ? (
+                          <span className="ml-1 inline-flex min-w-4 items-center justify-center rounded-full bg-[#377dff] px-1 text-[10px] font-bold text-white">
+                            {unread}
+                          </span>
+                        ) : null}
                       </span>
+                    </span>
+                    <span className="mt-5 block truncate text-[16px] font-medium leading-[1.3] tracking-[-0.04em] text-black">
+                      {threadTitle(row)}
+                    </span>
+                    <span className="mt-1 line-clamp-2 text-[14px] font-normal leading-[1.3] tracking-[-0.04em] text-black/40">
+                      {row.preview ?? "No messages yet"}
                     </span>
                   </button>
                 </li>
@@ -703,80 +937,22 @@ export function AdminChatView({
         )}
       </aside>
 
-      <section className="flex min-h-112 min-w-0 flex-col lg:min-h-0">
-        {showNewChatComposer ? (
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-card)] border border-border bg-surface shadow-[var(--shadow-card)]">
-            <div className="border-b border-border px-5 py-4">
-              <h2 className="text-base font-semibold text-foreground">
-                New support ticket
-              </h2>
-              <p className="mt-1 text-sm text-muted">
-                Give it a clear title, then describe what you need from Carl ops.
-              </p>
-            </div>
-            <div className="flex flex-1 flex-col gap-4 p-5">
-              <label className="block space-y-1.5">
-                <span className="text-xs font-semibold uppercase tracking-wide text-muted">
-                  Title
+      <section className="flex min-h-[480px] min-w-0 flex-col lg:min-h-0">
+        {selected ? (
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10px] bg-[#fdfdfd]">
+            <header className="flex shrink-0 items-center gap-[10px] border-b border-[#efefef] px-5 py-5">
+              <span className="flex size-[34px] shrink-0 items-center justify-center rounded-full bg-[#f0f0f0]">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/figma/support/user.svg" alt="" width={16} height={16} />
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-[12px] font-semibold leading-[14px] text-black">
+                  {ADMIN_LABEL}
                 </span>
-                <input
-                  value={openSubject}
-                  onChange={(event) => setOpenSubject(event.target.value)}
-                  placeholder="e.g. Payment stuck on task #124"
-                  className="h-10 w-full rounded-[var(--radius-md)] border border-border bg-surface px-3 text-sm outline-none focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/20"
-                  maxLength={200}
-                />
-              </label>
-              <label className="flex min-h-0 flex-1 flex-col gap-1.5">
-                <span className="text-xs font-semibold uppercase tracking-wide text-muted">
-                  Description
+                <span className="block truncate text-[12px] font-medium leading-[14px] text-[#777583]">
+                  {ticketStatusLabel(selected.status)} · {threadTitle(selected)}
                 </span>
-                <Textarea
-                  value={openMessage}
-                  onChange={(event) => setOpenMessage(event.target.value)}
-                  placeholder="Describe your question or issue…"
-                  className="min-h-40 flex-1"
-                  maxLength={MAX_CONTENT}
-                />
-              </label>
-              <div className="flex items-center justify-end gap-2 border-t border-border pt-4">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => setComposerOpen(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="button"
-                  loading={opening}
-                  onClick={() => void handleOpenChat()}
-                >
-                  Open ticket
-                </Button>
-              </div>
-            </div>
-          </div>
-        ) : selected ? (
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-card)] border border-border bg-surface shadow-[var(--shadow-card)]">
-            <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-foreground">
-                  {threadTitle(selected)}
-                </p>
-                <p className="truncate text-xs text-muted">
-                  {ticketCode(selected.id)} · {ADMIN_LABEL}
-                </p>
-              </div>
-              {selected.status === "OPEN" ? (
-                <span className="rounded-full bg-success-soft px-2.5 py-1 text-[11px] font-semibold text-success-foreground">
-                  Open
-                </span>
-              ) : (
-                <span className="rounded-full bg-surface-hover px-2.5 py-1 text-[11px] font-semibold text-muted">
-                  Closed
-                </span>
-              )}
+              </span>
             </header>
 
             {threadLoading ? (
@@ -807,7 +983,7 @@ export function AdminChatView({
               <>
                 <div
                   ref={scrollRef}
-                  className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-surface-muted/40 px-4 py-4"
+                  className="min-h-0 flex-1 space-y-5 overflow-y-auto bg-[#fdfdfd] px-5 py-6"
                   onScroll={(event) => {
                     const el = event.currentTarget;
                     stickToBottom.current =
@@ -864,44 +1040,37 @@ export function AdminChatView({
                       return (
                         <div
                           key={block.key}
-                          className={cn("flex", mine ? "justify-end" : "justify-start")}
+                          className={cn(
+                            "flex flex-col gap-1",
+                            mine ? "items-end" : "items-start",
+                          )}
                         >
                           <div
                             className={cn(
-                              "max-w-[min(85%,28rem)] rounded-2xl px-3.5 py-2.5 shadow-sm",
+                              "max-w-[480px] px-4 py-3 text-[14px] font-normal leading-[1.5] text-[#11142d]",
                               mine
-                                ? "rounded-br-md bg-accent text-accent-foreground"
-                                : "rounded-bl-md border border-border bg-surface text-foreground",
+                                ? "rounded-bl-[16px] rounded-br-[16px] rounded-tl-[16px] rounded-tr-[4px] bg-[rgba(84,149,253,0.2)]"
+                                : "rounded-bl-[16px] rounded-br-[16px] rounded-tl-[4px] rounded-tr-[16px] bg-[#f0f3f6]",
                             )}
                           >
-                            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide opacity-75">
-                              {mine ? "You" : ADMIN_LABEL}
-                            </p>
-                            <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
-                              {message.content}
-                            </p>
-                            <p
-                              className={cn(
-                                "mt-1.5 text-[10px] tabular-nums",
-                                mine ? "text-accent-foreground/75" : "text-muted",
-                              )}
-                            >
-                              {formatClock(message.createdAt)}
-                            </p>
+                            <ChatAttachment message={message} />
                           </div>
+                          <p className="text-[11px] text-[#b2b3bd]">
+                            {formatClock(message.createdAt)}
+                          </p>
                         </div>
                       );
                     })
                   )}
                 </div>
 
-                <footer className="shrink-0 border-t border-border bg-surface p-4">
+                <footer className="shrink-0 border-t border-[#eef0f2] bg-[#fdfdfd] p-6">
                   {selected.status === "CLOSED" ? (
-                    <div className="rounded-[var(--radius-md)] bg-surface-muted px-4 py-3 text-center text-sm text-muted">
+                    <div className="rounded-[100px] bg-[#f7f8fa] px-4 py-3 text-center text-sm text-[#777583]">
                       This ticket is closed. Open a{" "}
                       <button
                         type="button"
-                        className="font-semibold text-accent hover:text-accent-hover"
+                        className="font-semibold text-[#377dff]"
                         onClick={startNewChat}
                       >
                         new ticket
@@ -910,40 +1079,97 @@ export function AdminChatView({
                     </div>
                   ) : (
                     <form
-                      className="flex items-end gap-2"
+                      className="flex items-center gap-4"
                       onSubmit={(event) => {
                         event.preventDefault();
                         void handleSend();
                       }}
                     >
-                      <Textarea
-                        value={draft}
-                        onChange={(event) => setDraft(event.target.value)}
-                        placeholder="Write a message…"
-                        className="min-h-11 max-h-32 flex-1 resize-none py-2.5"
-                        maxLength={MAX_CONTENT}
-                        disabled={sending}
-                        rows={1}
-                        onKeyDown={(event) => {
-                          if (
-                            event.key === "Enter" &&
-                            !event.shiftKey &&
-                            !event.nativeEvent.isComposing
-                          ) {
-                            event.preventDefault();
-                            void handleSend();
-                          }
+                      <button
+                        type="button"
+                        aria-label="Add a photo"
+                        disabled={uploading || sending}
+                        onClick={() => imageInputRef.current?.click()}
+                        className="flex size-9 shrink-0 items-center justify-center rounded-[18px] bg-[#f0f0f0] disabled:opacity-50"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src="/figma/support/image.svg" alt="" width={16} height={16} />
+                      </button>
+                      <input
+                        ref={imageInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,.heic,.heif"
+                        className="hidden"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          event.target.value = "";
+                          void handleUpload("image", file);
                         }}
                       />
-                      <Button
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif"
+                        className="hidden"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          event.target.value = "";
+                          void handleUpload("file", file);
+                        }}
+                      />
+                      <label className="flex min-w-0 flex-1 items-center gap-3 rounded-[100px] bg-[#f7f8fa] px-4 py-3">
+                        <button
+                          type="button"
+                          aria-label="Add a document"
+                          disabled={uploading || sending}
+                          onClick={() => fileInputRef.current?.click()}
+                          className="shrink-0 disabled:opacity-50"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src="/figma/support/paperclip.svg" alt="" width={18} height={18} />
+                        </button>
+                        <textarea
+                          value={draft}
+                          onChange={(event) => setDraft(event.target.value)}
+                          placeholder={uploading ? "Sending file…" : "Write message here..."}
+                          className="max-h-24 min-h-[17px] w-full flex-1 resize-none border-0 bg-transparent p-0 text-[14px] leading-normal text-[#11142d] outline-none placeholder:text-[#b2b3bd]"
+                          maxLength={MAX_CONTENT}
+                          disabled={sending || uploading}
+                          rows={1}
+                          onKeyDown={(event) => {
+                            if (
+                              event.key === "Enter" &&
+                              !event.shiftKey &&
+                              !event.nativeEvent.isComposing
+                            ) {
+                              event.preventDefault();
+                              void handleSend();
+                            }
+                          }}
+                        />
+                      </label>
+                      <button
                         type="submit"
-                        className="size-10 shrink-0 rounded-full p-0"
-                        loading={sending}
-                        disabled={!draft.trim()}
+                        className="flex size-11 shrink-0 items-center justify-center rounded-[22px] bg-[#377dff] disabled:opacity-50"
+                        disabled={sending || uploading || !draft.trim()}
                         aria-label="Send message"
                       >
-                        <SendIcon />
-                      </Button>
+                        <svg
+                          viewBox="0 0 24 24"
+                          width={18}
+                          height={18}
+                          fill="none"
+                          aria-hidden
+                        >
+                          <path
+                            d="M5 12h12M13 6l6 6-6 6"
+                            stroke="white"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </button>
                     </form>
                   )}
                 </footer>
@@ -951,7 +1177,7 @@ export function AdminChatView({
             )}
           </div>
         ) : hasConversations ? (
-          <div className="flex flex-1 items-center justify-center rounded-[var(--radius-card)] border border-border bg-surface shadow-[var(--shadow-card)]">
+          <div className="flex flex-1 items-center justify-center rounded-[10px] bg-[#fdfdfd]">
             <EmptyState
               className="border-0 bg-transparent shadow-none"
               title="Select a ticket"
@@ -959,7 +1185,7 @@ export function AdminChatView({
             />
           </div>
         ) : (
-          <div className="flex flex-1 items-center justify-center rounded-[var(--radius-card)] border border-border bg-surface p-6 shadow-[var(--shadow-card)]">
+          <div className="flex flex-1 items-center justify-center rounded-[10px] bg-[#fdfdfd] p-6">
             <EmptyState
               className="max-w-md border-0 bg-transparent shadow-none"
               icon={<SupportIcon className="size-16" />}
@@ -974,6 +1200,78 @@ export function AdminChatView({
           </div>
         )}
       </section>
+    </div>
+    {composerOpen
+      ? createPortal(
+          <div className="fixed inset-0 z-[130] flex items-center justify-center p-4">
+            <button
+              type="button"
+              className="absolute inset-0 bg-black/10 backdrop-blur-[5px]"
+              aria-label="Close"
+              onClick={() => setComposerOpen(false)}
+            />
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="new-ticket-title"
+              className="relative w-full max-w-[546px] rounded-[10px] bg-white p-[25px] shadow-[0_2px_2.5px_rgba(0,0,0,0.05)]"
+            >
+              <h2
+                id="new-ticket-title"
+                className="text-[32px] font-semibold leading-normal tracking-[-0.05em] text-[#0b1f3a]"
+              >
+                New support ticket
+              </h2>
+              <p className="mt-[10px] max-w-[496px] text-[16px] font-normal leading-normal text-[rgba(0,16,44,0.5)]">
+                Create a new support ticket and share the details of your issue
+                so our team can assist you quickly.
+              </p>
+              <label className="mt-[49px] block">
+                <span className="text-[16px] font-medium leading-normal tracking-[-0.05em] text-[#00102c]">
+                  Title
+                </span>
+                <input
+                  value={openSubject}
+                  onChange={(event) => setOpenSubject(event.target.value)}
+                  placeholder="Enter name here"
+                  maxLength={200}
+                  className="mt-[10px] h-[50px] w-full rounded-[10px] border border-[#cacaca] bg-white px-[15px] text-[14px] tracking-[-0.05em] text-[#00102c] outline-none placeholder:text-[rgba(0,16,44,0.2)]"
+                />
+              </label>
+              <label className="mt-[25px] block">
+                <span className="text-[16px] font-medium leading-normal tracking-[-0.05em] text-[#00102c]">
+                  Description
+                </span>
+                <textarea
+                  value={openMessage}
+                  onChange={(event) => setOpenMessage(event.target.value)}
+                  placeholder="Johnwhite @gmail.com"
+                  maxLength={MAX_CONTENT}
+                  className="mt-[10px] h-[184px] w-full resize-none rounded-[10px] border border-[#cacaca] bg-white px-4 py-4 text-[14px] tracking-[-0.05em] text-[#00102c] outline-none placeholder:text-[rgba(0,16,44,0.2)]"
+                />
+              </label>
+              <div className="mt-[25px] flex gap-[19px]">
+                <button
+                  type="button"
+                  disabled={opening}
+                  onClick={() => void handleOpenChat()}
+                  className="h-12 min-w-0 flex-[316] rounded-[8px] bg-[#3b82f6] text-[18px] font-medium tracking-[-0.05em] text-white disabled:opacity-60"
+                >
+                  {opening ? "Creating…" : "Create Ticket"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setComposerOpen(false)}
+                  className="h-[50px] min-w-0 flex-[162] rounded-[8px] border border-[#cacaca] bg-white text-[18px] font-medium tracking-[-0.05em] text-[#cacaca]"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )
+      : null}
     </div>
   );
 }

@@ -19,6 +19,19 @@ function todayInput() {
   return `${now.getFullYear()}-${month}-${date}`;
 }
 
+function money(cents: number) {
+  return new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency: "USD",
+  }).format(cents / 100);
+}
+
+function hoursLabel(hours: number) {
+  if (!Number.isFinite(hours)) return "";
+  const rounded = Math.round(hours * 100) / 100;
+  return `${rounded} hr`;
+}
+
 function label(mode: string) {
   if (mode === "weekly") return "Weekly";
   if (mode === "biweekly") return "Biweekly";
@@ -68,6 +81,8 @@ export function PayRequestPanel() {
     periodStart?: string | null;
     periodEnd?: string | null;
     unpaidRanges?: Array<{ periodStart: string; periodEnd: string }> | null;
+    amountCents?: number | null;
+    hoursWorked?: number | null;
   } | null>(null);
   const seenRejectIds = useRef(new Set<string>());
   const ready = useRef(false);
@@ -161,6 +176,10 @@ export function PayRequestPanel() {
           <p className="mt-1 text-sm font-semibold text-foreground">
             {label(waiting.mode)} pay is waiting for review.
           </p>
+          <p className="mt-1 text-sm font-semibold text-foreground">
+            {money(waiting.amountCents)}
+            {waiting.hoursWorked ? ` · ${hoursLabel(waiting.hoursWorked)}` : ""}
+          </p>
           <p className="mt-1 text-sm text-muted">
             {formatPayRange(waiting.periodStart, waiting.periodEnd)}
           </p>
@@ -181,6 +200,8 @@ export function PayRequestPanel() {
                     periodStart: choice.periodStart,
                     periodEnd: choice.periodEnd,
                     unpaidRanges: choice.unpaidRanges,
+                    amountCents: choice.quote?.amountCents,
+                    hoursWorked: choice.quote?.hoursWorked,
                   });
                 }}
                 className={cn(
@@ -193,6 +214,19 @@ export function PayRequestPanel() {
                 <p className="text-sm font-semibold text-foreground">
                   {label(choice.mode)}
                 </p>
+                {choice.quote ? (
+                  <p className="mt-1 text-[18px] font-semibold tracking-[-0.03em] text-foreground">
+                    {money(choice.quote.amountCents)}
+                  </p>
+                ) : null}
+                {choice.quote ? (
+                  <p className="mt-0.5 text-[12px] text-muted">
+                    {hoursLabel(choice.quote.hoursWorked)}
+                    {choice.quote.hourlyRateCents != null
+                      ? ` · ${money(choice.quote.hourlyRateCents)}/hr`
+                      : ""}
+                  </p>
+                ) : null}
                 {choiceDates(choice) ? (
                   <p className="mt-1 text-[12px] text-muted">{choiceDates(choice)}</p>
                 ) : null}
@@ -216,8 +250,18 @@ export function PayRequestPanel() {
         }}
         title={`Ask for ${label(pendingChoice?.mode ?? "monthly").toLowerCase()} pay?`}
         description={
-          pendingChoice && choiceDates(pendingChoice)
-            ? `This sends a ${label(pendingChoice.mode).toLowerCase()} pay request for ${choiceDates(pendingChoice)}.`
+          pendingChoice
+            ? [
+                pendingChoice.amountCents != null
+                  ? money(pendingChoice.amountCents)
+                  : null,
+                pendingChoice.hoursWorked != null
+                  ? hoursLabel(pendingChoice.hoursWorked)
+                  : null,
+                choiceDates(pendingChoice) || null,
+              ]
+                .filter(Boolean)
+                .join(" · ") || "This sends the pay request for review."
             : "This sends the pay request for review."
         }
         confirmLabel="Send request"

@@ -9,7 +9,21 @@ export const adminChatMessageSchema = z.object({
   conversationId: z.string(),
   sender: adminChatSenderSchema,
   senderId: z.string().nullable().optional(),
-  content: z.string(),
+  content: z
+    .string()
+    .nullish()
+    .transform((value) => value ?? ""),
+  messageType: z
+    .string()
+    .nullish()
+    .transform((value) => {
+      const kind = (value ?? "TEXT").toUpperCase();
+      if (kind === "IMAGE" || kind === "FILE" || kind === "TEXT") return kind;
+      return "TEXT" as const;
+    }),
+  fileName: z.string().nullish(),
+  fileUrl: z.string().nullish(),
+  imageUrl: z.string().nullish(),
   readAt: z.string().nullable().optional(),
   createdAt: z.string(),
 });
@@ -44,6 +58,7 @@ export const markAdminChatReadSchema = z.object({
 });
 
 export type AdminChatStatus = z.infer<typeof adminChatStatusSchema>;
+export type AdminChatMessageType = "TEXT" | "IMAGE" | "FILE";
 export type AdminChatSender = z.infer<typeof adminChatSenderSchema>;
 export type AdminChatMessage = z.infer<typeof adminChatMessageSchema>;
 export type AdminChatConversation = z.infer<typeof adminChatConversationSchema>;

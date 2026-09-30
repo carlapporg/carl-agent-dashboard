@@ -122,7 +122,13 @@ function callAccessFail(error: unknown): { ok: false; message: string; code?: st
 
 export async function getCallTranscriptAction(
   callId: string,
-): Promise<CallActionResult<{ text: string | null; summary: string | null }>> {
+): Promise<
+  CallActionResult<{
+    text: string | null;
+    summary: string | null;
+    status: string | null;
+  }>
+> {
   try {
     return { ok: true, data: await callsApi.getTranscript(callId) };
   } catch (error) {

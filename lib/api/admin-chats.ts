@@ -30,8 +30,20 @@ function parseConversation(row: unknown): AdminChatConversation | null {
 }
 
 function parseMessage(row: unknown): AdminChatMessage | null {
-  const parsed = adminChatMessageSchema.safeParse(row);
+  const parsed = adminChatMessageSchema.safeParse(normalizeMessage(row));
   return parsed.success ? parsed.data : null;
+}
+
+function normalizeMessage(row: unknown): unknown {
+  if (!row || typeof row !== "object") return row;
+  const record = { ...(row as Record<string, unknown>) };
+  if (record.messageType == null && typeof record.type === "string") {
+    record.messageType = record.type;
+  }
+  if (record.fileName == null && typeof record.filename === "string") {
+    record.fileName = record.filename;
+  }
+  return record;
 }
 
 function parseDetail(data: unknown): AdminChatDetail {
@@ -179,9 +191,35 @@ export const adminChatsApi = {
       sender: "AGENT",
       senderId: null,
       content: text,
+      messageType: "TEXT",
+      fileName: null,
+      fileUrl: null,
+      imageUrl: null,
       readAt: null,
       createdAt: new Date().toISOString(),
     };
+  },
+
+  async sendAttachment(
+    conversationId: string,
+    kind: "image" | "file",
+    form: FormData,
+  ): Promise<AdminChatMessage> {
+    const path =
+      kind === "image"
+        ? API_ENDPOINTS.agents.adminChatMessageImage(conversationId)
+        : API_ENDPOINTS.agents.adminChatMessageFile(conversationId);
+    const data = await apiRequest(path, {
+      method: "POST",
+      body: form,
+      schema: z.unknown(),
+      looseEnvelope: true,
+      dedupe: false,
+      timeoutMs: 90_000,
+    });
+    const message = parseMessage(data);
+    if (!message) throw new Error("Couldn't send that file.");
+    return message;
   },
 
   async markRead(conversationId: string): Promise<void> {

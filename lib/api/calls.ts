@@ -94,6 +94,7 @@ const callRecordingSchema = z
 export type CallTranscript = {
   text: string | null;
   summary: string | null;
+  status: string | null;
 };
 
 export const callsApi = {
@@ -187,9 +188,11 @@ export const callsApi = {
     });
     const text = typeof data.text === "string" ? data.text.trim() : "";
     const summary = typeof data.summary === "string" ? data.summary.trim() : "";
+    const status = typeof data.status === "string" ? data.status : null;
     return {
       text: text || null,
       summary: summary || null,
+      status,
     };
   },
 

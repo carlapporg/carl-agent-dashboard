@@ -27,7 +27,19 @@ export function parseAdminChatMessagePayload(
   ];
 
   for (const candidate of candidates) {
-    const parsed = adminChatMessageSchema.safeParse(candidate);
+    const row =
+      candidate && typeof candidate === "object"
+        ? {
+            ...(candidate as Record<string, unknown>),
+            messageType:
+              (candidate as Record<string, unknown>).messageType ??
+              (candidate as Record<string, unknown>).type,
+            fileName:
+              (candidate as Record<string, unknown>).fileName ??
+              (candidate as Record<string, unknown>).filename,
+          }
+        : candidate;
+    const parsed = adminChatMessageSchema.safeParse(row);
     if (parsed.success) return parsed.data;
   }
 

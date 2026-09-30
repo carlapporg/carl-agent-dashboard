@@ -25,6 +25,7 @@ export const ROUTES = {
   settings: "/settings",
   unauthorized: "/unauthorized",
   sessionClear: "/session/clear",
+  sessionLogout: "/session/logout",
   privacy: "/privacy",
   terms: "/terms",
 } as const;

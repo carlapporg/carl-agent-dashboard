@@ -8,7 +8,6 @@ import {
   useId,
   useRef,
   useState,
-  useTransition,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { ConfirmDialog } from "@/components/ui/dialog";
@@ -16,7 +15,6 @@ import { AnchoredMenu } from "@/components/ui/anchored-menu";
 import { AgentAvatar } from "@/components/ui/agent-avatar";
 import { ChevronIcon } from "@/components/ui/chevron-icon";
 import { dropdownPanelClass } from "@/components/ui/dropdown-styles";
-import { logoutAction } from "@/features/auth/actions/auth";
 import { useClearAppCache } from "@/features/agents/hooks";
 import { clearManualPresence } from "@/lib/agent/presence";
 import { ROUTES } from "@/lib/constants/routes";
@@ -81,7 +79,6 @@ export function UserMenu({
   const initialFocus = useRef(0);
   const [open, setOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [pending, startTransition] = useTransition();
 
   const close = useCallback((restoreFocus = false) => {
     setOpen(false);
@@ -300,13 +297,10 @@ export function UserMenu({
         confirmLabel="Log Out"
         cancelLabel="Stay signed in"
         destructive
-        loading={pending}
         onConfirm={() => {
           clearCache();
           clearManualPresence();
-          startTransition(() => {
-            void logoutAction();
-          });
+          window.location.assign(ROUTES.sessionLogout);
         }}
       />
     </div>

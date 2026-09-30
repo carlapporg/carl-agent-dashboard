@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { logoutAction } from "@/features/auth/actions/auth";
 import { useClearAppCache } from "@/features/agents/hooks";
 import {
   NavIcon,
@@ -97,7 +96,7 @@ export function MobileNav() {
               setOpen(false);
               clearCache();
               clearManualPresence();
-              void logoutAction();
+              window.location.assign(ROUTES.sessionLogout);
             }}
           >
             Log out
