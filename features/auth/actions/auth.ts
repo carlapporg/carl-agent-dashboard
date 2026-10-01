@@ -151,6 +151,12 @@ export async function loginAction(
       reason: isApiError(error) ? error.kind : "unknown",
       status: isApiError(error) ? error.status : undefined,
     });
+    if (isApiError(error) && error.kind === "unverified") {
+      return {
+        message: USER_MESSAGES.emailNotVerified,
+        needsVerification: true,
+      };
+    }
     return {
       message: toUserMessage(error),
     };
@@ -203,6 +209,11 @@ export async function registerAction(
       recordLoginFailure(key);
       logAuthEvent("register_failed", { email, reason: "wrong_role" });
       return { message: USER_MESSAGES.unauthorizedApp };
+    }
+
+    if (env.isApiConfigured) {
+      logAuthEvent("register_success", { email });
+      return { success: true, verificationSent: true };
     }
 
     const result = await authApi.login({
@@ -261,6 +272,21 @@ export async function registerAction(
   }
 
   return { success: true };
+}
+
+export async function resendVerificationAction(
+  email: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const normalized = email.trim().toLowerCase();
+  if (!normalized) {
+    return { ok: false, message: USER_MESSAGES.emailRequired };
+  }
+  try {
+    await authApi.resendVerification(normalized);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, message: toUserMessage(error) };
+  }
 }
 
 export async function logoutAction(): Promise<void> {

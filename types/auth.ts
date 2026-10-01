@@ -58,6 +58,7 @@ export type RegisterCredentials = z.infer<typeof registerCredentialsSchema>;
 export type RegisterFormState =
   | {
       success?: boolean;
+      verificationSent?: boolean;
       errors?: {
         email?: string[];
         password?: string[];
@@ -73,6 +74,7 @@ export type RegisterFormState =
 export type LoginFormState =
   | {
       success?: boolean;
+      needsVerification?: boolean;
       errors?: {
         email?: string[];
         password?: string[];

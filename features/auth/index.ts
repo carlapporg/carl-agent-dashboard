@@ -4,6 +4,7 @@ export { AuthCard } from "@/features/auth/components/auth-card";
 export {
   loginAction,
   registerAction,
+  resendVerificationAction,
   logoutAction,
   clearSessionAfterPasswordChangeAction,
 } from "@/features/auth/actions/auth";

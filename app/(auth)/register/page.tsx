@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { AuthCard } from "@/features/auth/components/auth-card";
-import { RegisterForm } from "@/features/auth/components/register-form";
+import { RegisterScreen } from "@/features/auth/components/register-screen";
 import { env } from "@/lib/config/env";
 
 export const metadata: Metadata = {
@@ -10,10 +9,8 @@ export const metadata: Metadata = {
 
 export default function RegisterPage() {
   return (
-    <AuthCard title="Create your account" subtitle="Agent workspace">
-      <Suspense fallback={null}>
-        <RegisterForm demoMode={!env.isApiConfigured} />
-      </Suspense>
-    </AuthCard>
+    <Suspense fallback={null}>
+      <RegisterScreen demoMode={!env.isApiConfigured} />
+    </Suspense>
   );
 }

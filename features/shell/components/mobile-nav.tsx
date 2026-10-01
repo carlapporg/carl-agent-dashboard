@@ -37,12 +37,31 @@ export function MobileNav() {
         </Link>
         <button
           type="button"
-          className="inline-flex h-10 items-center rounded-[var(--radius-md)] border border-border px-3.5 text-sm font-semibold text-foreground"
+          className="inline-flex size-10 items-center justify-center rounded-full border border-border text-foreground"
           aria-expanded={open}
           aria-controls="mobile-nav"
+          aria-label={open ? "Close menu" : "Open menu"}
           onClick={() => setOpen((value) => !value)}
         >
-          {open ? "Close" : "Menu"}
+          {open ? (
+            <svg viewBox="0 0 20 20" className="size-5" fill="none" aria-hidden>
+              <path
+                d="M5 5l10 10M15 5L5 15"
+                stroke="currentColor"
+                strokeWidth="1.75"
+                strokeLinecap="round"
+              />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 20 20" className="size-5" fill="none" aria-hidden>
+              <path
+                d="M4 6h12M4 10h12M4 14h12"
+                stroke="currentColor"
+                strokeWidth="1.75"
+                strokeLinecap="round"
+              />
+            </svg>
+          )}
         </button>
       </div>
       {open ? (

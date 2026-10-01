@@ -183,6 +183,8 @@ const payChoiceSchema = z.object({
       hoursWorked: hours,
       amountCents: cents,
       hourlyRateCents: z.number().nullable().optional(),
+      tipCents: cents.optional(),
+      bonusCents: cents.optional(),
     })
     .nullable()
     .optional(),

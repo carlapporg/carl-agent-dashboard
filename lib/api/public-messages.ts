@@ -9,6 +9,8 @@ export const USER_MESSAGES = {
   dateOfBirthInvalid: "Enter a real date of birth",
   emailTaken: "An account with this email already exists.",
   registerSuccess: "Account created successfully.",
+  emailNotVerified:
+    "Confirm your email before you sign in. Check your inbox for the verification link.",
   invalidCredentials: "Invalid email or password",
   unauthorizedApp: "You are not authorized to access this application",
   offerGone: "This offer expired or went to another agent.",
@@ -30,6 +32,7 @@ export const USER_MESSAGES = {
 export type AuthErrorKind =
   | "credentials"
   | "forbidden"
+  | "unverified"
   | "disabled"
   | "conflict"
   | "rate_limit"
@@ -74,10 +77,10 @@ export function classifyAuthError(
   }
 
   if (status === 403) {
-    if (text.includes("WRONG_ROLE") || text.includes("ROLE")) {
-      return "forbidden";
+    if (text.includes("EMAIL_NOT_VERIFIED") || text.includes("NOT_VERIFIED")) {
+      return "unverified";
     }
-    if (text.includes("EMAIL_NOT_VERIFIED") || text.includes("VERIFIED")) {
+    if (text.includes("WRONG_ROLE") || text.includes("ROLE")) {
       return "forbidden";
     }
     return "forbidden";
@@ -103,6 +106,8 @@ export function messageForKind(kind: AuthErrorKind): string {
       return USER_MESSAGES.invalidCredentials;
     case "forbidden":
       return USER_MESSAGES.unauthorizedApp;
+    case "unverified":
+      return USER_MESSAGES.emailNotVerified;
     case "disabled":
       return USER_MESSAGES.accountDisabled;
     case "conflict":

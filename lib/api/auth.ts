@@ -42,6 +42,19 @@ export const authApi = {
     });
   },
 
+  async resendVerification(email: string): Promise<void> {
+    if (!env.isApiConfigured) return;
+    await apiRequest(API_ENDPOINTS.auth.resendVerification, {
+      method: "POST",
+      body: { email },
+      schema: z.object({ message: z.string().optional() }).passthrough(),
+      skipAuth: true,
+      skipRefresh: true,
+      dedupe: false,
+      looseEnvelope: true,
+    });
+  },
+
   async login(credentials: LoginCredentials): Promise<LoginResponse> {
     const parsed = loginCredentialsSchema.parse(credentials);
 

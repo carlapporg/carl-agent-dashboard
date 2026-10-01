@@ -34,9 +34,13 @@ import type { RegisterFormState } from "@/types/auth";
 
 type RegisterFormProps = {
   demoMode?: boolean;
+  onVerificationSent?: (email: string) => void;
 };
 
-export function RegisterForm({ demoMode = false }: RegisterFormProps) {
+export function RegisterForm({
+  demoMode = false,
+  onVerificationSent,
+}: RegisterFormProps) {
   const router = useRouter();
   const { toast } = useToast();
   const [state, formAction, pending] = useActionState(
@@ -104,8 +108,15 @@ export function RegisterForm({ demoMode = false }: RegisterFormProps) {
     }
   }, [state, toast]);
 
+  const sentNotice = useRef(false);
   useEffect(() => {
-    if (!state?.success) return;
+    if (!state?.verificationSent || sentNotice.current) return;
+    sentNotice.current = true;
+    onVerificationSent?.(email.trim().toLowerCase());
+  }, [state?.verificationSent, email, onVerificationSent]);
+
+  useEffect(() => {
+    if (!state?.success || state.verificationSent) return;
 
     clearManualPresence();
     setShowSuccess(true);
@@ -117,7 +128,7 @@ export function RegisterForm({ demoMode = false }: RegisterFormProps) {
     }, 450);
 
     return () => window.clearTimeout(timer);
-  }, [state?.success, router, toast]);
+  }, [state?.success, state?.verificationSent, router, toast]);
 
   function handleSubmit(formData: FormData) {
     const normalizedEmail = email.trim().toLowerCase();

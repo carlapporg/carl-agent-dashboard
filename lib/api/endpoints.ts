@@ -7,6 +7,8 @@ export const API_ENDPOINTS = {
   auth: {
     /** POST { email, password, firstName?, lastName? } → user, no tokens */
     agentRegister: "/auth/agent/register",
+    /** POST { email } → sends the verification email again */
+    resendVerification: "/auth/resend-verification",
     /** POST { email, password } → { accessToken, refreshToken, user } */
     agentLogin: "/auth/agent/login",
     /** POST { refreshToken } or cookie → new token pair */

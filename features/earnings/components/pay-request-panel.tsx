@@ -227,6 +227,14 @@ export function PayRequestPanel() {
                       : ""}
                   </p>
                 ) : null}
+                {choice.quote &&
+                ((choice.quote.tipCents ?? 0) > 0 ||
+                  (choice.quote.bonusCents ?? 0) > 0) ? (
+                  <p className="mt-0.5 text-[12px] text-muted">
+                    Includes {money(choice.quote.tipCents ?? 0)} tips and{" "}
+                    {money(choice.quote.bonusCents ?? 0)} bonuses
+                  </p>
+                ) : null}
                 {choiceDates(choice) ? (
                   <p className="mt-1 text-[12px] text-muted">{choiceDates(choice)}</p>
                 ) : null}

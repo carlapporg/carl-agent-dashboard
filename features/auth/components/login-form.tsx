@@ -8,7 +8,10 @@ import {
   useRef,
   useState,
 } from "react";
-import { loginAction } from "@/features/auth/actions/auth";
+import {
+  loginAction,
+  resendVerificationAction,
+} from "@/features/auth/actions/auth";
 import { CheckIcon } from "@/features/auth/components/icons";
 import {
   isLoginFormValid,
@@ -44,6 +47,10 @@ export function LoginForm({ demoMode = false }: LoginFormProps) {
   const [showSuccess, setShowSuccess] = useState(false);
   const [bannerMessage, setBannerMessage] = useState<string | undefined>();
   const [infoMessage, setInfoMessage] = useState<string | undefined>();
+  const [infoVariant, setInfoVariant] = useState<"info" | "success">("info");
+  const [showResend, setShowResend] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resendNote, setResendNote] = useState<string | undefined>();
 
   const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
@@ -57,11 +64,20 @@ export function LoginForm({ demoMode = false }: LoginFormProps) {
   const nextPath = searchParams.get("next");
 
   useEffect(() => {
+    const fromQuery = searchParams.get("email")?.trim().toLowerCase() ?? "";
+    if (fromQuery) setEmail(fromQuery);
     emailRef.current?.focus();
-  }, []);
+  }, [searchParams]);
 
   useEffect(() => {
-    if (searchParams.get("passwordChanged") === "1") {
+    if (searchParams.get("verified") === "1") {
+      setInfoVariant("success");
+      setInfoMessage("Email verified successfully");
+    } else if (searchParams.get("verified") === "0") {
+      setInfoVariant("info");
+      setInfoMessage("That verification link is invalid or expired.");
+      setShowResend(true);
+    } else if (searchParams.get("passwordChanged") === "1") {
       setInfoMessage("Password changed successfully. Please sign in again.");
     } else if (searchParams.get("expired") === "1") {
       setInfoMessage("Your session expired. Please sign in again.");
@@ -75,9 +91,10 @@ export function LoginForm({ demoMode = false }: LoginFormProps) {
     if (state?.errors?.password?.[0]) {
       setPasswordError(state.errors.password[0]);
     }
+    if (state?.needsVerification) setShowResend(true);
     if (state?.message) {
       setBannerMessage(state.message);
-      setInfoMessage(undefined);
+      if (!state.needsVerification) setInfoMessage(undefined);
       alertRef.current?.focus();
       if (toastedMessage.current !== state.message) {
         toastedMessage.current = state.message;
@@ -125,6 +142,23 @@ export function LoginForm({ demoMode = false }: LoginFormProps) {
     formAction(formData);
   }
 
+  async function handleResend() {
+    const normalized = email.trim().toLowerCase();
+    if (!normalized) {
+      setEmailError("Please enter your email address");
+      emailRef.current?.focus();
+      return;
+    }
+    if (resending) return;
+    setResending(true);
+    setResendNote(undefined);
+    const result = await resendVerificationAction(normalized);
+    setResending(false);
+    setResendNote(
+      result.ok ? "Verification email sent again." : result.message,
+    );
+  }
+
   return (
     <form action={handleSubmit} className="flex flex-col gap-4" noValidate>
       {bannerMessage || infoMessage ? (
@@ -134,7 +168,7 @@ export function LoginForm({ demoMode = false }: LoginFormProps) {
               <Alert>{bannerMessage}</Alert>
             </div>
           ) : infoMessage ? (
-            <Alert variant="info">{infoMessage}</Alert>
+            <Alert variant={infoVariant}>{infoMessage}</Alert>
           ) : null}
         </div>
       ) : null}
@@ -212,6 +246,27 @@ export function LoginForm({ demoMode = false }: LoginFormProps) {
           "Log in"
         )}
       </Button>
+
+      {showResend ? (
+        <div className="flex flex-col gap-2 text-center">
+          <Button
+            type="button"
+            variant="secondary"
+            fullWidth
+            loading={resending}
+            onClick={() => {
+              void handleResend();
+            }}
+          >
+            Resend email
+          </Button>
+          {resendNote ? (
+            <p className="text-sm text-muted" role="status">
+              {resendNote}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       {demoMode ? (
         <p className="text-center text-xs text-muted-dim">
