@@ -23,10 +23,18 @@ import {
 } from "@/lib/auth/session";
 import { env } from "@/lib/config/env";
 import { ROUTES } from "@/lib/constants/routes";
-import { parseLoginFormData } from "@/features/auth/schemas/login";
+import {
+  parseLoginFormData,
+  validateEmailField,
+} from "@/features/auth/schemas/login";
 import { parseRegisterFormData } from "@/features/auth/schemas/register";
 import { backendUserSchema } from "@/types/user";
-import type { LoginFormState, RegisterFormState } from "@/types/auth";
+import type {
+  ForgotPasswordFormState,
+  LoginFormState,
+  RegisterFormState,
+  ResetPasswordFormState,
+} from "@/types/auth";
 
 async function clientKey(email: string): Promise<string> {
   const headerStore = await headers();
@@ -287,6 +295,68 @@ export async function resendVerificationAction(
   } catch (error) {
     return { ok: false, message: toUserMessage(error) };
   }
+}
+
+export async function forgotPasswordAction(
+  _prevState: ForgotPasswordFormState,
+  formData: FormData,
+): Promise<ForgotPasswordFormState> {
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const emailError = validateEmailField(email);
+  if (emailError) {
+    return { message: emailError };
+  }
+
+  try {
+    await authApi.forgotPassword(email);
+  } catch (error) {
+    if (isApiError(error) && error.status === 429) {
+      return { message: USER_MESSAGES.waitAndRetry };
+    }
+    return { message: toUserMessage(error, USER_MESSAGES.emailInvalid) };
+  }
+
+  return { success: true, message: USER_MESSAGES.forgotPasswordSent };
+}
+
+export async function resetPasswordAction(
+  _prevState: ResetPasswordFormState,
+  formData: FormData,
+): Promise<ResetPasswordFormState> {
+  const token = String(formData.get("token") ?? "").trim();
+  const newPassword = String(formData.get("newPassword") ?? "");
+  const confirmPassword = String(formData.get("confirmPassword") ?? "");
+
+  if (!token) {
+    return {
+      invalidLink: true,
+      message: USER_MESSAGES.resetLinkInvalid,
+    };
+  }
+
+  if (newPassword.length < 8) {
+    return { errors: { newPassword: [USER_MESSAGES.passwordMinLength] } };
+  }
+
+  if (newPassword !== confirmPassword) {
+    return { errors: { confirmPassword: [USER_MESSAGES.passwordMismatch] } };
+  }
+
+  try {
+    await authApi.resetPassword(token, newPassword);
+  } catch (error) {
+    if (isApiError(error) && error.status === 429) {
+      return { message: USER_MESSAGES.waitAndRetry };
+    }
+    const message = toUserMessage(error);
+    if (message === USER_MESSAGES.resetTokenInvalid) {
+      return { invalidToken: true, message };
+    }
+    return { message };
+  }
+
+  await destroySession();
+  redirect(`${ROUTES.login}?reset=1`);
 }
 
 export async function logoutAction(): Promise<void> {

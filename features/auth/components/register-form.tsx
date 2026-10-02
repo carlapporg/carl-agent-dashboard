@@ -166,7 +166,7 @@ export function RegisterForm({
   }
 
   return (
-    <form action={handleSubmit} className="flex flex-col gap-4" noValidate>
+    <form action={handleSubmit} className="flex flex-col gap-2" noValidate>
       {bannerMessage ? (
         <div className="min-h-0" aria-live="polite">
           <div ref={alertRef} tabIndex={-1} id={bannerId}>
@@ -198,9 +198,9 @@ export function RegisterForm({
             disabled={isBusy}
             required
           />
-          <p className="mt-1.5 min-h-5 text-sm text-danger-foreground">
-            {firstNameError ?? ""}
-          </p>
+          {firstNameError ? (
+            <p className="mt-1 text-sm text-danger-foreground">{firstNameError}</p>
+          ) : null}
         </div>
         <div>
           <Label htmlFor="lastName">Last name</Label>
@@ -214,9 +214,9 @@ export function RegisterForm({
             hasError={Boolean(lastNameError)}
             disabled={isBusy}
           />
-          <p className="mt-1.5 min-h-5 text-sm text-danger-foreground">
-            {lastNameError ?? ""}
-          </p>
+          {lastNameError ? (
+            <p className="mt-1 text-sm text-danger-foreground">{lastNameError}</p>
+          ) : null}
         </div>
       </div>
 
@@ -242,9 +242,9 @@ export function RegisterForm({
           disabled={isBusy}
           required
         />
-        <p className="mt-1.5 min-h-5 text-sm text-danger-foreground">
-          {dateOfBirthError ?? ""}
-        </p>
+        {dateOfBirthError ? (
+          <p className="mt-1 text-sm text-danger-foreground">{dateOfBirthError}</p>
+        ) : null}
       </div>
 
       <div>
@@ -274,12 +274,11 @@ export function RegisterForm({
           disabled={isBusy}
           required
         />
-        <p
-          id={emailErrorId}
-          className="mt-1.5 min-h-5 text-sm text-danger-foreground"
-        >
-          {emailError ?? ""}
-        </p>
+        {emailError ? (
+          <p id={emailErrorId} className="mt-1 text-sm text-danger-foreground">
+            {emailError}
+          </p>
+        ) : null}
       </div>
 
       <PasswordField
@@ -336,6 +335,7 @@ export function RegisterForm({
         }
         hasError={Boolean(confirmPasswordError)}
         errorMessage={confirmPasswordError}
+        reserveErrorSpace={false}
         disabled={isBusy}
         required
       />

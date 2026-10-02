@@ -25,6 +25,12 @@ export const USER_MESSAGES = {
   apiNotConfigured:
     "This deployment is missing API_BASE_URL. Add it in Vercel → Settings → Environment Variables, then redeploy.",
   rateLimited: "Too many attempts. Please wait a moment and try again.",
+  forgotPasswordSent:
+    "If an account exists for that email, a reset link has been sent",
+  resetLinkInvalid: "This reset link is invalid",
+  resetTokenInvalid: "Invalid or expired reset token",
+  passwordResetSuccess: "Password reset successfully",
+  waitAndRetry: "Wait a minute and try again.",
   sessionExpired: "Your session expired. Please sign in again.",
   wrongPassword: "Current password is incorrect.",
 } as const;

@@ -9,6 +9,10 @@ export const API_ENDPOINTS = {
     agentRegister: "/auth/agent/register",
     /** POST { email } → sends the verification email again */
     resendVerification: "/auth/resend-verification",
+    /** POST { email } — always 200, does not say if the account exists */
+    forgotPassword: "/auth/forgot-password",
+    /** POST { token, newPassword } — revokes old sessions */
+    resetPassword: "/auth/reset-password",
     /** POST { email, password } → { accessToken, refreshToken, user } */
     agentLogin: "/auth/agent/login",
     /** POST { refreshToken } or cookie → new token pair */

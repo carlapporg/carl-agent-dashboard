@@ -5,6 +5,8 @@ export {
   loginAction,
   registerAction,
   resendVerificationAction,
+  forgotPasswordAction,
+  resetPasswordAction,
   logoutAction,
   clearSessionAfterPasswordChangeAction,
 } from "@/features/auth/actions/auth";

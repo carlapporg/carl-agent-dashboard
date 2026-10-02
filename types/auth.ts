@@ -71,6 +71,25 @@ export type RegisterFormState =
     }
   | undefined;
 
+export type ForgotPasswordFormState =
+  | {
+      success?: boolean;
+      message?: string;
+    }
+  | undefined;
+
+export type ResetPasswordFormState =
+  | {
+      invalidLink?: boolean;
+      invalidToken?: boolean;
+      errors?: {
+        newPassword?: string[];
+        confirmPassword?: string[];
+      };
+      message?: string;
+    }
+  | undefined;
+
 export type LoginFormState =
   | {
       success?: boolean;

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   useActionState,
@@ -77,6 +78,9 @@ export function LoginForm({ demoMode = false }: LoginFormProps) {
       setInfoVariant("info");
       setInfoMessage("That verification link is invalid or expired.");
       setShowResend(true);
+    } else if (searchParams.get("reset") === "1") {
+      setInfoVariant("success");
+      setInfoMessage("Password reset successfully");
     } else if (searchParams.get("passwordChanged") === "1") {
       setInfoMessage("Password changed successfully. Please sign in again.");
     } else if (searchParams.get("expired") === "1") {
@@ -200,33 +204,47 @@ export function LoginForm({ demoMode = false }: LoginFormProps) {
           disabled={isBusy}
           required
         />
-        <p
-          id={emailErrorId}
-          className="mt-1.5 min-h-5 text-sm text-danger-foreground"
-        >
-          {emailError ?? ""}
-        </p>
+        {emailError ? (
+          <p
+            id={emailErrorId}
+            className="mt-1.5 text-sm text-danger-foreground"
+          >
+            {emailError}
+          </p>
+        ) : null}
       </div>
 
-      <PasswordField
-        ref={passwordRef}
-        id="password"
-        name="password"
-        label="Password"
-        autoComplete="off"
-        placeholder="Enter your password"
-        value={password}
-        onChange={(event) => {
-          const next = event.target.value;
-          setPassword(next);
-          if (passwordError) setPasswordError(validatePasswordField(next));
-        }}
-        onBlur={() => setPasswordError(validatePasswordField(password))}
-        hasError={Boolean(passwordError)}
-        errorMessage={passwordError}
-        disabled={isBusy}
-        required
-      />
+      <div className="flex flex-col gap-2">
+        <PasswordField
+          ref={passwordRef}
+          id="password"
+          name="password"
+          label="Password"
+          autoComplete="off"
+          placeholder="Enter your password"
+          value={password}
+          onChange={(event) => {
+            const next = event.target.value;
+            setPassword(next);
+            if (passwordError) setPasswordError(validatePasswordField(next));
+          }}
+          onBlur={() => setPasswordError(validatePasswordField(password))}
+          hasError={Boolean(passwordError)}
+          errorMessage={passwordError}
+          reserveErrorSpace={false}
+          disabled={isBusy}
+          required
+        />
+
+        <div className="flex justify-end">
+          <Link
+            href={ROUTES.forgotPassword}
+            className="text-sm font-semibold text-accent hover:text-accent-hover"
+          >
+            Forgot password?
+          </Link>
+        </div>
+      </div>
 
       <Button
         type="submit"
