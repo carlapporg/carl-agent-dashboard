@@ -291,13 +291,28 @@ export function TaskConfirmationPanel({
       </div>
 
       {/* Single card flow: Initial → Waiting → Approved */}
-      <ol className="mt-5 flex items-center gap-0">
-        {FLOW_STEPS.map((item, index) => {
-          const done = index < stepIndex;
-          const active = index === stepIndex;
-          return (
-            <li key={item.id} className="flex min-w-0 flex-1 items-center">
-              <div className="flex min-w-0 flex-col items-center gap-1.5 text-center">
+      <div className="relative mt-5">
+        <div
+          className="absolute top-3.5 right-[16.666%] left-[16.666%] h-0.5 -translate-y-1/2 rounded-full bg-border"
+          aria-hidden
+        >
+          <div
+            className="h-full rounded-full bg-accent"
+            style={{
+              width:
+                stepIndex <= 0 ? "0%" : stepIndex === 1 ? "50%" : "100%",
+            }}
+          />
+        </div>
+        <ol className="relative grid grid-cols-3">
+          {FLOW_STEPS.map((item, index) => {
+            const done = index < stepIndex;
+            const active = index === stepIndex;
+            return (
+              <li
+                key={item.id}
+                className="flex min-w-0 flex-col items-center gap-1.5 text-center"
+              >
                 <span
                   className={cn(
                     "flex size-7 items-center justify-center rounded-full text-[12px] font-bold",
@@ -308,9 +323,7 @@ export function TaskConfirmationPanel({
                     active &&
                       declined &&
                       "bg-danger text-white ring-4 ring-danger/20",
-                    !done &&
-                      !active &&
-                      "bg-surface-muted text-muted-dim",
+                    !done && !active && "bg-surface-muted text-muted-dim",
                   )}
                   aria-current={active ? "step" : undefined}
                 >
@@ -318,26 +331,17 @@ export function TaskConfirmationPanel({
                 </span>
                 <span
                   className={cn(
-                    "max-w-[6.5rem] text-[11px] font-semibold leading-tight tracking-[-0.02em]",
+                    "px-1 text-[11px] font-semibold leading-tight tracking-[-0.02em]",
                     active || done ? "text-foreground" : "text-muted-dim",
                   )}
                 >
                   {item.label}
                 </span>
-              </div>
-              {index < FLOW_STEPS.length - 1 ? (
-                <span
-                  className={cn(
-                    "mb-5 mx-1 h-0.5 min-w-[12px] flex-1 rounded-full",
-                    index < stepIndex ? "bg-accent" : "bg-border",
-                  )}
-                  aria-hidden
-                />
-              ) : null}
-            </li>
-          );
-        })}
-      </ol>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
 
       <p
         className={cn(
