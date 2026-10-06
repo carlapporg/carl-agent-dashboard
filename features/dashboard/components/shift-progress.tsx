@@ -48,6 +48,7 @@ type ChartColumn = {
   label: string;
   completed: number;
   inProgress: number;
+  waiting: number;
   taskCount: number;
 };
 
@@ -90,8 +91,17 @@ function isInProgressTask(task: Task): boolean {
   return (
     task.backendStatus === "IN_PROGRESS" ||
     task.backendStatus === "ASSIGNED" ||
+    task.backendStatus === "WAITING_FOR_AGENT" ||
     task.status === "in_progress" ||
     task.status === "assigned"
+  );
+}
+
+function isWaitingTask(task: Task): boolean {
+  return (
+    task.backendStatus === "WAITING_FOR_USER" ||
+    task.status === "waiting_for_customer" ||
+    task.status === "waiting_for_payment"
   );
 }
 
@@ -162,10 +172,15 @@ function buildSplitMaps(
   active: Task[],
   timeZone: string,
   weekDates: string[],
-): { completed: Map<string, number>; inProgress: Map<string, number> } {
+): {
+  completed: Map<string, number>;
+  inProgress: Map<string, number>;
+  waiting: Map<string, number>;
+} {
   const allowed = new Set(weekDates);
   const completed = new Map<string, number>();
   const inProgress = new Map<string, number>();
+  const waiting = new Map<string, number>();
 
   for (const task of history) {
     if (!isCompletedTask(task)) continue;
@@ -176,14 +191,18 @@ function buildSplitMaps(
   }
 
   for (const task of active) {
-    if (!isInProgressTask(task)) continue;
     const at = task.updatedAt || task.createdAt;
     const day = dateKeyInZone(at, timeZone);
     if (!day || !allowed.has(day)) continue;
+    if (isWaitingTask(task)) {
+      bump(waiting, day);
+      continue;
+    }
+    if (!isInProgressTask(task)) continue;
     bump(inProgress, day);
   }
 
-  return { completed, inProgress };
+  return { completed, inProgress, waiting };
 }
 
 function buildChartColumns(
@@ -205,6 +224,7 @@ function buildChartColumns(
     return hourly.buckets.map((b, index) => {
       let completed = 0;
       let inProgress = 0;
+      let waiting = 0;
 
       if (apiHasSplit && b.hasStatusSplit) {
         completed = b.completed;
@@ -224,18 +244,23 @@ function buildChartColumns(
           index,
           weekDates,
         );
-        if (completed === 0 && inProgress === 0 && b.taskCount > 0) {
-          completed = b.taskCount;
-        }
-      } else {
-        completed = b.taskCount;
+      }
+      if (maps) {
+        waiting = lookupCount(
+          maps.waiting,
+          b.key,
+          b.label,
+          index,
+          weekDates,
+        );
       }
 
       return {
         label: b.label,
         completed,
         inProgress,
-        taskCount: completed + inProgress,
+        waiting,
+        taskCount: completed + inProgress + waiting,
       };
     });
   }
@@ -246,6 +271,7 @@ function buildChartColumns(
       label: DAY_LABELS[index] ?? `D${index + 1}`,
       completed: count,
       inProgress: 0,
+      waiting: 0,
       taskCount: count,
     }));
   }
@@ -254,6 +280,7 @@ function buildChartColumns(
     label: `${index + 1}`,
     completed: count,
     inProgress: 0,
+    waiting: 0,
     taskCount: count,
   }));
 }
@@ -501,7 +528,7 @@ export function TasksPerHourPanel({
       void getTasksPerDaySplitAction()
         .then((splitRow) => setSplit(splitRow))
         .catch(() => {
-          /* keep bars from hourly totals */
+          /* Chart stays on real completed / in-progress counts only. */
         });
     } catch {
       setError("Could not load tasks per day.");
@@ -564,7 +591,14 @@ export function TasksPerHourPanel({
     (sum, c) => sum + c.inProgress,
     0,
   );
-  const subtitle = `${weekCompleted} Completed · ${weekInProgress} In Progress`;
+  const weekWaiting = chart.columns.reduce((sum, c) => sum + c.waiting, 0);
+  const subtitle = [
+    `${weekCompleted} Completed`,
+    `${weekInProgress} In Progress`,
+    weekWaiting > 0 ? `${weekWaiting} Waiting` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <div
@@ -630,7 +664,7 @@ export function TasksPerHourPanel({
                       current === index ? null : current,
                     )
                   }
-                  aria-label={`${column.label}: ${column.completed} completed, ${column.inProgress} in progress`}
+                  aria-label={`${column.label}: ${column.completed} completed, ${column.inProgress} in progress, ${column.waiting} waiting`}
                 >
                   <span
                     className="relative h-full w-full overflow-visible rounded-[10px] bg-[#f6f6f6]"
@@ -678,6 +712,12 @@ export function TasksPerHourPanel({
                         <span className="size-1.5 rounded-full bg-[#377dff]" />
                         {column.inProgress} In Progress
                       </span>
+                      {column.waiting > 0 ? (
+                        <span className="mt-0.5 flex items-center gap-1 text-[10px] text-foreground">
+                          <span className="size-1.5 rounded-full bg-[#7ec8ff]" />
+                          {column.waiting} Waiting
+                        </span>
+                      ) : null}
                     </span>
                   ) : null}
                 </button>

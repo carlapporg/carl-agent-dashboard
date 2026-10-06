@@ -14,6 +14,18 @@ export function taskPlaceLabel(task: Task): string {
       ? (task.confirmationPrefill as Record<string, unknown>)
       : null;
   const candidates = [
+    meta?.origin,
+    prefill?.origin,
+    meta?.departureArea,
+    prefill?.departureArea,
+    meta?.departureCity,
+    prefill?.departureCity,
+    meta?.departure,
+    prefill?.departure,
+    meta?.originCity,
+    meta?.originArea,
+    meta?.arrival,
+    prefill?.arrival,
     meta?.airline,
     prefill?.airline,
     meta?.cinema,
