@@ -542,6 +542,8 @@ export function TaskWorkspace({
               disabled={lockedReadOnly}
             />
 
+            <EventTicketLink task={task} />
+
             <TaskAgentNotes taskId={task.id} disabled={lockedReadOnly} />
 
             {childTasks.length > 0 ? (
@@ -715,5 +717,25 @@ export function TaskWorkspace({
         />
       </div>
     </>
+  );
+}
+
+function EventTicketLink({ task }: { task: Task }) {
+  if ((task.taskType ?? "").toUpperCase() !== "EVENT_BOOKING") return null;
+  const raw = task.metadata?.ticketUrl;
+  const url = typeof raw === "string" ? raw.trim() : "";
+  if (!url) return null;
+  return (
+    <section className="rounded-[var(--radius-card)] border border-border bg-surface p-4 shadow-[var(--shadow-card)]">
+      <h2 className="text-sm font-semibold text-foreground">Ticket link</h2>
+      <a
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        className="mt-2 block break-all text-sm text-primary underline"
+      >
+        {url}
+      </a>
+    </section>
   );
 }
