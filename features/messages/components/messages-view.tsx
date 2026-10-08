@@ -24,13 +24,16 @@ import {
   lastChatPreview,
 } from "@/features/messages/lib/preview";
 import { previewForIncomingMessage } from "@/lib/realtime/parse-task-message";
-import { dashboardExtrasApi } from "@/lib/api/dashboard-extras";
 import { setViewingMessagesTaskId } from "@/lib/messages/viewing-chat";
 import {
   callEndedMessageBody,
   isCallEndedMessageMetadata,
   isCallTranscriptReadyMessageMetadata,
 } from "@/types/call";
+import {
+  countUnreadCustomerMessages,
+  markCustomerMessagesRead,
+} from "@/features/messages/lib/unread";
 import { taskListSubtitle, taskPlaceLabel } from "@/lib/tasks/place-label";
 import { ROUTES } from "@/lib/constants/routes";
 import { cn } from "@/lib/utils/cn";
@@ -70,21 +73,6 @@ function formatRel(value: string): string {
   return d === 1 ? "1d Ago" : `${d}d Ago`;
 }
 
-function bookingRefFromTask(task: Task): string | null {
-  const meta = task.metadata;
-  if (!meta) return null;
-  const candidates = [
-    meta.bookingRef,
-    meta.booking_ref,
-    meta.reference,
-    meta.confirmationCode,
-  ];
-  for (const value of candidates) {
-    if (typeof value === "string" && value.trim()) return value.trim();
-  }
-  return null;
-}
-
 /** Sidebar second line: place/venue so duplicate client names stay distinct. */
 function sidebarSubtitle(
   conversation: ConversationSummary,
@@ -108,11 +96,6 @@ function unseenLabel(count: number): string {
   if (count <= 0) return "";
   if (count === 1) return "1 msg unseen";
   return `${count} msgs unseen`;
-}
-
-function formatBookingRef(value: string): string {
-  const trimmed = value.trim();
-  return trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
 }
 
 function initialsFromName(name: string): string {
@@ -180,9 +163,7 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
     {},
   );
   const [filter, setFilter] = useState("");
-  const [bookingRefs, setBookingRefs] = useState<Record<string, string | null>>(
-    {},
-  );
+  const [inbox, setInbox] = useState<"all" | "unread">("all");
   const inflightRef = useRef(new Set<string>());
   const timelinesRef = useRef(timelines);
   timelinesRef.current = timelines;
@@ -196,6 +177,17 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
   }, [selectedId]);
 
   const clearUnread = useCallback((taskId: string) => {
+    const readAt = new Date().toISOString();
+    setTimelines((prev) => {
+      const load = prev[taskId];
+      if (load?.status !== "ready") return prev;
+      const marked = markCustomerMessagesRead(load.events, readAt);
+      if (!marked.changed) return prev;
+      return {
+        ...prev,
+        [taskId]: { status: "ready", events: marked.events },
+      };
+    });
     setUnreadByTaskId((prev) => {
       if (!prev[taskId]) return prev;
       const next = { ...prev };
@@ -213,16 +205,16 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
   }, []);
 
   const loadTimeline = useCallback((taskId: string, force = false) => {
-    if (!force && inflightRef.current.has(taskId)) return;
+    if (!force && inflightRef.current.has(taskId)) return Promise.resolve();
     const existing = timelinesRef.current[taskId];
-    if (!force && existing?.status === "ready") return;
-    if (!force && existing?.status === "loading") return;
+    if (!force && existing?.status === "ready") return Promise.resolve();
+    if (!force && existing?.status === "loading") return Promise.resolve();
     inflightRef.current.add(taskId);
     setTimelines((prev) => ({
       ...prev,
       [taskId]: { status: "loading" },
     }));
-    void listTaskMessagesAction(taskId)
+    return listTaskMessagesAction(taskId)
       .then((result) => {
         if (!result.ok) {
           setTimelines((prev) => ({
@@ -249,7 +241,13 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
       const chatPreview = events ? lastChatPreview(events) : null;
       const activityAt =
         (events ? lastChatActivityAt(events) : null) ?? c.lastActivityAt;
-      const unread = unreadByTaskId[c.taskId] ?? c.unreadCount ?? 0;
+      const threadUnread = events
+        ? countUnreadCustomerMessages(events)
+        : undefined;
+      const unread =
+        selectedId === c.taskId
+          ? 0
+          : (threadUnread ?? unreadByTaskId[c.taskId] ?? c.unreadCount ?? 0);
       return {
         ...c,
         lastMessage: chatPreview ?? place,
@@ -262,11 +260,17 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
         new Date(b.lastActivityAt).getTime() -
         new Date(a.lastActivityAt).getTime(),
     );
-  }, [tasks, timelines, unreadByTaskId, visibleConversations]);
+  }, [selectedId, tasks, timelines, unreadByTaskId, visibleConversations]);
+
+  const unreadChats = useMemo(
+    () => displayConversations.filter((c) => c.unreadCount > 0).length,
+    [displayConversations],
+  );
 
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase();
     return displayConversations.filter((c) => {
+      if (inbox === "unread" && c.unreadCount <= 0) return false;
       if (!q) return true;
       const row = tasks[c.taskId];
       return (
@@ -276,11 +280,11 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
         String(c.taskNumber).includes(q)
       );
     });
-  }, [displayConversations, filter, tasks]);
+  }, [displayConversations, filter, inbox, tasks]);
 
   const selected = useMemo(
-    () => filtered.find((c) => c.taskId === selectedId) ?? null,
-    [filtered, selectedId],
+    () => displayConversations.find((c) => c.taskId === selectedId) ?? null,
+    [displayConversations, selectedId],
   );
   const task = selectedId ? tasks[selectedId] : null;
   const timelineLoad = selectedId ? timelines[selectedId] : undefined;
@@ -299,10 +303,33 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
       : task?.title?.trim() || selected?.taskTitle || "";
 
   useEffect(() => {
-    if (!selectedId) return;
-    if (filtered.some((c) => c.taskId === selectedId)) return;
-    setSelectedId(filtered[0]?.taskId ?? null);
-  }, [filtered, selectedId]);
+    if (
+      selectedId &&
+      displayConversations.some((c) => c.taskId === selectedId)
+    ) {
+      return;
+    }
+    if (inbox === "unread") return;
+    setSelectedId(displayConversations[0]?.taskId ?? null);
+  }, [displayConversations, inbox, selectedId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const ids = visibleConversations.map((c) => c.taskId);
+    let cursor = 0;
+    async function worker() {
+      while (!cancelled && cursor < ids.length) {
+        const taskId = ids[cursor];
+        cursor += 1;
+        if (!taskId) return;
+        await loadTimeline(taskId);
+      }
+    }
+    void Promise.all([worker(), worker(), worker()]);
+    return () => {
+      cancelled = true;
+    };
+  }, [loadTimeline, visibleConversations]);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -355,6 +382,10 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
           metadata: live.metadata,
         });
 
+    const seenNow =
+      isUser && selectedIdRef.current === live.taskId
+        ? new Date(live.at).toISOString()
+        : null;
     const nextEvent: TimelineEvent = {
       id: live.messageId ?? `live-${live.at}`,
       taskId: live.taskId,
@@ -365,6 +396,8 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
       mediaKind: live.mediaKind ?? "text",
       durationMs: live.durationMs,
       metadata: live.metadata ?? null,
+      readAt: seenNow,
+      seenAt: seenNow,
     };
 
     setTimelines((prev) => {
@@ -411,30 +444,6 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
     [handleThreadUpdate, selectedId],
   );
 
-  useEffect(() => {
-    if (!task) return;
-    const taskId = task.id;
-    const fromMeta = bookingRefFromTask(task);
-    if (fromMeta) {
-      setBookingRefs((prev) =>
-        prev[taskId] === fromMeta ? prev : { ...prev, [taskId]: fromMeta },
-      );
-      return;
-    }
-    let cancelled = false;
-    void dashboardExtrasApi.getTaskChatMeta(taskId).then((row) => {
-      if (cancelled) return;
-      setBookingRefs((prev) =>
-        Object.hasOwn(prev, taskId)
-          ? prev
-          : { ...prev, [taskId]: row.bookingRef },
-      );
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [task]);
-
   if (visibleConversations.length === 0) {
     return (
       <div className="space-y-6">
@@ -457,8 +466,6 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
     );
   }
 
-  const bookingRef = task ? bookingRefs[task.id] : null;
-
   return (
     <div className="flex h-[calc(100dvh-8.5rem)] max-h-[calc(100dvh-8.5rem)] flex-col gap-5 overflow-hidden">
       <div className="flex shrink-0 flex-wrap items-start justify-between gap-4">
@@ -476,7 +483,45 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
       {/* Figma: list 292px + gap ~25px + chat; panels end with a small bottom gap */}
       <div className="grid min-h-0 flex-1 gap-[25px] overflow-hidden lg:grid-cols-[minmax(292px,320px)_minmax(0,1fr)] lg:items-stretch">
         <aside className="dash-card-shimmer flex h-full min-h-0 flex-col overflow-hidden rounded-[15px] border border-border bg-surface">
-          <div className="shrink-0 px-5 pt-5">
+          <div className="flex shrink-0 gap-2 px-5 pt-4">
+            <button
+              type="button"
+              onClick={() => setInbox("all")}
+              className={cn(
+                "inline-flex h-8 items-center rounded-full px-3 text-[12px] font-semibold",
+                inbox === "all"
+                  ? "bg-accent text-accent-foreground"
+                  : "bg-surface-muted text-muted hover:text-foreground",
+              )}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              onClick={() => setInbox("unread")}
+              className={cn(
+                "inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[12px] font-semibold",
+                inbox === "unread"
+                  ? "bg-accent text-accent-foreground"
+                  : "bg-surface-muted text-muted hover:text-foreground",
+              )}
+            >
+              Unread
+              {unreadChats > 0 ? (
+                <span
+                  className={cn(
+                    "inline-flex min-w-4 items-center justify-center rounded-full px-1 text-[10px]",
+                    inbox === "unread"
+                      ? "bg-white/25 text-accent-foreground"
+                      : "bg-accent text-accent-foreground",
+                  )}
+                >
+                  {unreadChats > 99 ? "99+" : unreadChats}
+                </span>
+              ) : null}
+            </button>
+          </div>
+          <div className="shrink-0 px-5 pt-3">
             <div className="flex h-10 items-center gap-2 rounded-[8px] border border-border bg-surface px-2">
               <svg
                 width="20"
@@ -505,7 +550,11 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
           <ul className="min-h-0 flex-1 overflow-y-auto px-0 pb-3 pt-2">
             {filtered.length === 0 ? (
               <li className="px-5 py-8 text-center text-sm text-muted">
-                {filter.trim() ? "No chats match this search." : "No chats yet."}
+                {filter.trim()
+                  ? "No chats match this search."
+                  : inbox === "unread"
+                    ? "No unread chats."
+                    : "No chats yet."}
               </li>
             ) : (
               filtered.map((c, index) => {
@@ -579,7 +628,7 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
               className="dash-card-shimmer flex h-full min-h-0 flex-1 flex-col overflow-hidden rounded-[15px] border border-border bg-surface"
               style={{ "--row-i": 1 } as CSSProperties}
             >
-              <header className="flex shrink-0 items-center justify-between gap-3 px-5 py-5">
+              <header className="flex shrink-0 items-center justify-between gap-3 px-5 py-3">
                 <div className="flex min-w-0 items-center gap-2.5">
                   <ConversationAvatar name={task.customerName} size={34} />
                   <div className="min-w-0 leading-[14px]">
@@ -593,31 +642,20 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
                     ) : null}
                   </div>
                 </div>
-                <div className="flex shrink-0 flex-col items-end gap-1 text-right">
-                  {bookingRef ? (
-                    <p className="text-[11px] text-muted-dim">
-                      {formatBookingRef(bookingRef)} · #{task.number}
-                    </p>
-                  ) : (
-                    <p className="text-[11px] text-muted-dim">
-                      Ticket #T-{task.number}
-                    </p>
-                  )}
-                  <div className="flex items-center gap-2">
-                    <CallButton
-                      taskId={task.id}
-                      customerName={task.customerName}
-                      taskTitle={task.title}
-                      taskNumber={task.number}
-                      disabled={!canCallClient(task)}
-                    />
-                    <Link
-                      href={ROUTES.taskPanel(task.id, "chat")}
-                      className="text-[12px] font-semibold text-accent hover:text-accent-hover"
-                    >
-                      Open task
-                    </Link>
-                  </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <CallButton
+                    taskId={task.id}
+                    customerName={task.customerName}
+                    taskTitle={task.title}
+                    taskNumber={task.number}
+                    disabled={!canCallClient(task)}
+                  />
+                  <Link
+                    href={ROUTES.taskPanel(task.id, "chat")}
+                    className="text-[12px] font-semibold text-accent hover:text-accent-hover"
+                  >
+                    Open task
+                  </Link>
                 </div>
               </header>
               <div className="h-px w-full shrink-0 bg-border" />
