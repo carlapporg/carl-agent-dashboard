@@ -27,7 +27,7 @@ export function hrefForNotification(
   if (item.payId) return ROUTES.earningsPay(item.payId);
   if (item.taskId && item.panel) return ROUTES.taskPanel(item.taskId, item.panel);
   if (item.taskId) return ROUTES.task(item.taskId);
-  return ROUTES.notifications;
+  return `${ROUTES.history}?tab=notifications`;
 }
 
 export function kindLabel(kind: NotificationKind): string {

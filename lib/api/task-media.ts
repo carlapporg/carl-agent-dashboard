@@ -5,6 +5,7 @@ import type { ChatMediaKind, TimelineEvent } from "@/types/message";
 export const TASK_MEDIA = {
   maxImageBytes: 10 * 1024 * 1024,
   maxVoiceBytes: 16 * 1024 * 1024,
+  maxFileBytes: 15 * 1024 * 1024,
   maxVoiceMs: 120_000,
 } as const;
 
@@ -16,12 +17,20 @@ export function dashboardImageUploadUrl(taskId: string): string {
   return `/api/agent/tasks/${encodeURIComponent(taskId)}/messages/image`;
 }
 
+export function dashboardFileUploadUrl(taskId: string): string {
+  return `/api/agent/tasks/${encodeURIComponent(taskId)}/messages/file`;
+}
+
 export function dashboardAudioSrc(taskId: string, messageId: string): string {
   return `/api/agent/tasks/${encodeURIComponent(taskId)}/messages/${encodeURIComponent(messageId)}/audio`;
 }
 
 export function dashboardImageSrc(taskId: string, messageId: string): string {
   return `/api/agent/tasks/${encodeURIComponent(taskId)}/messages/${encodeURIComponent(messageId)}/image`;
+}
+
+export function dashboardFileSrc(taskId: string, messageId: string): string {
+  return `/api/agent/tasks/${encodeURIComponent(taskId)}/messages/${encodeURIComponent(messageId)}/file`;
 }
 
 export function dashboardReceiptFileSrc(taskId: string, receiptId: string): string {
@@ -33,13 +42,29 @@ export function isImageFile(file: File): boolean {
   return /\.(jpe?g|png|gif|webp|heic|heif)$/i.test(file.name);
 }
 
+export function isDocumentFile(file: File): boolean {
+  if (
+    file.type === "application/pdf" ||
+    file.type === "application/msword" ||
+    file.type ===
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+    file.type === "application/vnd.ms-excel" ||
+    file.type ===
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+    file.type === "text/plain"
+  ) {
+    return true;
+  }
+  return /\.(pdf|docx?|xlsx?|txt)$/i.test(file.name);
+}
+
 export function isVoiceFile(file: File): boolean {
   if (file.type.startsWith("audio/")) return true;
   return /\.(webm|ogg|mp3|mp4|m4a|aac|wav)$/i.test(file.name);
 }
 
 export const CHAT_ATTACH_ACCEPT =
-  "image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,image/*,audio/*,audio/webm,audio/ogg,audio/mpeg,audio/mp4,audio/wav,audio/aac,.m4a";
+  "image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,image/*,audio/*,audio/webm,audio/ogg,audio/mpeg,audio/mp4,audio/wav,audio/aac,.m4a,application/pdf,.pdf,application/msword,.doc,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,application/vnd.ms-excel,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx,text/plain,.txt";
 
 export function voiceFilename(mimeType: string): string {
   if (mimeType.includes("mp4") || mimeType.includes("m4a") || mimeType.includes("aac")) {
@@ -117,14 +142,19 @@ export function uploadTaskMedia(input: MediaUploadInput): Promise<TimelineEvent>
   if (input.kind === "voice" && input.durationMs != null) {
     form.append("durationMs", String(Math.round(input.durationMs)));
   }
-  if (input.kind === "image" && input.caption?.trim()) {
+  if (
+    (input.kind === "image" || input.kind === "file") &&
+    input.caption?.trim()
+  ) {
     form.append("caption", input.caption.trim());
   }
 
   const url =
     input.kind === "voice"
       ? dashboardVoiceUploadUrl(input.taskId)
-      : dashboardImageUploadUrl(input.taskId);
+      : input.kind === "file"
+        ? dashboardFileUploadUrl(input.taskId)
+        : dashboardImageUploadUrl(input.taskId);
 
   const fallback: TimelineEvent = {
     id: `local-${Date.now()}`,

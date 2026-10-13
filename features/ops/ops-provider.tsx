@@ -260,7 +260,8 @@ type LiveChatEvent = {
   sender: string;
   content: string;
   messageId?: string;
-  mediaKind?: "text" | "voice" | "image";
+  mediaKind?: "text" | "voice" | "image" | "file";
+  fileName?: string | null;
   durationMs?: number | null;
   metadata?: unknown;
 };
@@ -1007,6 +1008,7 @@ export function AgentOpsProvider({
           content: incoming.content,
           messageId: incoming.messageId,
           mediaKind: incoming.mediaKind,
+          fileName: incoming.fileName,
           durationMs: incoming.durationMs,
           metadata: incoming.metadata,
         });

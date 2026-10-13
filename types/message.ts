@@ -11,7 +11,7 @@ export const timelineEventKindSchema = z.enum([
   "system",
 ]);
 
-export const chatMediaKindSchema = z.enum(["text", "voice", "image"]);
+export const chatMediaKindSchema = z.enum(["text", "voice", "image", "file"]);
 
 export const messageReceiptStatusSchema = z.enum([
   "SENT",
@@ -33,6 +33,7 @@ export const timelineEventSchema = z.object({
   durationMs: z.number().nullable().optional(),
   mimeType: z.string().nullable().optional(),
   previewUrl: z.string().nullable().optional(),
+  fileName: z.string().nullable().optional(),
   /** SENT → DELIVERED → SEEN (agent outgoing ticks). */
   receiptStatus: messageReceiptStatusSchema.optional(),
   deliveredAt: z.string().nullable().optional(),

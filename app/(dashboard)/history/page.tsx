@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { HistoryPageClient } from "@/features/history/components/history-page-client";
+import { HistorySkeleton } from "@/components/feedback/skeleton";
 import { PageShell } from "@/components/ui/page-shell";
 
 export const metadata: Metadata = {
@@ -9,7 +11,9 @@ export const metadata: Metadata = {
 export default function HistoryPage() {
   return (
     <PageShell wide>
-      <HistoryPageClient />
+      <Suspense fallback={<HistorySkeleton />}>
+        <HistoryPageClient />
+      </Suspense>
     </PageShell>
   );
 }

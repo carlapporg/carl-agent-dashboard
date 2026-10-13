@@ -40,7 +40,7 @@ export function AlertsStrip() {
               ? ROUTES.taskPanel(alert.taskId, alert.panel)
               : alert.taskId
                 ? ROUTES.task(alert.taskId)
-                : ROUTES.notifications;
+                : `${ROUTES.history}?tab=notifications`;
           return (
             <li
               key={alert.id}

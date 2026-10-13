@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { AvailabilityToggle } from "@/features/dashboard/components/availability-toggle";
@@ -29,6 +29,7 @@ type HistoryViewProps = {
 };
 
 type HistoryTab = ActivityLogFilter | "notifications";
+type NotifFilter = "all" | "unread" | "tasks" | "system";
 
 /** Hand-Over + All Activity + Notifications (System Alerts hidden until API ships). */
 const TABS: Array<{ value: HistoryTab; label: string }> = [
@@ -55,6 +56,39 @@ function formatLogTime(iso: string): string {
     day: "numeric",
     year: "numeric",
   });
+}
+
+function isTaskKind(kind: NotificationKind) {
+  return (
+    kind === "task_offered" ||
+    kind === "task_assigned" ||
+    kind === "missed_task" ||
+    kind === "waiting_for_agent" ||
+    kind === "client_message" ||
+    kind === "confirmation_confirmed" ||
+    kind === "confirmation_declined" ||
+    kind === "receipt_accepted" ||
+    kind === "receipt_rejected"
+  );
+}
+
+function isSystemKind(kind: NotificationKind) {
+  return (
+    kind === "payment_approved" ||
+    kind === "payment_declined" ||
+    kind === "payment_expired" ||
+    kind === "pay_sent" ||
+    kind === "pay_rejected" ||
+    kind === "task_cancelled" ||
+    kind === "task_failed"
+  );
+}
+
+function matchesNotifFilter(item: NotificationItem, filter: NotifFilter) {
+  if (filter === "all") return true;
+  if (filter === "unread") return !item.read;
+  if (filter === "tasks") return isTaskKind(item.kind);
+  return isSystemKind(item.kind);
 }
 
 function matchesFilter(item: ActivityLogItem, filter: ActivityLogFilter) {
@@ -411,10 +445,16 @@ export function HistoryView({ logs }: HistoryViewProps) {
   const ops = useOps();
   const {
     items: notifications,
+    unreadCount,
     markRead,
+    markAllRead,
     removeFromHistory,
   } = useNotifications();
-  const [tab, setTab] = useState<HistoryTab>("all");
+  const searchParams = useSearchParams();
+  const [tab, setTab] = useState<HistoryTab>(
+    searchParams.get("tab") === "notifications" ? "notifications" : "all",
+  );
+  const [notifFilter, setNotifFilter] = useState<NotifFilter>("all");
   const [hiddenActivityIds, setHiddenActivityIds] = useState(() =>
     readHiddenActivityIds(),
   );
@@ -439,11 +479,13 @@ export function HistoryView({ logs }: HistoryViewProps) {
 
   const visibleNotifs = useMemo(() => {
     if (tab !== "notifications") return [];
-    return [...notifications].sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    );
-  }, [notifications, tab]);
+    return [...notifications]
+      .filter((item) => matchesNotifFilter(item, notifFilter))
+      .sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
+  }, [notifFilter, notifications, tab]);
 
   const allFeed = useMemo(() => {
     if (tab !== "all") return [] as AllFeedRow[];
@@ -478,7 +520,7 @@ export function HistoryView({ logs }: HistoryViewProps) {
 
   useEffect(() => {
     setSelectedKeys(new Set());
-  }, [tab]);
+  }, [tab, notifFilter]);
 
   const selectedCount = useMemo(
     () => visibleKeys.filter((key) => selectedKeys.has(key)).length,
@@ -546,6 +588,11 @@ export function HistoryView({ logs }: HistoryViewProps) {
 
   function changeTab(next: HistoryTab) {
     setTab(next);
+    if (next === "notifications") {
+      router.replace(`${ROUTES.history}?tab=notifications`);
+      return;
+    }
+    if (searchParams.get("tab")) router.replace(ROUTES.history);
   }
 
   return (
@@ -593,8 +640,22 @@ export function HistoryView({ logs }: HistoryViewProps) {
                 </button>
               </div>
             ) : null}
+            {tab === "notifications" ? (
+              <button
+                type="button"
+                disabled={unreadCount === 0}
+                onClick={markAllRead}
+                className="inline-flex h-[35px] items-center rounded-[40px] border border-border bg-surface px-4 text-[12px] font-medium tracking-[-0.05em] text-foreground disabled:opacity-50"
+              >
+                Mark all as read
+              </button>
+            ) : null}
             {TABS.map((item) => {
               const active = tab === item.value;
+              const label =
+                item.value === "notifications" && unreadCount > 0
+                  ? `Notifications (${unreadCount})`
+                  : item.label;
               return (
                 <button
                   key={item.value}
@@ -607,7 +668,7 @@ export function HistoryView({ logs }: HistoryViewProps) {
                       : "bg-surface-muted text-foreground hover:bg-surface-hover",
                   )}
                 >
-                  {item.label}
+                  {label}
                 </button>
               );
             })}
@@ -615,11 +676,49 @@ export function HistoryView({ logs }: HistoryViewProps) {
         </div>
 
         {tab === "notifications" ? (
+          <div className="flex flex-wrap gap-2 border-t border-border px-4 py-3 md:px-5">
+            {(
+              [
+                { value: "all", label: "All alerts" },
+                { value: "unread", label: `Unread (${unreadCount})` },
+                { value: "tasks", label: "Tasks" },
+                { value: "system", label: "System" },
+              ] as const
+            ).map((item) => {
+              const active = notifFilter === item.value;
+              return (
+                <button
+                  key={item.value}
+                  type="button"
+                  onClick={() => setNotifFilter(item.value)}
+                  className={cn(
+                    "inline-flex h-8 items-center rounded-full px-3 text-[12px] font-medium",
+                    active
+                      ? "bg-accent text-accent-foreground"
+                      : "bg-surface-muted text-foreground hover:bg-surface-hover",
+                  )}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+
+        {tab === "notifications" ? (
           visibleNotifs.length === 0 ? (
             <div className="border-t border-border px-4 py-12 md:px-5">
               <EmptyState
-                title="No notifications yet"
-                description="Offers, messages, and alerts will show up here."
+                title={
+                  notifFilter === "unread"
+                    ? "No unread notifications"
+                    : "No notifications yet"
+                }
+                description={
+                  notifFilter === "unread"
+                    ? "New offers, messages, and payment results will show up here."
+                    : "Offers, messages, and alerts will show up here."
+                }
               />
             </div>
           ) : (

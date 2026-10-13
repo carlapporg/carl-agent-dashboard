@@ -1,10 +1,6 @@
-import type { Metadata } from "next";
-import { NotificationsView } from "@/features/notifications/components/notifications-view";
-
-export const metadata: Metadata = {
-  title: "Notifications",
-};
+import { redirect } from "next/navigation";
+import { ROUTES } from "@/lib/constants/routes";
 
 export default function NotificationsPage() {
-  return <NotificationsView />;
+  redirect(`${ROUTES.history}?tab=notifications`);
 }

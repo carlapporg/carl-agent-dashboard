@@ -129,6 +129,12 @@ export const API_ENDPOINTS = {
     /** GET raw image */
     taskMessageImageFile: (taskId: string, messageId: string) =>
       `/agents/me/tasks/${taskId}/messages/${messageId}/image` as const,
+    /** POST multipart { file, caption? } — document to the member */
+    taskMessageFile: (taskId: string) =>
+      `/agents/me/tasks/${taskId}/messages/file` as const,
+    /** GET raw document */
+    taskMessageDocument: (taskId: string, messageId: string) =>
+      `/agents/me/tasks/${taskId}/messages/${messageId}/file` as const,
 
     /**
      * Admin ↔ agent chat.

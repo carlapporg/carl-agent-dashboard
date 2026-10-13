@@ -14,6 +14,9 @@ export function lastChatPreview(events: TimelineEvent[]): string | null {
     if (event.mediaKind === "image") {
       return event.body.trim() || "Photo";
     }
+    if (event.mediaKind === "file") {
+      return event.fileName?.trim() || event.body.trim() || "Document";
+    }
     const body = event.body.trim();
     if (body) return body;
   }

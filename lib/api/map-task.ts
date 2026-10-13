@@ -228,12 +228,14 @@ function captionFromMetadata(metadata: unknown): string {
 export function mediaKindFromMessage(message: AgentTaskMessage): ChatMediaKind {
   const type = (message.messageType ?? "").toUpperCase();
   if (type.includes("VOICE") || type === "AUDIO") return "voice";
+  if (type === "FILE" || type === "DOCUMENT") return "file";
   if (type.includes("IMAGE") || type === "PHOTO" || type === "PICTURE") {
     return "image";
   }
   if (message.mimeType?.startsWith("audio/")) return "voice";
   if (message.mimeType?.startsWith("image/")) return "image";
   if (message.audioUrl) return "voice";
+  if (message.fileUrl || message.fileName) return "file";
   if (message.imageUrl) return "image";
   const meta = message.metadata;
   if (meta && typeof meta === "object") {
@@ -277,6 +279,7 @@ export function mapAgentMessageToTimeline(
     mediaKind,
     durationMs: message.durationMs,
     mimeType: message.mimeType,
+    fileName: message.fileName ?? null,
     receiptStatus: receiptStatusFromMessage(message),
     deliveredAt: message.deliveredAt ?? null,
     seenAt: message.seenAt ?? message.readAt ?? null,

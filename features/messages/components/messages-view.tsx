@@ -394,6 +394,7 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
       createdAt: new Date(live.at).toISOString(),
       visibleToCustomer: !isCallEnded && !isTranscriptReady,
       mediaKind: live.mediaKind ?? "text",
+      fileName: live.fileName,
       durationMs: live.durationMs,
       metadata: live.metadata ?? null,
       readAt: seenNow,

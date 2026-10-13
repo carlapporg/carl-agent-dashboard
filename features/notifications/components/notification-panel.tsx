@@ -94,7 +94,7 @@ export function NotificationPanel() {
 
         <div className="border-t border-border px-4 py-3">
           <Link
-            href={ROUTES.notifications}
+            href={`${ROUTES.history}?tab=notifications`}
             className="text-sm font-semibold text-accent hover:text-accent-hover"
             onClick={() => setPanelOpen(false)}
           >

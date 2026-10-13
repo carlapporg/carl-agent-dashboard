@@ -11,7 +11,7 @@ function jsonError(error: unknown) {
 
 export async function proxyTaskMediaUpload(
   taskId: string,
-  kind: "voice" | "image",
+  kind: "voice" | "image" | "file",
   request: Request,
 ): Promise<Response> {
   try {
@@ -19,14 +19,23 @@ export async function proxyTaskMediaUpload(
     const file = form.get("file");
     if (!(file instanceof File) || file.size === 0) {
       return NextResponse.json(
-        { message: kind === "voice" ? "Record a voice note first." : "Choose an image first." },
+        {
+          message:
+            kind === "voice"
+              ? "Record a voice note first."
+              : kind === "file"
+                ? "Choose a document first."
+                : "Choose an image first.",
+        },
         { status: 400 },
       );
     }
     const event =
       kind === "voice"
         ? await messagesApi.sendVoice(taskId, form)
-        : await messagesApi.sendImage(taskId, form);
+        : kind === "file"
+          ? await messagesApi.sendFile(taskId, form)
+          : await messagesApi.sendImage(taskId, form);
     return NextResponse.json({ data: event }, { status: 201 });
   } catch (error) {
     return jsonError(error);

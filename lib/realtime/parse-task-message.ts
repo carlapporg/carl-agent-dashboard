@@ -17,6 +17,7 @@ export type IncomingTaskMessage = {
   taskTitle?: string;
   messageId?: string;
   mediaKind: ChatMediaKind;
+  fileName?: string | null;
   durationMs?: number | null;
   metadata?: unknown;
   receiptStatus?: "SENT" | "DELIVERED" | "SEEN";
@@ -50,6 +51,9 @@ export function previewForIncomingMessage(message: IncomingTaskMessage): string 
   if (message.mediaKind === "voice") return "Voice message";
   if (message.mediaKind === "image") {
     return message.content.trim() || "Photo";
+  }
+  if (message.mediaKind === "file") {
+    return message.content.trim() || "Document";
   }
   return message.content;
 }
@@ -113,6 +117,7 @@ export function parseIncomingTaskMessage(
     taskTitle,
     messageId: parsed.success ? parsed.data.id : undefined,
     mediaKind,
+    fileName: parsed.success ? parsed.data.fileName ?? null : null,
     durationMs: parsed.success ? parsed.data.durationMs : null,
     metadata,
     receiptStatus: parsed.success

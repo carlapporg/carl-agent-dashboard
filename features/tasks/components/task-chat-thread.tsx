@@ -38,7 +38,9 @@ import {
 } from "@/types/call";
 import {
   CHAT_ATTACH_ACCEPT,
+  dashboardFileSrc,
   formatClockMs,
+  isDocumentFile,
   isImageFile,
   isVoiceFile,
   pickRecorderMime,
@@ -211,7 +213,13 @@ function importantTone(event: ChatItem): "ok" | "warn" | "bad" {
 function mediaLikelySame(server: TimelineEvent, opt: ChatItem): boolean {
   if (server.kind !== "agent_message") return false;
   if ((server.mediaKind ?? "text") !== (opt.mediaKind ?? "text")) return false;
-  if (opt.mediaKind !== "voice" && opt.mediaKind !== "image") return false;
+  if (
+    opt.mediaKind !== "voice" &&
+    opt.mediaKind !== "image" &&
+    opt.mediaKind !== "file"
+  ) {
+    return false;
+  }
   if (opt.mediaKind === "voice") {
     const serverMs = server.durationMs ?? 0;
     const optMs = opt.durationMs ?? 0;
@@ -234,7 +242,9 @@ function mergeThread(server: TimelineEvent[], extras: ChatItem[]): ChatItem[] {
     if (
       (item.id.startsWith("opt-") || item.id.startsWith("local-")) &&
       (item.delivery === "sending" || item.delivery === "failed") &&
-      (item.mediaKind === "voice" || item.mediaKind === "image") &&
+      (item.mediaKind === "voice" ||
+        item.mediaKind === "image" ||
+        item.mediaKind === "file") &&
       server.some((row) => mediaLikelySame(row, item))
     ) {
       continue;
@@ -547,6 +557,25 @@ const ChatBubble = memo(function ChatBubble({
             onOpen={onOpenImage}
           />
         ) : null}
+        {mediaKind === "file" ? (
+          <div className="min-w-0">
+            <a
+              href={
+                event.previewUrl?.startsWith("blob:")
+                  ? event.previewUrl
+                  : dashboardFileSrc(event.taskId, event.id)
+              }
+              target="_blank"
+              rel="noreferrer"
+              className="font-medium underline"
+            >
+              {event.fileName?.trim() || "Document"}
+            </a>
+            {event.body.trim() ? (
+              <p className="mt-1 whitespace-pre-wrap break-words">{event.body}</p>
+            ) : null}
+          </div>
+        ) : null}
         {mediaKind === "text" ? (
           (() => {
             const venue =
@@ -759,6 +788,7 @@ const TaskChatThreadBody = forwardRef<
     file: File;
     url: string;
   } | null>(null);
+  const [documentPreview, setDocumentPreview] = useState<File | null>(null);
   const [lightbox, setLightbox] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -805,6 +835,10 @@ const TaskChatThreadBody = forwardRef<
     setImagePreview(null);
   }, [imagePreview]);
 
+  const discardDocumentPreview = useCallback(() => {
+    setDocumentPreview(null);
+  }, []);
+
   const applyDraft = useCallback((text: string) => {
     setDraft(text);
     setFlash(true);
@@ -834,6 +868,7 @@ const TaskChatThreadBody = forwardRef<
         createdAt: new Date(liveChat.at).toISOString(),
         visibleToCustomer: true,
         mediaKind: liveChat.mediaKind ?? "text",
+        fileName: liveChat.fileName,
         durationMs: liveChat.durationMs,
         metadata: liveChat.metadata ?? null,
       };
@@ -951,7 +986,9 @@ const TaskChatThreadBody = forwardRef<
         if (timeline.some((row) => row.id === item.id)) return false;
         if (
           (item.id.startsWith("opt-") || item.id.startsWith("local-")) &&
-          (item.mediaKind === "voice" || item.mediaKind === "image") &&
+          (item.mediaKind === "voice" ||
+        item.mediaKind === "image" ||
+        item.mediaKind === "file") &&
           timeline.some((row) => mediaLikelySame(row, item))
         ) {
           return false;
@@ -1198,6 +1235,7 @@ const TaskChatThreadBody = forwardRef<
           mediaKind: pending.kind,
           durationMs: pending.durationMs,
           mimeType: pending.blob.type || null,
+          fileName: pending.kind === "file" ? pending.filename : undefined,
           previewUrl: pending.previewUrl,
           delivery: "sending",
           uploadProgress: 1,
@@ -1258,6 +1296,7 @@ const TaskChatThreadBody = forwardRef<
       return;
     }
     discardImagePreview();
+    discardDocumentPreview();
     discardVoicePreview();
     recordingLockRef.current = true;
     try {
@@ -1299,6 +1338,7 @@ const TaskChatThreadBody = forwardRef<
     }
   }, [
     disabled,
+    discardDocumentPreview,
     discardImagePreview,
     discardVoicePreview,
     finishRecording,
@@ -1330,6 +1370,7 @@ const TaskChatThreadBody = forwardRef<
           return;
         }
         discardVoicePreview();
+        discardDocumentPreview();
         setImagePreview((current) => {
           if (current?.url) URL.revokeObjectURL(current.url);
           return { file, url: URL.createObjectURL(file) };
@@ -1344,6 +1385,7 @@ const TaskChatThreadBody = forwardRef<
           return;
         }
         discardImagePreview();
+        discardDocumentPreview();
         discardVoicePreview();
         const url = URL.createObjectURL(file);
         setVoicePreview({
@@ -1356,12 +1398,21 @@ const TaskChatThreadBody = forwardRef<
         return;
       }
 
-      toast(
-        "Chat can send photos and voice notes. For PDFs or docs, upload a receipt on the task.",
-        "error",
-      );
+      if (isDocumentFile(file)) {
+        if (file.size > TASK_MEDIA.maxFileBytes) {
+          toast("That document is too large. Please pick one under 15 MB.", "error");
+          return;
+        }
+        discardImagePreview();
+        discardVoicePreview();
+        setDocumentPreview(file);
+        setError(null);
+        return;
+      }
+
+      toast("Send a photo, voice note, PDF, Word, Excel, or text file.", "error");
     },
-    [discardImagePreview, discardVoicePreview, toast],
+    [discardDocumentPreview, discardImagePreview, discardVoicePreview, toast],
   );
 
   const sendImagePreview = useCallback(() => {
@@ -1378,6 +1429,21 @@ const TaskChatThreadBody = forwardRef<
     setImagePreview(null);
   }, [draft, imagePreview, queueMedia]);
 
+  const sendDocumentPreview = useCallback(() => {
+    if (!documentPreview) return;
+    const caption = draft.trim();
+    const url = URL.createObjectURL(documentPreview);
+    queueMedia({
+      kind: "file",
+      blob: documentPreview,
+      filename: documentPreview.name || "document",
+      caption,
+      previewUrl: url,
+    });
+    setDraft("");
+    setDocumentPreview(null);
+  }, [documentPreview, draft, queueMedia]);
+
   const onRetry = useCallback(
     (event: ChatItem) => {
       const pending = pendingMediaRef.current.get(event.id);
@@ -1385,7 +1451,11 @@ const TaskChatThreadBody = forwardRef<
         void sendMediaNow(event.id, pending);
         return;
       }
-      if (event.mediaKind === "voice" || event.mediaKind === "image") {
+      if (
+        event.mediaKind === "voice" ||
+        event.mediaKind === "image" ||
+        event.mediaKind === "file"
+      ) {
         toast("Please attach that file again.", "error");
         return;
       }
@@ -1402,6 +1472,10 @@ const TaskChatThreadBody = forwardRef<
     }
     if (imagePreview) {
       sendImagePreview();
+      return;
+    }
+    if (documentPreview) {
+      sendDocumentPreview();
       return;
     }
     const text = draft.trim();
@@ -1751,6 +1825,38 @@ const TaskChatThreadBody = forwardRef<
               ) : null}
             </div>
           ) : null}
+          {documentPreview ? (
+            <div
+              className={cn(
+                "mb-2 flex items-center gap-2 rounded-lg border border-border bg-surface-muted p-1.5",
+                inbox && "mx-6 mt-4",
+              )}
+            >
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[12px] font-medium text-foreground">
+                  {documentPreview.name}
+                </p>
+                <p className="text-[11px] text-muted">Ready to send</p>
+              </div>
+              <button
+                type="button"
+                onClick={discardDocumentPreview}
+                className="px-2 text-[11px] font-semibold text-muted hover:text-foreground"
+              >
+                Remove
+              </button>
+              {inbox ? (
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={submitComposer}
+                  className="rounded-full bg-accent px-3 py-1.5 text-[11px] font-semibold text-accent-foreground hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Send
+                </button>
+              ) : null}
+            </div>
+          ) : null}
           {voicePreview ? (
             <div
               className={cn(
@@ -1850,8 +1956,8 @@ const TaskChatThreadBody = forwardRef<
                 <button
                   type="button"
                   disabled={disabled}
-                  aria-label="Attach photo or voice file"
-                  title="Attach photo or voice file"
+                  aria-label="Attach a photo, voice note, or document"
+                  title="Attach a photo, voice note, or document"
                   onClick={() => fileRef.current?.click()}
                   className="inline-flex size-[18px] shrink-0 items-center justify-center text-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -1873,7 +1979,7 @@ const TaskChatThreadBody = forwardRef<
                   placeholder={
                     disabled
                       ? "Messaging is paused"
-                      : imagePreview
+                      : imagePreview || documentPreview
                         ? "Add a caption…"
                         : "Write message here..."
                   }
@@ -1886,12 +1992,12 @@ const TaskChatThreadBody = forwardRef<
                 type="button"
                 disabled={disabled}
                 aria-label={
-                  draft.trim() || imagePreview || voicePreview
+                  draft.trim() || imagePreview || voicePreview || documentPreview
                     ? "Send message"
                     : "Send a voice message"
                 }
                 onClick={() => {
-                  if (draft.trim() || imagePreview || voicePreview) {
+                  if (draft.trim() || imagePreview || voicePreview || documentPreview) {
                     submitComposer();
                     return;
                   }
@@ -1899,7 +2005,7 @@ const TaskChatThreadBody = forwardRef<
                 }}
                 className="inline-flex size-11 shrink-0 items-center justify-center rounded-[22px] bg-accent text-accent-foreground transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {draft.trim() || imagePreview || voicePreview ? (
+                {draft.trim() || imagePreview || voicePreview || documentPreview ? (
                   <SendIcon className="size-[18px]" />
                 ) : (
                   /* eslint-disable-next-line @next/next/no-img-element */
@@ -1923,7 +2029,7 @@ const TaskChatThreadBody = forwardRef<
             >
               <div className="mb-0.5 flex shrink-0 items-center gap-0.5">
                 <ComposerToolButton
-                  label="Attach photo or voice file"
+                  label="Attach a photo, voice note, or document"
                   active={Boolean(imagePreview || voicePreview)}
                   disabled={disabled}
                   onClick={() => fileRef.current?.click()}
@@ -1958,7 +2064,7 @@ const TaskChatThreadBody = forwardRef<
                 placeholder={
                   disabled
                     ? "Messaging is paused"
-                    : imagePreview
+                    : imagePreview || documentPreview
                       ? "Add a caption…"
                       : "Write a message…"
                 }
@@ -1970,7 +2076,7 @@ const TaskChatThreadBody = forwardRef<
                 type="submit"
                 disabled={
                   disabled ||
-                  (!draft.trim() && !imagePreview && !voicePreview)
+                  (!draft.trim() && !imagePreview && !voicePreview && !documentPreview)
                 }
                 aria-label="Send"
                 className="mb-0.5 inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground transition-opacity hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"

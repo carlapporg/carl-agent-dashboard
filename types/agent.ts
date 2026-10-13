@@ -254,6 +254,8 @@ export const agentTaskMessageSchema = z
     mimeType: z.string().nullable().optional(),
     audioUrl: z.string().nullable().optional(),
     imageUrl: z.string().nullable().optional(),
+    fileUrl: z.string().nullable().optional(),
+    fileName: z.string().nullable().optional(),
     caption: z.string().nullable().optional(),
     metadata: z.unknown().nullable().optional(),
     status: z.string().optional(),

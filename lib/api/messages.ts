@@ -149,4 +149,33 @@ export const messagesApi = {
       }
     );
   },
+
+  async sendFile(taskId: string, form: FormData): Promise<TimelineEvent> {
+    const row = await apiRequest(API_ENDPOINTS.agents.taskMessageFile(taskId), {
+      method: "POST",
+      body: form,
+      schema: sendResultSchema,
+      looseEnvelope: true,
+      dedupe: false,
+      timeoutMs: 90_000,
+    });
+    const event = toTimeline(row, taskId);
+    const captionRaw = form.get("caption");
+    const caption = typeof captionRaw === "string" ? captionRaw : "";
+    const file = form.get("file");
+    const fileName = file instanceof File ? file.name : "Document";
+    return (
+      event ?? {
+        id: `local-${Date.now()}`,
+        taskId,
+        kind: "agent_message",
+        body: caption,
+        createdAt: new Date().toISOString(),
+        visibleToCustomer: true,
+        mediaKind: "file",
+        fileName,
+        receiptStatus: "SENT",
+      }
+    );
+  },
 };

@@ -31,7 +31,7 @@ export const DASHBOARD_NAV: Array<{
   // Work Diary is redundant — Timesheet already shows the same hours.
   // { href: ROUTES.workDiary, label: "Work Diary", icon: "workDiary" },
   { href: ROUTES.timesheet, label: "Timesheet", icon: "calendar" },
-  { href: ROUTES.notifications, label: "Notifications", icon: "notifications" },
+  // Notifications live on History (All Activity + Notifications tab).
   { href: ROUTES.profile, label: "Profile", icon: "profile" },
   { href: ROUTES.settings, label: "Settings", icon: "settings" },
 ];
@@ -47,7 +47,6 @@ const FIGMA_PRIMARY_HREFS = new Set<string>([
   ROUTES.history,
   // ROUTES.workDiary,
   ROUTES.timesheet,
-  ROUTES.notifications,
   ROUTES.profile,
 ]);
 
