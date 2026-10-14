@@ -48,6 +48,8 @@ type TaskConfirmationPanelProps = {
   task: Task;
   taskStatus?: string | null;
   confirmation: TaskConfirmation | null;
+  /** True while a saved confirmation may still be loading. Do not show step 1 yet. */
+  confirmationResolving?: boolean;
   disabled?: boolean;
   onDraft?: (confirmation: TaskConfirmation) => void;
   onSent?: (confirmation: TaskConfirmation) => void;
@@ -68,12 +70,13 @@ function flowStep(confirmation: TaskConfirmation | null): FlowStep {
 }
 
 function stepHelp(
-  step: FlowStep,
+  step: FlowStep | null,
   confirmation: TaskConfirmation | null,
 ): string {
   if (confirmation?.status === "DECLINED") {
     return "The client declined. Edit the details and send again.";
   }
+  if (!step) return "Loading the saved step…";
   if (step === "waiting") {
     return "Waiting for the customer to approve or reject.";
   }
@@ -90,6 +93,7 @@ export function TaskConfirmationPanel({
   task,
   taskStatus,
   confirmation,
+  confirmationResolving = false,
   disabled = false,
   onDraft,
   onSent,
@@ -114,10 +118,12 @@ export function TaskConfirmationPanel({
   const waiting = isConfirmationPending(confirmation);
   const approved = isConfirmationConfirmed(confirmation);
   const declined = confirmation?.status === "DECLINED";
-  const step = flowStep(confirmation);
+  const waitingForSavedStep = confirmationResolving && !confirmation;
+  const step = waitingForSavedStep ? null : flowStep(confirmation);
 
   // Editable form: open by default until sent/pending; reopen on decline/draft/edit.
   const showEditableForm =
+    !waitingForSavedStep &&
     canSend &&
     !approved &&
     (forceEdit ||
@@ -274,7 +280,7 @@ export function TaskConfirmationPanel({
     });
   }
 
-  const stepIndex = FLOW_STEPS.findIndex((s) => s.id === step);
+  const stepIndex = step ? FLOW_STEPS.findIndex((s) => s.id === step) : -1;
 
   return (
     <section

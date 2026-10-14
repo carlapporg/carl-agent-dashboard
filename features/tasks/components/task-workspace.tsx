@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
 import {
   getTaskConfirmationAction,
   startTaskAction,
@@ -96,6 +96,10 @@ function phaseLabel(
   return formatStatus(displayedTaskStatus(task, confirmation, receipt));
 }
 
+function confirmationMayArriveLater(status?: string | null) {
+  return status === "IN_PROGRESS" || status === "WAITING_FOR_AGENT";
+}
+
 function withBackendStatus(task: Task, backendStatus: AgentTaskStatus): Task {
   return {
     ...task,
@@ -131,6 +135,10 @@ export function TaskWorkspace({
   const chatRef = useRef<TaskChatThreadHandle>(null);
   const [taskState, setTask] = useState(taskProp);
   const [confirmation, setConfirmation] = useState(confirmationProp);
+  const [confirmationResolving, setConfirmationResolving] = useState(
+    () =>
+      !confirmationProp && confirmationMayArriveLater(taskProp.backendStatus),
+  );
   const [receipt, setReceipt] = useState(receiptProp);
   const declinedResumeKey = useRef<string | null>(null);
   const decision = useOfferDecision(taskProp.id);
@@ -204,8 +212,10 @@ export function TaskWorkspace({
   const rememberReceipt = ops?.rememberReceipt;
 
   useEffect(() => {
-    rememberConfirmation?.(taskProp.id, confirmationProp ?? null);
-    if (confirmationProp) markTaskConfirmationKnown(taskProp.id);
+    if (confirmationProp) {
+      rememberConfirmation?.(taskProp.id, confirmationProp);
+      markTaskConfirmationKnown(taskProp.id);
+    }
     rememberReceipt?.(taskProp.id, receiptProp ?? null);
     if (receiptProp) markTaskReceiptKnown(taskProp.id);
   }, [
@@ -221,27 +231,48 @@ export function TaskWorkspace({
    * Also restores an unsent DRAFT after refresh. SSR skips confirmation GET
    * on fresh IN_PROGRESS (404); client hydrates when a confirmation may exist.
    */
-  useEffect(() => {
-    if (confirmationProp) return;
-    if (
-      taskProp.backendStatus !== "IN_PROGRESS" &&
-      taskProp.backendStatus !== "WAITING_FOR_AGENT"
-    ) {
+  useLayoutEffect(() => {
+    if (confirmationProp) {
+      setConfirmationResolving(false);
       return;
     }
-    // Always probe once for DRAFT / declined confirmations; 404 → null.
+    if (!confirmationMayArriveLater(taskProp.backendStatus)) {
+      setConfirmationResolving(false);
+      return;
+    }
+
+    const cached =
+      ops?.confirmationsByTaskId?.[taskProp.id] ??
+      (ops?.liveConfirmation?.taskId === taskProp.id
+        ? ops.liveConfirmation
+        : null);
+    if (cached) {
+      setConfirmation(cached);
+      setConfirmationResolving(false);
+    } else {
+      setConfirmationResolving(true);
+    }
+
+    // A missing server prop means "not loaded yet", not "still on step 1".
     let cancelled = false;
     void getTaskConfirmationAction(taskProp.id).then((result) => {
-      if (cancelled || !result.ok) return;
-      markTaskConfirmationKnown(taskProp.id);
-      setConfirmation(result.confirmation);
-      rememberConfirmation?.(taskProp.id, result.confirmation);
+      if (cancelled) return;
+      if (result.ok && result.confirmation) {
+        markTaskConfirmationKnown(taskProp.id);
+        setConfirmation(result.confirmation);
+        rememberConfirmation?.(taskProp.id, result.confirmation);
+      } else if (result.ok && !cached) {
+        setConfirmation(null);
+      }
+      setConfirmationResolving(false);
     });
     return () => {
       cancelled = true;
     };
   }, [
     confirmationProp,
+    ops?.confirmationsByTaskId,
+    ops?.liveConfirmation,
     taskProp.backendStatus,
     taskProp.id,
     rememberConfirmation,
@@ -510,6 +541,7 @@ export function TaskWorkspace({
               task={task}
               taskStatus={task.backendStatus}
               confirmation={confirmation}
+              confirmationResolving={confirmationResolving}
               disabled={lockedReadOnly}
               onDraft={(next) => {
                 markTaskConfirmationKnown(task.id);
