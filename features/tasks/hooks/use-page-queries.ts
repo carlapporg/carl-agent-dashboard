@@ -3,6 +3,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getDashboardSeedTasksAction,
+  getMessageInboxTasksAction,
   getOpenTasksAction,
   getTaskHubTasksAction,
 } from "@/features/dashboard/actions";
@@ -41,6 +42,14 @@ export function useOpenTasks() {
   return useQuery({
     queryKey: queryKeys.tasks.open(),
     queryFn: getOpenTasksAction,
+    ...pageQueryOptions,
+  });
+}
+
+export function useMessageInboxTasks() {
+  return useQuery({
+    queryKey: queryKeys.tasks.messageInbox(),
+    queryFn: getMessageInboxTasksAction,
     ...pageQueryOptions,
   });
 }

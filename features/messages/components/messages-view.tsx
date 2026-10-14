@@ -25,6 +25,7 @@ import {
 } from "@/features/messages/lib/preview";
 import { previewForIncomingMessage } from "@/lib/realtime/parse-task-message";
 import { setViewingMessagesTaskId } from "@/lib/messages/viewing-chat";
+import { getAgentSocket, joinTaskRoom } from "@/lib/realtime/agent-socket";
 import {
   callEndedMessageBody,
   isCallEndedMessageMetadata,
@@ -139,7 +140,16 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
   const ops = useOps();
   const hydrateOpenTasks = ops?.hydrateOpenTasks;
   useEffect(() => {
-    hydrateOpenTasks?.(Object.values(tasks));
+    const open = Object.values(tasks).filter(
+      (task) =>
+        task.backendStatus !== "COMPLETED" &&
+        task.backendStatus !== "FAILED" &&
+        task.backendStatus !== "CANCELLED" &&
+        task.status !== "completed" &&
+        task.status !== "failed" &&
+        task.status !== "cancelled",
+    );
+    hydrateOpenTasks?.(open);
   }, [hydrateOpenTasks, tasks]);
   const { data: agent } = useAgentMe();
   const agentLabel = agent ? getAgentDisplayName(agent) : "You";
@@ -173,6 +183,8 @@ export function MessagesView({ conversations, tasks }: MessagesViewProps) {
 
   useEffect(() => {
     setViewingMessagesTaskId(selectedId);
+    const socket = getAgentSocket();
+    if (selectedId && socket) joinTaskRoom(socket, selectedId);
     return () => setViewingMessagesTaskId(null);
   }, [selectedId]);
 

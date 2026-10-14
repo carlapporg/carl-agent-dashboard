@@ -10,11 +10,11 @@ import {
   useRejectedOfferTick,
   withoutRejectedOffers,
 } from "@/features/ops/rejected-offers";
-import { useOpenTasks } from "@/features/tasks/hooks/use-page-queries";
+import { useMessageInboxTasks } from "@/features/tasks/hooks/use-page-queries";
 import { mergeTaskLists } from "@/lib/tasks/merge-live-task";
 
 export function MessagesPageClient() {
-  const { data, isPending, isError } = useOpenTasks();
+  const { data, isPending, isError } = useMessageInboxTasks();
   const ops = useOps();
   const rejectedTick = useRejectedOfferTick();
 

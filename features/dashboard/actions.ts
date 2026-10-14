@@ -14,6 +14,23 @@ export async function getOpenTasksAction() {
   return tasksApi.listOpen();
 }
 
+/** Open chats plus completed tasks, so messages still arrive after the task is done. */
+export async function getMessageInboxTasksAction() {
+  const [open, history] = await Promise.all([
+    tasksApi.listOpen(),
+    tasksApi.listByInbox("HISTORY").catch(() => []),
+  ]);
+  const completed = history.filter(
+    (task) =>
+      task.backendStatus === "COMPLETED" || task.status === "completed",
+  );
+  const byId = new Map<string, (typeof open)[number]>();
+  for (const task of [...open, ...completed]) {
+    byId.set(task.id, task);
+  }
+  return [...byId.values()];
+}
+
 /** Offered + active + history for dashboard live queue seed. */
 export async function getDashboardSeedTasksAction() {
   const [offered, active, history] = await Promise.all([

@@ -17,6 +17,8 @@ export const queryKeys = {
     hub: () => [...queryKeys.tasks.lists(), "hub"] as const,
     /** Open tasks for Chat Box. */
     open: () => [...queryKeys.tasks.lists(), "open"] as const,
+    /** Open chats plus completed tasks. */
+    messageInbox: () => [...queryKeys.tasks.lists(), "message-inbox"] as const,
     details: () => [...queryKeys.tasks.all, "detail"] as const,
     detail: (id: string) => [...queryKeys.tasks.details(), id] as const,
   },
