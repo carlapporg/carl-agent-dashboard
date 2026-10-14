@@ -14,6 +14,7 @@ import {
   isLineItemsValue,
 } from "@/types/confirmation";
 import type { Task } from "@/types/task";
+import { formatEventInstant } from "@/lib/tasks/details";
 
 /** Internal / intake keys that must not appear on the confirmation form. */
 const SKIP_FORM_KEYS = new Set([
@@ -43,6 +44,7 @@ const SKIP_FORM_KEYS = new Set([
   "venuePlaceId",
   "venueLat",
   "venueLng",
+  "registrationRequired",
 ]);
 
 function titleCase(value: string): string {
@@ -281,7 +283,18 @@ function resolvePrefillValue(
       continue;
     }
     const text = scalarString(candidate);
-    if (text) return text;
+    if (text) {
+      if (field.key === "start" || field.key === "end") {
+        const zone =
+          metadata && typeof metadata.timezone === "string"
+            ? metadata.timezone
+            : "";
+        const city =
+          metadata && typeof metadata.city === "string" ? metadata.city : "";
+        return formatEventInstant(text, zone, city);
+      }
+      return text;
+    }
   }
   return null;
 }

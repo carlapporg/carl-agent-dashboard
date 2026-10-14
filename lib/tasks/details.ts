@@ -21,6 +21,8 @@ const KEY_LABELS: Record<string, string> = {
   time: "Pickup time",
   pickupTime: "Pickup time",
   date: "Date",
+  start: "Date and time",
+  end: "End",
   guests: "Guests",
   hotel: "Hotel",
   restaurant: "Restaurant",
@@ -88,7 +90,59 @@ const SKIP_METADATA_KEYS = new Set([
   "venuePlaceId",
   "venueLat",
   "venueLng",
+  "registrationRequired",
 ]);
+
+const CITY_TIME_ZONES: Record<string, string> = {
+  tulsa: "America/Chicago",
+  dallas: "America/Chicago",
+  houston: "America/Chicago",
+  austin: "America/Chicago",
+  "san antonio": "America/Chicago",
+  "oklahoma city": "America/Chicago",
+  "new york": "America/New_York",
+  "new york city": "America/New_York",
+  "los angeles": "America/Los_Angeles",
+  "san francisco": "America/Los_Angeles",
+};
+
+function eventDisplayTimeZone(timeZone: string, city: string): string {
+  const zone = timeZone.trim();
+  if (zone && zone.toUpperCase() !== "UTC" && zone !== "Etc/UTC") return zone;
+  return CITY_TIME_ZONES[city.trim().toLowerCase()] || zone || "UTC";
+}
+
+/** Show an event timestamp in the venue clock, not as 2026-10-16T01:00:00Z. */
+export function formatEventInstant(
+  value: string,
+  timeZone: string,
+  city = "",
+): string {
+  if (!/^\d{4}-\d{2}-\d{2}T/.test(value)) return value;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const zone = eventDisplayTimeZone(timeZone, city);
+  const options: Intl.DateTimeFormatOptions = {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  };
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      ...options,
+      timeZone: zone,
+    }).format(date);
+  } catch {
+    return new Intl.DateTimeFormat("en-US", {
+      ...options,
+      timeZone: "UTC",
+    }).format(date);
+  }
+}
 
 function titleCase(value: string): string {
   return value
@@ -150,20 +204,28 @@ export function taskDisplayTitle(task: Task): string {
 export function taskFacts(task: Task): TaskFact[] {
   const facts: TaskFact[] = [];
   const seen = new Set<string>();
+  const metadata = task.metadata;
+  const zone =
+    metadata && typeof metadata.timezone === "string" ? metadata.timezone : "";
+  const city =
+    metadata && typeof metadata.city === "string" ? metadata.city : "";
 
   function add(key: string, raw: unknown, options?: { titleCaseValue?: boolean }) {
     if (raw == null) return;
     const asCount = isCountKey(key);
+    const isInstant = key === "start" || key === "end";
     const value = asCount
       ? formatCountValue(raw)
-      : String(raw).trim();
+      : isInstant
+        ? formatEventInstant(String(raw).trim(), zone, city)
+        : String(raw).trim();
     if (!value || seen.has(key)) return;
     seen.add(key);
     facts.push({
       key,
       label: humanizeKey(key),
       value:
-        asCount || options?.titleCaseValue === false
+        asCount || isInstant || options?.titleCaseValue === false
           ? value
           : titleCase(value),
     });
@@ -179,7 +241,6 @@ export function taskFacts(task: Task): TaskFact[] {
     );
   }
 
-  const metadata = task.metadata;
   if (metadata && typeof metadata === "object") {
     for (const [key, value] of Object.entries(metadata)) {
       if (SKIP_METADATA_KEYS.has(key)) continue;
